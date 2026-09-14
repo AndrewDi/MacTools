@@ -78,6 +78,14 @@ jobs:
             xcrun xcresulttool get test-results summary --path build/CI-TestResults.xcresult
           fi
 
+      - name: Upload failed native test results
+        if: failure() && steps.tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-test-results
+          path: build/CI-TestResults.xcresult
+          retention-days: 7
+
       - name: Verify native panel layout interactions
         run: make panel-layout-ui-tests
 
