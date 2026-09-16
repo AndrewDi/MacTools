@@ -2190,6 +2190,9 @@ actor DeviceBatterySampler: DeviceBatterySampling {
         if field == "case" || field == "left" || field == "right" {
             return .airPodsPart
         }
+        if JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name) {
+            return .bluetooth
+        }
         if let productID,
            let isHeadphone = AppleBluetoothProductCatalog.isHeadphoneProduct(
                forProductID: productID
@@ -2232,7 +2235,7 @@ actor DeviceBatterySampler: DeviceBatterySampling {
     }
 
     private static func bluetoothBatteryTargets(from profile: BluetoothProfile) -> [BluetoothBatteryTarget] {
-        profile.batteryDevices.map { device in
+        let targets = profile.batteryDevices.map { device in
             let productID = stringValue(device.info["device_productID"])
             let vendorID = stringValue(device.info["device_vendorID"])
             let model = productID.flatMap { AppleBluetoothProductCatalog.modelName(forProductID: $0) }
@@ -2253,6 +2256,7 @@ actor DeviceBatterySampler: DeviceBatterySampling {
                 deviceIdentity: deviceIdentity
             )
         }
+        return targets
     }
 
     static func matchingBluetoothPowerLogTarget(
@@ -3994,9 +3998,12 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
         rssi RSSI: NSNumber
     ) {
         guard !didFinish else { return }
+        let name = peripheral.name ?? "nil"
         let shouldRegisterByBatteryService = discoveryMode == .batteryService
             || Self.advertisesBatteryService(advertisementData)
-        if shouldRegisterByBatteryService {
+        let shouldRegisterJBL = JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name)
+            && jblTargetMatching(name: name) != nil
+        if shouldRegisterByBatteryService || shouldRegisterJBL {
             register(peripheral, central: central)
         }
         collectAdvertisementBattery(peripheral: peripheral, advertisementData: advertisementData)
@@ -4180,7 +4187,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
 
         let target = uniqueTarget(named: name, eligibleTargetIDs: gattTargetIDs)
             ?? anyTargetNamed(name)
-            ?? jblTargetMatching(name: name)
+                ?? jblTargetMatching(name: name)
 
         guard let target else {
             return
@@ -4393,6 +4400,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
             // across all targets to get the correct identity
             let target = uniqueTarget(named: name, eligibleTargetIDs: gattTargetIDs)
                 ?? anyTargetNamed(name)
+                ?? jblTargetMatching(name: name)
             let deviceIdentity = target?.deviceIdentity
                 ?? DeviceBatteryDeviceIdentity.bluetooth(peripheral.identifier.uuidString)
             let groupID = deviceIdentity.key

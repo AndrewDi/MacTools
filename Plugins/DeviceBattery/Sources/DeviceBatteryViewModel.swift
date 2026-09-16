@@ -573,6 +573,11 @@ final class DeviceBatteryViewModel: ObservableObject {
             return
         }
 
+        // Don't restart sampling if a bluetooth scan is already in progress —
+        // the scanner's BLE connections trigger connection-change notifications,
+        // which would cancel the running scan and discard its results.
+        guard bluetoothTask == nil else { return }
+
         bluetoothEventTask?.cancel()
         bluetoothEventTask = Task { @MainActor [weak self, schedule] in
             do {
