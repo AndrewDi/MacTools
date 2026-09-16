@@ -72,25 +72,40 @@ final class DuoStatusIconTests: XCTestCase {
             let chargingPixels = try alphaPixels(DuoStatusIcon.image(for: charging))
             XCTAssertNotEqual(unpluggedPixels, pluggedInPixels)
             XCTAssertNotEqual(pluggedInPixels, chargingPixels)
-            XCTAssertEqual(region(unpluggedPixels, x: 0..<48, y: 0..<31), region(pluggedInPixels, x: 0..<48, y: 0..<31))
+            XCTAssertEqual(region(unpluggedPixels, x: 0..<48, y: 0..<30), region(pluggedInPixels, x: 0..<48, y: 0..<30))
             XCTAssertNotEqual(DuoSystemStatusDescription(localization: PluginLocalization(bundle: .main)).text(for: pluggedIn), DuoSystemStatusDescription(localization: PluginLocalization(bundle: .main)).text(for: unplugged))
             XCTAssertNotEqual(DuoSystemStatusDescription(localization: PluginLocalization(bundle: .main)).text(for: pluggedIn), DuoSystemStatusDescription(localization: PluginLocalization(bundle: .main)).text(for: charging))
         }
     }
 
-    func testPowerIndicatorsFitInsideArtworkBounds() throws {
-        for charging in [false, true] {
-            var snapshot = connectedSnapshot
-            snapshot.battery = .level(fraction: 0.8, isCharging: charging, isExternalPowerConnected: true)
-            let image = DuoStatusIcon.image(for: snapshot)
-            // Resolve subpixel padding before checking that neither indicator reaches the image edge.
-            let pixels = try rgbaPixels(image, scale: 4)
-            let side = 96
-            for offset in 0..<side {
-                XCTAssertEqual(pixels[offset].alpha, 0)
-                XCTAssertEqual(pixels[(side - 1) * side + offset].alpha, 0)
-                XCTAssertEqual(pixels[offset * side].alpha, 0)
-                XCTAssertEqual(pixels[offset * side + side - 1].alpha, 0)
+    func testArtworkIsCompactAndCenteredAtStandardDisplayScales() throws {
+        let batteries: [DuoSystemStatusSnapshot.Battery] = [
+            .level(fraction: 0.8, isCharging: false),
+            .level(fraction: 0.1, isCharging: false),
+            .level(fraction: 0.8, isCharging: false, isExternalPowerConnected: true),
+            .level(fraction: 0.8, isCharging: true),
+            .notPresent, .unavailable
+        ]
+        for scale: CGFloat in [1, 2] {
+            for appearance: DuoIconAppearance in [.light, .dark] {
+                for battery in batteries {
+                    var snapshot = connectedSnapshot
+                    snapshot.battery = battery
+                    let image = DuoStatusIcon.image(for: snapshot, appearance: appearance)
+                    XCTAssertEqual(image.size, NSSize(width: 24, height: 24))
+                    let bounds = try visibleBounds(image, scale: scale)
+                    // Allow one physical pixel for antialiasing on Retina and non-Retina displays.
+                    XCTAssertLessThanOrEqual(bounds.width, 18 + 1 / scale)
+                    XCTAssertLessThanOrEqual(bounds.height, 18 + 1 / scale)
+                    XCTAssertGreaterThanOrEqual(bounds.width, 16)
+                    XCTAssertGreaterThanOrEqual(bounds.height, 16)
+                    XCTAssertEqual(bounds.midX, 12, accuracy: 0.5)
+                    XCTAssertEqual(bounds.midY, 12, accuracy: 0.75)
+                    XCTAssertGreaterThanOrEqual(bounds.minX, 2.5)
+                    XCTAssertGreaterThanOrEqual(bounds.minY, 2.5)
+                    XCTAssertLessThanOrEqual(bounds.maxX, 21.5)
+                    XCTAssertLessThanOrEqual(bounds.maxY, 21.5)
+                }
             }
         }
     }
@@ -139,6 +154,22 @@ final class DuoStatusIconTests: XCTestCase {
 
     private func alphaPixels(_ image: NSImage) throws -> [UInt8] {
         try rgbaPixels(image).map(\.alpha)
+    }
+
+    private func visibleBounds(_ image: NSImage, scale: CGFloat) throws -> CGRect {
+        let pixels = try rgbaPixels(image, scale: scale)
+        let side = Int(image.size.width * scale)
+        let indices = pixels.indices.filter { pixels[$0].alpha > 8 }
+        let columns = indices.map { $0 % side }
+        let rows = indices.map { $0 / side }
+        let minX = try XCTUnwrap(columns.min())
+        let maxX = try XCTUnwrap(columns.max())
+        let minY = try XCTUnwrap(rows.min())
+        let maxY = try XCTUnwrap(rows.max())
+        return CGRect(
+            x: CGFloat(minX) / scale, y: CGFloat(minY) / scale,
+            width: CGFloat(maxX - minX + 1) / scale, height: CGFloat(maxY - minY + 1) / scale
+        )
     }
 
     private struct Pixel {
