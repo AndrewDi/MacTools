@@ -1973,7 +1973,8 @@ actor DeviceBatterySampler: DeviceBatterySampling {
                   let level = device.pluginBatteryPercentSingle,
                   level > 0,
                   let name = device.name,
-                  !name.isEmpty
+                  !name.isEmpty,
+                  !JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name)
             else {
                 return nil
             }
@@ -4380,8 +4381,10 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
                 return []
             }
 
-            // Use existing target if available, otherwise create a synthetic identity for JBL devices
+            // JBL devices may not be in gattTargetIDs, so use name lookup
+            // across all targets to get the correct identity
             let target = uniqueTarget(named: name, eligibleTargetIDs: gattTargetIDs)
+                ?? anyTargetNamed(name)
             let deviceIdentity = target?.deviceIdentity
                 ?? DeviceBatteryDeviceIdentity.bluetooth(peripheral.identifier.uuidString)
             let groupID = deviceIdentity.key
@@ -4475,6 +4478,14 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
         let candidates = targetsByName[Self.targetNameKey(name), default: []].filter { target in
             eligibleTargetIDs.contains(target.id)
         }
+        guard candidates.count == 1 else {
+            return nil
+        }
+        return candidates[0]
+    }
+
+    private func anyTargetNamed(_ name: String) -> BluetoothBatteryTarget? {
+        let candidates = targetsByName[Self.targetNameKey(name), default: []]
         guard candidates.count == 1 else {
             return nil
         }
