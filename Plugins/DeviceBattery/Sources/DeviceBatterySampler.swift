@@ -1771,9 +1771,6 @@ actor DeviceBatterySampler: DeviceBatterySampling {
         var items: [DeviceBatteryItem] = []
 
         for device in profile.batteryDevices {
-            guard !JBLSenseLiteBLEBatteryParser.isJBLEarbuds(device.name) else {
-                continue
-            }
             let productID = stringValue(device.info["device_productID"])
             let model = productID.flatMap { AppleBluetoothProductCatalog.modelName(forProductID: $0) }
             let deviceIdentity = bluetoothDeviceIdentity(
@@ -1976,8 +1973,7 @@ actor DeviceBatterySampler: DeviceBatterySampling {
                   let level = device.pluginBatteryPercentSingle,
                   level > 0,
                   let name = device.name,
-                  !name.isEmpty,
-                  !JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name)
+                  !name.isEmpty
             else {
                 return nil
             }
@@ -2236,10 +2232,7 @@ actor DeviceBatterySampler: DeviceBatterySampling {
     }
 
     private static func bluetoothBatteryTargets(from profile: BluetoothProfile) -> [BluetoothBatteryTarget] {
-        profile.batteryDevices.compactMap { device in
-            guard !JBLSenseLiteBLEBatteryParser.isJBLEarbuds(device.name) else {
-                return nil
-            }
+        profile.batteryDevices.map { device in
             let productID = stringValue(device.info["device_productID"])
             let vendorID = stringValue(device.info["device_vendorID"])
             let model = productID.flatMap { AppleBluetoothProductCatalog.modelName(forProductID: $0) }
@@ -3901,7 +3894,6 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
     private var discoveryMode = DeviceBatteryBluetoothDiscoveryMode.none
     private var timeoutTask: Task<Void, Never>?
     private var didFinish = false
-    private var hasStartedBLEScan = false
 
     static func collectBatteryDevices(
         targets: [BluetoothBatteryTarget],
@@ -3974,19 +3966,25 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
             register(peripheral, central: central)
         }
 
-        // Also retrieve ALL connected peripherals to find JBL devices
-        // that may not advertise the standard battery service
-        let allConnectedPeripherals = central.retrieveConnectedPeripherals(withServices: [])
-        for peripheral in allConnectedPeripherals {
+        // Retrieve connected JBL peripherals via ExcelPoint service
+        let jblConnectedPeripherals = central.retrieveConnectedPeripherals(
+            withServices: [Self.jblExcelPointService]
+        )
+        for peripheral in jblConnectedPeripherals {
             register(peripheral, central: central)
         }
 
-        // Always scan all advertisements to find JBL devices
+        // Only scan when there are eligible targets to discover
+        let expectedTargetIDs = advertisementTargetIDs.union(gattTargetIDs)
+        guard !expectedTargetIDs.isEmpty || !peripheralHasJBLService.isEmpty else {
+            finishIfComplete()
+            return
+        }
+
         central.scanForPeripherals(
             withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
-        hasStartedBLEScan = true
     }
 
     func centralManager(
@@ -3996,11 +3994,9 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
         rssi RSSI: NSNumber
     ) {
         guard !didFinish else { return }
-        let name = peripheral.name ?? "nil"
         let shouldRegisterByBatteryService = discoveryMode == .batteryService
             || Self.advertisesBatteryService(advertisementData)
-        let shouldRegisterJBL = JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name)
-        if shouldRegisterByBatteryService || shouldRegisterJBL {
+        if shouldRegisterByBatteryService {
             register(peripheral, central: central)
         }
         collectAdvertisementBattery(peripheral: peripheral, advertisementData: advertisementData)
@@ -4182,18 +4178,15 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
             return
         }
 
-        // For JBL devices, register directly without requiring a target match
-        let isJBLDevice = JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name)
         let target = uniqueTarget(named: name, eligibleTargetIDs: gattTargetIDs)
+            ?? anyTargetNamed(name)
 
-        guard isJBLDevice || target != nil else {
+        guard let target else {
             return
         }
 
         discoveredNames.insert(Self.targetNameKey(name))
-        if let target {
-            registeredGATTTargetIDs.insert(target.id)
-        }
+        registeredGATTTargetIDs.insert(target.id)
         peripheralsByID[peripheral.identifier] = peripheral
         pendingPeripheralIDs.insert(peripheral.identifier)
         peripheral.delegate = self
@@ -4264,13 +4257,6 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
         guard completedTargetIDs.isSuperset(of: expectedTargetIDs),
               allJBLPeripheralsCompleted
         else {
-            return
-        }
-
-        // When the BLE scan has started but no JBL peripherals were discovered
-        // yet, don't finish — the scan needs more time to find JBL devices.
-        // The 10-second timeout will handle termination.
-        if hasStartedBLEScan && peripheralHasJBLService.isEmpty && expectedTargetIDs.isEmpty {
             return
         }
 
