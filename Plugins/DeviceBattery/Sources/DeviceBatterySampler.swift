@@ -4485,6 +4485,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
     private func target(for peripheral: CBPeripheral) -> BluetoothBatteryTarget? {
         guard let name = peripheral.name else { return nil }
         return uniqueTarget(named: name, eligibleTargetIDs: gattTargetIDs)
+            ?? jblTargetMatching(name: name)
     }
 
     private func uniqueTarget(
