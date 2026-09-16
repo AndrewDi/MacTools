@@ -4180,6 +4180,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
 
         let target = uniqueTarget(named: name, eligibleTargetIDs: gattTargetIDs)
             ?? anyTargetNamed(name)
+            ?? jblTargetMatching(name: name)
 
         guard let target else {
             return
@@ -4193,6 +4194,17 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
 
         connectionsStartedByReader.insert(peripheral.identifier)
         central.connect(peripheral, options: nil)
+    }
+
+    private func jblTargetMatching(name: String) -> BluetoothBatteryTarget? {
+        guard JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name) else { return nil }
+        let lowered = name.lowercased()
+        return targets.first { target in
+            gattTargetIDs.contains(target.id)
+                && JBLSenseLiteBLEBatteryParser.isJBLEarbuds(target.name)
+                && (lowered.hasPrefix(target.name.lowercased())
+                    || target.name.lowercased().hasPrefix(lowered))
+        }
     }
 
     private func discoverServices(for peripheral: CBPeripheral) {
