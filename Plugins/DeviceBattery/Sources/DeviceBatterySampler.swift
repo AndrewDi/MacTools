@@ -2236,7 +2236,10 @@ actor DeviceBatterySampler: DeviceBatterySampling {
     }
 
     private static func bluetoothBatteryTargets(from profile: BluetoothProfile) -> [BluetoothBatteryTarget] {
-        profile.batteryDevices.map { device in
+        profile.batteryDevices.compactMap { device in
+            guard !JBLSenseLiteBLEBatteryParser.isJBLEarbuds(device.name) else {
+                return nil
+            }
             let productID = stringValue(device.info["device_productID"])
             let vendorID = stringValue(device.info["device_vendorID"])
             let model = productID.flatMap { AppleBluetoothProductCatalog.modelName(forProductID: $0) }
