@@ -723,8 +723,7 @@ func deviceSymbolName(for item: DeviceBatteryItem) -> String {
         return "computermouse.fill"
     case .airPodsPart:
         if haystack.contains("jbl") {
-            let ownName = item.name.lowercased()
-            if ownName.contains("case") || ownName.contains("充电盒") {
+            if item.componentIdentity?.role == .chargingCase {
                 return "bolt.circle"
             }
             return "headphones"
@@ -742,7 +741,7 @@ func deviceSymbolName(for item: DeviceBatteryItem) -> String {
         return airPodsSymbolName(in: haystack, part: .all)
     case .bluetooth, .magicAccessory, .other:
         if haystack.contains("jbl") {
-            if haystack.contains("充电盒") || haystack.contains("case") {
+            if item.componentIdentity?.role == .chargingCase {
                 return "bolt.circle"
             }
             return "headphones"
