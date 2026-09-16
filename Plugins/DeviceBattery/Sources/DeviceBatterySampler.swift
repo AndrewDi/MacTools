@@ -3952,7 +3952,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
             self.continuation = continuation
             centralManager = CBCentralManager(delegate: self, queue: .main)
             timeoutTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(10))
+                try? await Task.sleep(for: .seconds(5))
                 self?.finish()
             }
         }
