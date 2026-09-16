@@ -47,6 +47,7 @@ final class DeviceBatteryViewModel: ObservableObject {
     private var activityResumeTask: Task<Void, Never>?
     private var pendingVisibleBluetoothRefresh = false
     private var pendingVisibleAppleMobileRefresh = false
+    private var pendingConnectionRefresh = false
     private var activeCollectionIDs: Set<UUID> = []
     private var collectionSourcesByID: [UUID: DeviceBatterySource] = [:]
 
@@ -459,6 +460,13 @@ final class DeviceBatteryViewModel: ObservableObject {
                 shouldRevalidateSupplementalState = true
                 continue
             }
+            if pendingConnectionRefresh {
+                pendingConnectionRefresh = false
+                shouldForceProfileRefresh = true
+                shouldPerformActiveScan = true
+                shouldRevalidateSupplementalState = true
+                continue
+            }
             shouldForceProfileRefresh = false
             shouldPerformActiveScan = true
             shouldRevalidateSupplementalState = false
@@ -573,10 +581,14 @@ final class DeviceBatteryViewModel: ObservableObject {
             return
         }
 
-        // Don't restart sampling if a bluetooth scan is already in progress —
-        // the scanner's BLE connections trigger connection-change notifications,
-        // which would cancel the running scan and discard its results.
-        guard bluetoothTask == nil else { return }
+        // If a bluetooth collection is in progress, coalesce into a pending
+        // refresh so the loop picks it up after the current collection finishes.
+        // This avoids cancelling an in-progress scan whose BLE connections
+        // trigger the very connection-change notifications we are handling here.
+        if isCollecting(.bluetooth) {
+            pendingConnectionRefresh = true
+            return
+        }
 
         bluetoothEventTask?.cancel()
         bluetoothEventTask = Task { @MainActor [weak self, schedule] in
@@ -748,6 +760,7 @@ final class DeviceBatteryViewModel: ObservableObject {
         activityResumeTask = nil
         pendingVisibleBluetoothRefresh = false
         pendingVisibleAppleMobileRefresh = false
+        pendingConnectionRefresh = false
         activeCollectionIDs.removeAll()
         collectionSourcesByID.removeAll()
         rebuildSnapshot()

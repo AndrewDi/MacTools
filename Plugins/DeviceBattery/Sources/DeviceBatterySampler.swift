@@ -126,9 +126,6 @@ actor DeviceBatterySampler: DeviceBatterySampling {
         options: DeviceBatteryBluetoothSamplingOptions
     ) async -> [DeviceBatteryItem] {
         let localization = localization
-        if options.forceProfileRefresh {
-            supplementalItemCache.removeAll()
-        }
         guard let profileSnapshot = await bluetoothProfileOutput(
             referenceDate: referenceDate,
             forceRefresh: options.forceProfileRefresh
@@ -3948,7 +3945,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
             self.continuation = continuation
             centralManager = CBCentralManager(delegate: self, queue: .main)
             timeoutTask = Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(5))
+                try? await Task.sleep(for: .seconds(3))
                 self?.finish()
             }
         }
@@ -3980,7 +3977,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
 
         // Only scan when there are eligible targets to discover
         let expectedTargetIDs = advertisementTargetIDs.union(gattTargetIDs)
-        guard !expectedTargetIDs.isEmpty || !peripheralHasJBLService.isEmpty else {
+        guard !expectedTargetIDs.isEmpty else {
             finishIfComplete()
             return
         }
