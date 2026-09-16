@@ -12,10 +12,10 @@ import Foundation
 /// ┌─────────────────────────────────────────────────────────────┐
 /// │ Header: 00 DD 03 00 01 00 [len] 00 00 00                   │
 /// ├─────────────────────────────────────────────────────────────┤
-/// │ Feature 0x0D: [XX] 0D 00 01 00 [left_battery]   (0~100%)  │
-/// │ Feature 0x0E: [XX] 0E 00 01 00 [right_battery]  (0~100%)  │
-/// │ Feature 0x1F: 03 1F 01 00    [case_battery]     (0~100%)  │
-/// │ Feature 0x34: 34 00 01 00    [status]           (unknown) │
+/// │ Feature 0x0D: 0D 00 01 00 [left_battery]    (0~100%)       │
+/// │ Feature 0x0E: 0E 00 01 00 [right_battery]   (0~100%)       │
+/// │ Feature 0x1F: 03 1F 01 00 [case_battery]    (0~100%)       │
+/// │ Feature 0x34: 34 00 01 00 [status]          (unknown)      │
 /// ├─────────────────────────────────────────────────────────────┤
 /// │ Footer: 01 1F 03 00 19 0A 0A                               │
 /// └─────────────────────────────────────────────────────────────┘
@@ -72,38 +72,44 @@ enum JBLSenseLiteBLEBatteryParser {
         var rightBattery: Int?
         var caseBattery: Int?
 
-        // Scan for feature patterns in the packet
+        // Scan for feature patterns: [ID] 00 01 00 [level]
         var i = 6 // Skip header
         while i + 4 < bytes.count {
-            // Pattern: [XX] 0D 00 01 00 [level] - Left battery
-            if i + 5 <= bytes.count,
-               bytes[i + 1] == leftBatteryFeatureID,
-               bytes[i + 2] == 0x00,
-               bytes[i + 3] == 0x01,
-               bytes[i + 4] == 0x00 {
-                leftBattery = Int(bytes[i + 5])
-                i += 6
+            // Left battery: 0D 00 01 00 [level]
+            if bytes[i] == leftBatteryFeatureID,
+               bytes[i + 1] == 0x00,
+               bytes[i + 2] == 0x01,
+               bytes[i + 3] == 0x00 {
+                let level = Int(bytes[i + 4])
+                if (0...100).contains(level) {
+                    leftBattery = level
+                }
+                i += 5
                 continue
             }
 
-            // Pattern: [XX] 0E 00 01 00 [level] - Right battery
-            if i + 5 <= bytes.count,
-               bytes[i + 1] == rightBatteryFeatureID,
-               bytes[i + 2] == 0x00,
-               bytes[i + 3] == 0x01,
-               bytes[i + 4] == 0x00 {
-                rightBattery = Int(bytes[i + 5])
-                i += 6
+            // Right battery: 0E 00 01 00 [level]
+            if bytes[i] == rightBatteryFeatureID,
+               bytes[i + 1] == 0x00,
+               bytes[i + 2] == 0x01,
+               bytes[i + 3] == 0x00 {
+                let level = Int(bytes[i + 4])
+                if (0...100).contains(level) {
+                    rightBattery = level
+                }
+                i += 5
                 continue
             }
 
-            // Pattern: 03 1F 01 00 [level] - Case battery
-            if i + 4 <= bytes.count,
-               bytes[i] == caseBatteryFeatureID,
+            // Case battery: 03 1F 01 00 [level]
+            if bytes[i] == caseBatteryFeatureID,
                bytes[i + 1] == 0x1F,
                bytes[i + 2] == 0x01,
                bytes[i + 3] == 0x00 {
-                caseBattery = Int(bytes[i + 4])
+                let level = Int(bytes[i + 4])
+                if (0...100).contains(level) {
+                    caseBattery = level
+                }
                 i += 5
                 continue
             }
@@ -111,13 +117,8 @@ enum JBLSenseLiteBLEBatteryParser {
             i += 1
         }
 
-        // Validate battery levels (0-100%)
-        let validLeft = leftBattery.map { (0...100).contains($0) }
-        let validRight = rightBattery.map { (0...100).contains($0) }
-        let validCase = caseBattery.map { (0...100).contains($0) }
-
         // At least one battery level must be present and valid
-        guard validLeft == true || validRight == true || validCase == true else {
+        guard leftBattery != nil || rightBattery != nil || caseBattery != nil else {
             return nil
         }
 

@@ -1771,6 +1771,9 @@ actor DeviceBatterySampler: DeviceBatterySampling {
         var items: [DeviceBatteryItem] = []
 
         for device in profile.batteryDevices {
+            guard !JBLSenseLiteBLEBatteryParser.isJBLEarbuds(device.name) else {
+                continue
+            }
             let productID = stringValue(device.info["device_productID"])
             let model = productID.flatMap { AppleBluetoothProductCatalog.modelName(forProductID: $0) }
             let deviceIdentity = bluetoothDeviceIdentity(
@@ -3895,6 +3898,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
     private var discoveryMode = DeviceBatteryBluetoothDiscoveryMode.none
     private var timeoutTask: Task<Void, Never>?
     private var didFinish = false
+    private var hasStartedBLEScan = false
 
     static func collectBatteryDevices(
         targets: [BluetoothBatteryTarget],
@@ -3979,12 +3983,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
             withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
-        // When there are no expected targets, don't finish immediately —
-        // let the scan discover JBL devices via BLE advertisements first.
-        let expectedTargetIDs = advertisementTargetIDs.union(gattTargetIDs)
-        if !expectedTargetIDs.isEmpty || !pendingPeripheralIDs.isEmpty {
-            finishIfComplete()
-        }
+        hasStartedBLEScan = true
     }
 
     func centralManager(
@@ -4264,6 +4263,14 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
         else {
             return
         }
+
+        // When the BLE scan has started but no JBL peripherals were discovered
+        // yet, don't finish — the scan needs more time to find JBL devices.
+        // The 10-second timeout will handle termination.
+        if hasStartedBLEScan && peripheralHasJBLService.isEmpty && expectedTargetIDs.isEmpty {
+            return
+        }
+
         finish()
     }
 
