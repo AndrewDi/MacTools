@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import MacToolsPluginKit
 
-private enum CalendarComponentLayout {
+enum CalendarComponentLayout {
     static let contentPadding: CGFloat = 8
     static let sectionSpacing: CGFloat = 3
     static let gridSpacing: CGFloat = 6
@@ -10,34 +10,78 @@ private enum CalendarComponentLayout {
     static let weekdayHeight: CGFloat = 10
     static let dayCellSize: CGFloat = 36
     static let cornerRadius: CGFloat = PluginComponentPanelLayoutMetrics.cardCornerRadius
+
+    static let maximumAgendaListHeight: CGFloat = 256
+
+    static func estimatedContentHeight(showsRecentAgenda: Bool, dayCount: Int, eventCount: Int) -> CGFloat {
+        let monthHeight = contentPadding * 2 + headerHeight + weekdayHeight
+            + sectionSpacing * 2 + dayCellSize * 6 + gridSpacing * 5
+        guard showsRecentAgenda else { return monthHeight }
+
+        // Start close to the intrinsic height until the rendered content is measured.
+        let agendaHeaderHeight: CGFloat = 39
+        let listHeight = eventCount > 0 ? min(CGFloat(dayCount) * 46 + CGFloat(eventCount) * 40, maximumAgendaListHeight) : 24
+        return monthHeight + 1 + agendaHeaderHeight + listHeight
+    }
+}
+
+private struct CalendarContentHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
 }
 
 struct CalendarComponentView: View {
     @ObservedObject private var viewModel: CalendarComponentViewModel
     @ObservedObject private var settingsStore: CalendarSettingsStore
     private let localization: PluginLocalization
+    private let onContentHeightChange: (CGFloat) -> Void
+    private let onRequestAccess: () -> Void
+    @Environment(\.pluginComponentTheme) private var theme
 
     init(
         context: PluginComponentContext,
         viewModel: CalendarComponentViewModel,
         settingsStore: CalendarSettingsStore,
-        localization: PluginLocalization = PluginLocalization(bundle: .main)
+        localization: PluginLocalization = PluginLocalization(bundle: .main),
+        onRequestAccess: @escaping () -> Void = {},
+        onContentHeightChange: @escaping (CGFloat) -> Void = { _ in }
     ) {
         self.viewModel = viewModel
         self.settingsStore = settingsStore
         self.localization = localization
+        self.onContentHeightChange = onContentHeightChange
+        self.onRequestAccess = onRequestAccess
     }
 
     var body: some View {
-        VStack(spacing: CalendarComponentLayout.sectionSpacing) {
-            calendarCard
-            todayDetails
-            Spacer(minLength: 0)
+        VStack(spacing: 0) {
+            monthContent
+            if settingsStore.showsRecentAgenda && viewModel.hasAgendaContent {
+                Rectangle()
+                    .fill(theme.surfaces.track)
+                    .frame(height: 1)
+                    .padding(.horizontal, CalendarComponentLayout.contentPadding)
+                recentAgenda
+            }
         }
+        .fixedSize(horizontal: false, vertical: true)
+        .background(PluginComponentCardBackground(cornerRadius: CalendarComponentLayout.cornerRadius))
+        .background {
+            GeometryReader { geometry in
+                Color.clear.preference(
+                    key: CalendarContentHeightPreferenceKey.self,
+                    value: geometry.size.height
+                )
+            }
+        }
+        .onPreferenceChange(CalendarContentHeightPreferenceKey.self, perform: onContentHeightChange)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    private var calendarCard: some View {
+    private var monthContent: some View {
         VStack(spacing: CalendarComponentLayout.sectionSpacing) {
             CalendarHeaderView(
                 title: viewModel.month.title,
@@ -55,7 +99,6 @@ struct CalendarComponentView: View {
 
             CalendarMonthGrid(
                 days: viewModel.month.days,
-                selectedDayID: viewModel.selectedDay?.id,
                 dayCellSize: CalendarComponentLayout.dayCellSize,
                 gridSpacing: CalendarComponentLayout.gridSpacing,
                 localization: localization,
@@ -65,42 +108,37 @@ struct CalendarComponentView: View {
         }
         .padding(CalendarComponentLayout.contentPadding)
         .frame(maxWidth: .infinity, alignment: .top)
-        .background(
-            PluginComponentCardBackground(
-                cornerRadius: CalendarComponentLayout.cornerRadius
-            )
-        )
     }
 
-    @ViewBuilder
-    private var todayDetails: some View {
-        if settingsStore.showsTodayDetails, let todayDay = viewModel.todayDay {
-            CalendarSelectedDayDetails(
-                day: todayDay,
-                localization: localization
-            )
-        }
+    private var recentAgenda: some View {
+        CalendarAgendaView(
+            days: viewModel.agendaDays,
+            dates: viewModel.agendaDates,
+            today: viewModel.todayDay?.date ?? Date(),
+            authorization: viewModel.authorization,
+            errorMessage: viewModel.eventLoadingError,
+            localization: localization,
+            onOpenDay: { viewModel.open($0) },
+            onRequestAccess: onRequestAccess,
+            onRetry: { viewModel.refresh() }
+        )
     }
 }
 
 private struct CalendarHeaderView: View {
-    private enum Layout {
-        static let todayButtonMinimumWidth: CGFloat = 32
-        static let todayButtonMaximumWidth: CGFloat = 48
-        static let todayButtonHorizontalPadding: CGFloat = 4
-    }
-
     let title: String
     let localization: PluginLocalization
     let onPrevious: () -> Void
     let onToday: () -> Void
     let onNext: () -> Void
     @Environment(\.pluginComponentTheme) private var theme
+    @State private var isTodayHovered = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             Text(title)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(theme.text.primary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(1)
 
@@ -112,19 +150,17 @@ private struct CalendarHeaderView: View {
             Button(action: onToday) {
                 Text(localization.string("header.today.button", defaultValue: "今天"))
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(theme.text.secondary)
+                    .foregroundStyle(isTodayHovered ? theme.text.primary : theme.text.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .padding(.horizontal, Layout.todayButtonHorizontalPadding)
-                    .frame(
-                        minWidth: Layout.todayButtonMinimumWidth,
-                        maxWidth: Layout.todayButtonMaximumWidth,
-                        minHeight: 20,
-                        maxHeight: 20
-                    )
-                    .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .padding(.horizontal, 4)
+                    .frame(minWidth: 32, maxWidth: 48, minHeight: 20, maxHeight: 20)
+                    .background(isTodayHovered ? theme.surfaces.nested : .clear,
+                                in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
             .buttonStyle(.plain)
+            .onHover { isTodayHovered = $0 }
             .help(localization.string("header.today.help", defaultValue: "回到今天"))
             CalendarIconButton(
                 systemName: "chevron.right",
@@ -132,7 +168,7 @@ private struct CalendarHeaderView: View {
                 action: onNext
             )
         }
-        .frame(height: 20)
+        .frame(height: CalendarComponentLayout.headerHeight)
     }
 }
 
@@ -141,16 +177,21 @@ private struct CalendarIconButton: View {
     let help: String
     let action: () -> Void
     @Environment(\.pluginComponentTheme) private var theme
+    @State private var isHovered = false
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(theme.text.secondary)
-                .frame(width: 20, height: 20)
-                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(isHovered ? theme.text.primary : theme.text.secondary)
+                .frame(width: 24, height: 20)
+                .background(isHovered ? theme.surfaces.nested : .clear,
+                            in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
         .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .accessibilityLabel(help)
         .help(help)
     }
 }
@@ -165,18 +206,17 @@ private struct CalendarWeekdayRow: View {
         HStack(spacing: gridSpacing) {
             ForEach(Array(symbols.enumerated()), id: \.offset) { _, symbol in
                 Text(symbol)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(theme.text.secondary)
                     .frame(width: dayCellSize)
             }
         }
-        .frame(height: 10)
+        .frame(height: CalendarComponentLayout.weekdayHeight)
     }
 }
 
 private struct CalendarMonthGrid: View {
     let days: [CalendarDayModel]
-    let selectedDayID: String?
     let dayCellSize: CGFloat
     let gridSpacing: CGFloat
     let localization: PluginLocalization
@@ -197,7 +237,7 @@ private struct CalendarMonthGrid: View {
             ForEach(days) { day in
                 CalendarDayCell(
                     day: day,
-                    isSelected: selectedDayID == day.id,
+                    isHovered: hoveredDayID == day.id,
                     localization: localization,
                     onOpen: { onOpen(day) }
                 )
@@ -227,7 +267,7 @@ private struct CalendarMonthGrid: View {
 
 private struct CalendarDayCell: View {
     let day: CalendarDayModel
-    let isSelected: Bool
+    let isHovered: Bool
     let localization: PluginLocalization
     let onOpen: () -> Void
 
@@ -235,60 +275,50 @@ private struct CalendarDayCell: View {
 
     var body: some View {
         Button(action: onOpen) {
-            ZStack(alignment: .topTrailing) {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(backgroundColor)
-
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(borderColor, lineWidth: day.isToday ? 1.5 : 0)
-
-                VStack(spacing: 1) {
+            ZStack {
+                VStack(spacing: 0) {
                     Text(day.dayNumber)
-                        .font(.system(size: 13, weight: day.isToday ? .bold : .semibold, design: .rounded))
+                        .font(.system(size: day.alternateCalendarText.isEmpty ? 15 : 14,
+                                      weight: day.isToday ? .bold : .semibold, design: .rounded))
                         .foregroundStyle(primaryTextStyle)
                         .lineLimit(1)
 
-                    if !day.lunarText.isEmpty {
-                        Text(day.lunarText)
-                            .font(.system(size: 8.5, weight: .medium))
+                    if !day.alternateCalendarText.isEmpty {
+                        Text(day.alternateCalendarText)
+                            .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(secondaryTextStyle)
                             .lineLimit(1)
                             .minimumScaleFactor(0.65)
                     }
-
-                    CalendarEventDots(events: day.visibleEvents)
-                        .padding(.top, 1)
                 }
                 .padding(.horizontal, 2)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-                if let holidayKind = day.holidayKind {
-                    CalendarHolidayBadge(kind: holidayKind, localization: localization)
-                        .offset(x: 2, y: -3)
+                // Dots never participate in centering the date, including when no alternate calendar is shown.
+                .offset(y: day.alternateCalendarText.isEmpty ? 0 : -3)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay(alignment: .bottom) {
+                CalendarEventDots(events: day.visibleEvents)
+                    .opacity(day.isInDisplayedMonth ? 1 : 0.45)
+                    .padding(.bottom, 2)
+            }
+            .background(isHovered ? theme.surfaces.nested : .clear,
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                if day.isToday {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(theme.dataSeries.primary, lineWidth: 1.5)
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                if let holidayKind = day.holidayKind {
+                    CalendarHolidayBadge(kind: holidayKind, localization: localization)
+                        .offset(x: 2, y: -2)
+                }
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
-    }
-
-    private var backgroundColor: Color {
-        if isSelected {
-            return theme.interaction.selection(theme.dataSeries.primary)
-        }
-
-        if day.isToday {
-            return theme.interaction.emphasis(theme.dataSeries.primary)
-        }
-
-        return day.isInDisplayedMonth
-            ? theme.surfaces.nested
-            : theme.surfaces.nestedMuted
-    }
-
-    private var borderColor: Color {
-        day.isToday ? theme.dataSeries.primary.opacity(0.95) : .clear
     }
 
     private var primaryTextStyle: Color {
@@ -305,8 +335,8 @@ private struct CalendarDayCell: View {
 
     private var accessibilityLabel: String {
         var parts = [day.dayNumber]
-        if !day.lunarText.isEmpty {
-            parts.append(day.lunarText)
+        if !day.alternateCalendarText.isEmpty {
+            parts.append(day.alternateCalendarText)
         }
         if day.isToday {
             parts.append(localization.string("accessibility.today", defaultValue: "今天"))
@@ -338,7 +368,7 @@ private struct CalendarHolidayBadge: View {
         Text(kind.badgeText(localization: localization))
             .font(.system(size: 7, weight: .bold))
             .foregroundStyle(theme.text.primary)
-            .frame(width: 14, height: 14)
+            .frame(width: 12, height: 12)
             .background(
                 Circle()
                     .fill(
@@ -352,28 +382,22 @@ private struct CalendarHolidayBadge: View {
 
 private struct CalendarEventDots: View {
     private static let dotSize: CGFloat = 3
-    private static let rowHeight: CGFloat = 5
 
     let events: [CalendarEventSummary]
 
     var body: some View {
         HStack(spacing: 2) {
-            if events.isEmpty {
-                Color.clear
+            ForEach(events) { event in
+                Circle()
+                    .fill(Color(calendarEventColor: event.color))
                     .frame(width: Self.dotSize, height: Self.dotSize)
-            } else {
-                ForEach(events) { event in
-                    Circle()
-                        .fill(Color(calendarEventColor: event.color))
-                        .frame(width: Self.dotSize, height: Self.dotSize)
-                }
             }
         }
-        .frame(height: Self.rowHeight)
+        .accessibilityHidden(true)
     }
 }
 
-private struct CalendarEventPopoverPresenter: NSViewRepresentable {
+struct CalendarEventPopoverPresenter: NSViewRepresentable {
     let title: String
     let subtitle: String
     let events: [CalendarEventSummary]
@@ -406,7 +430,7 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
     }
 
     final class Coordinator {
-        private var popover: NSPopover?
+        private(set) var popover: NSPopover?
 
         @MainActor
         func update(
@@ -431,12 +455,11 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
                 localization: localization
             )
             .foregroundStyle(theme.text.primary)
-            .background(theme.surfaces.card)
             .environment(\.pluginComponentTheme, theme)
-            let hostingController = NSHostingController(rootView: content)
-            CalendarAppearancePreference.stored().apply(to: hostingController.view)
-            popover.contentViewController = hostingController
-            popover.contentSize = NSSize(width: 230, height: min(hostingController.view.fittingSize.height, 260))
+            let controller = CalendarEventPopoverController(content: content, theme: theme)
+            CalendarAppearancePreference.stored().apply(to: controller.view)
+            popover.contentViewController = controller
+            popover.contentSize = controller.popoverSize
             CalendarAppearancePreference.stored().apply(to: popover)
 
             if !popover.isShown {
@@ -445,6 +468,8 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
                 CalendarAppearancePreference.stored().apply(to: popover)
             }
 
+            controller.view.layoutSubtreeIfNeeded()
+            popover.contentSize = controller.popoverSize
             self.popover = popover
         }
 
@@ -459,6 +484,7 @@ private struct CalendarEventPopoverPresenter: NSViewRepresentable {
             let popover = NSPopover()
             popover.behavior = .applicationDefined
             popover.animates = false
+            popover.hasFullSizeContent = true
             return popover
         }
     }
@@ -478,10 +504,12 @@ private struct CalendarFloatingEventPopoverContent: View {
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
 
-                Text(subtitle)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(theme.text.secondary)
-                    .lineLimit(1)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(theme.text.secondary)
+                        .lineLimit(1)
+                }
             }
 
             Rectangle()
@@ -511,48 +539,6 @@ private struct CalendarFloatingEventPopoverContent: View {
     }
 }
 
-private struct CalendarSelectedDayDetails: View {
-    let day: CalendarDayModel
-    let localization: PluginLocalization
-    @Environment(\.pluginComponentTheme) private var theme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(CalendarDayPresentation.dateTitle(for: day))
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-
-                Text(CalendarDayPresentation.dateSubtitle(for: day, localization: localization))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(theme.text.secondary)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !day.events.isEmpty {
-                Rectangle()
-                    .fill(theme.surfaces.track)
-                    .frame(height: 1)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    ForEach(day.visibleEvents) { event in
-                        CalendarEventRow(event: event)
-                    }
-                }
-            }
-        }
-        .padding(CalendarComponentLayout.contentPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            PluginComponentCardBackground(
-                cornerRadius: CalendarComponentLayout.cornerRadius
-            )
-        )
-        .accessibilityElement(children: .contain)
-    }
-}
-
 enum CalendarDayPresentation {
     static func dateTitle(for day: CalendarDayModel) -> String {
         let formatter = DateFormatter()
@@ -564,23 +550,24 @@ enum CalendarDayPresentation {
 
     static func dateSubtitle(
         for day: CalendarDayModel,
+        includesOverflowCount: Bool = true,
         localization: PluginLocalization = PluginLocalization(bundle: .main)
     ) -> String {
         var parts: [String] = []
-        if !day.lunarDateText.isEmpty {
-            parts.append(day.lunarDateText)
-            if !day.lunarText.isEmpty && !day.lunarDateText.contains(day.lunarText) {
-                parts.append(day.lunarText)
+        if !day.alternateCalendarDateText.isEmpty {
+            parts.append(day.alternateCalendarDateText)
+            if !day.alternateCalendarText.isEmpty && !day.alternateCalendarDateText.contains(day.alternateCalendarText) {
+                parts.append(day.alternateCalendarText)
             }
-        } else if !day.lunarText.isEmpty {
-            parts.append(day.lunarText)
+        } else if !day.alternateCalendarText.isEmpty {
+            parts.append(day.alternateCalendarText)
         }
         if let holidayKind = day.holidayKind {
             parts.append(holidayText(for: holidayKind, localization: localization))
         } else if day.isWeekend {
             parts.append(localization.string("day.weekend", defaultValue: "周末"))
         }
-        if day.events.count > CalendarDayModel.maximumVisibleEvents {
+        if includesOverflowCount && day.events.count > CalendarDayModel.maximumVisibleEvents {
             parts.append(
                 localization.format(
                     "event.moreCount",

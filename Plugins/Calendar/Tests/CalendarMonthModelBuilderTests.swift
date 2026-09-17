@@ -96,8 +96,8 @@ final class CalendarMonthModelBuilderTests: XCTestCase {
             id: "20260429",
             date: day,
             dayNumber: "29",
-            lunarText: "十三",
-            lunarDateText: "四月十三",
+            alternateCalendarText: "十三",
+            alternateCalendarDateText: "四月十三",
             isInDisplayedMonth: true,
             isToday: true,
             isWeekend: false,
@@ -111,7 +111,7 @@ final class CalendarMonthModelBuilderTests: XCTestCase {
     func testFestivalLabelKeepsTheFullLunarDate() throws {
         let calendar = Self.makeCalendar(firstWeekday: 1)
         let localization = PluginLocalization(bundle: .main)
-        let builder = CalendarMonthModelBuilder(calendar: calendar, localization: localization)
+        let builder = CalendarMonthModelBuilder(calendar: calendar, localization: localization, alternateCalendar: .chinese)
         let model = builder.makeMonth(
             containing: try Self.date(year: 2026, month: 9, day: 15, calendar: calendar)
         )
@@ -122,14 +122,14 @@ final class CalendarMonthModelBuilderTests: XCTestCase {
         let expectedLunarDay = localization.string("lunar.day.15", defaultValue: "十五")
         let expectedFestival = localization.string("lunar.festival.midAutumn", defaultValue: "中秋")
 
-        XCTAssertEqual(midAutumnDay.lunarDateText, expectedLunarMonth + expectedLunarDay)
-        XCTAssertEqual(midAutumnDay.lunarText, expectedFestival)
+        XCTAssertEqual(midAutumnDay.alternateCalendarDateText, expectedLunarMonth + expectedLunarDay)
+        XCTAssertEqual(midAutumnDay.alternateCalendarText, expectedFestival)
     }
 
     func testFestivalDateSubtitleIncludesFullLunarDateAndFestival() throws {
         let calendar = Self.makeCalendar(firstWeekday: 1)
         let localization = PluginLocalization(bundle: .main)
-        let model = CalendarMonthModelBuilder(calendar: calendar, localization: localization).makeMonth(
+        let model = CalendarMonthModelBuilder(calendar: calendar, localization: localization, alternateCalendar: .chinese).makeMonth(
             containing: try Self.date(year: 2026, month: 9, day: 15, calendar: calendar)
         )
         let midAutumnDate = try Self.date(year: 2026, month: 9, day: 25, calendar: calendar)
@@ -137,8 +137,8 @@ final class CalendarMonthModelBuilderTests: XCTestCase {
 
         let subtitle = CalendarDayPresentation.dateSubtitle(for: midAutumnDay, localization: localization)
 
-        XCTAssertTrue(subtitle.contains(midAutumnDay.lunarDateText))
-        XCTAssertTrue(subtitle.contains(midAutumnDay.lunarText))
+        XCTAssertTrue(subtitle.contains(midAutumnDay.alternateCalendarDateText))
+        XCTAssertTrue(subtitle.contains(midAutumnDay.alternateCalendarText))
     }
 
     private static func makeCalendar(firstWeekday: Int) -> Calendar {

@@ -4,4 +4,4 @@ type: changed
 area: Calendar
 ---
 
-View today's full lunar date, holiday context, and agenda below the calendar, or hide the details to keep the panel compact.
+View events grouped by date below Calendar. Choose 1–7 days in the past, future, or both, with the next three days shown by default.
