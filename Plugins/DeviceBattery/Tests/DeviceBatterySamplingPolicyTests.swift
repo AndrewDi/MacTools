@@ -120,6 +120,76 @@ final class DeviceBatterySamplingPolicyTests: XCTestCase {
             gattTargetIDs: ["mouse"],
             registeredGATTTargetIDs: ["mouse"]
         ), .allAdvertisements)
+        XCTAssertEqual(DeviceBatteryBluetoothScanPolicy.discoveryMode(
+            advertisementTargetIDs: [],
+            gattTargetIDs: ["jbl", "mouse"],
+            registeredGATTTargetIDs: ["mouse"],
+            jblTargetIDs: ["jbl"]
+        ), .allAdvertisements)
+        XCTAssertEqual(DeviceBatteryBluetoothScanPolicy.discoveryMode(
+            advertisementTargetIDs: [],
+            gattTargetIDs: ["jbl", "mouse"],
+            registeredGATTTargetIDs: ["jbl"],
+            jblTargetIDs: ["jbl"]
+        ), .batteryService)
+        XCTAssertEqual(DeviceBatteryBluetoothScanPolicy.discoveryMode(
+            advertisementTargetIDs: [],
+            gattTargetIDs: ["jbl"],
+            registeredGATTTargetIDs: ["jbl"],
+            jblTargetIDs: ["jbl"]
+        ), .none)
+    }
+
+    func testConnectionRefreshScansOnlyNewlyConnectedDevices() {
+        let existing = makeBluetoothTarget(id: "existing", kind: .bluetooth, isConnected: true)
+        let disconnected = makeBluetoothTarget(id: "disconnected", kind: .bluetooth, isConnected: false)
+        let added = makeBluetoothTarget(id: "added", kind: .bluetooth, isConnected: true)
+        let targets = [existing, disconnected, added]
+
+        XCTAssertEqual(DeviceBatteryBluetoothScanScope.newlyConnected.targets(
+            from: targets, previouslyConnected: [existing.deviceIdentity, disconnected.deviceIdentity]
+        ).map(\.id), [added.id])
+        XCTAssertTrue(DeviceBatteryBluetoothScanScope.newlyConnected.targets(
+            from: targets, previouslyConnected: [existing.deviceIdentity, added.deviceIdentity]
+        ).isEmpty)
+        XCTAssertEqual(DeviceBatteryBluetoothScanScope.allConnected.targets(
+            from: targets, previouslyConnected: [existing.deviceIdentity, added.deviceIdentity]
+        ).map(\.id), [existing.id, added.id])
+        XCTAssertTrue(DeviceBatteryBluetoothScanScope.none.targets(
+            from: targets, previouslyConnected: []
+        ).isEmpty)
+    }
+
+    func testGattMatchingRequiresAnUnambiguousNameOrJBLLESuffix() {
+        func target(_ id: String, name: String) -> BluetoothBatteryTarget {
+            BluetoothBatteryTarget(
+                id: id, name: name, address: nil, vendorID: nil, productID: nil,
+                model: nil, kind: .bluetooth, detail: nil, isConnected: true
+            )
+        }
+        let mouse = target("mouse", name: "Mouse")
+        let jbl = target("jbl", name: "JBL Sense Lite")
+        let targets = [mouse, jbl]
+        let eligibleIDs = Set(targets.map(\.id))
+
+        XCTAssertEqual(DeviceBatteryBluetoothScanPolicy.gattTarget(
+            named: " mouse ", targets: targets, eligibleTargetIDs: eligibleIDs
+        )?.id, mouse.id)
+        XCTAssertEqual(DeviceBatteryBluetoothScanPolicy.gattTarget(
+            named: "jbl sense lite-LE", targets: targets, eligibleTargetIDs: eligibleIDs
+        )?.id, jbl.id)
+        for name in ["JBL Sense Lite 2", "JBL Sense", "Mouse-LE", "Unknown"] {
+            XCTAssertNil(DeviceBatteryBluetoothScanPolicy.gattTarget(
+                named: name, targets: targets, eligibleTargetIDs: eligibleIDs
+            ))
+        }
+        let duplicate = target("second-jbl", name: jbl.name)
+        for name in [jbl.name, "JBL Sense Lite-LE"] {
+            XCTAssertNil(DeviceBatteryBluetoothScanPolicy.gattTarget(
+                named: name, targets: targets + [duplicate],
+                eligibleTargetIDs: eligibleIDs.union([duplicate.id])
+            ))
+        }
     }
 
     func testGattReaderDoesNotCollapseMultipleBatteryServices() {
@@ -1231,7 +1301,8 @@ final class DeviceBatterySamplingPolicyTests: XCTestCase {
             model: "AirPods 4",
             kind: kind,
             detail: "Headphones",
-            isConnected: isConnected
+            isConnected: isConnected,
+            deviceIdentity: .source("test:\(id)")
         )
     }
 
@@ -1246,6 +1317,9 @@ final class DeviceBatterySamplingPolicyTests: XCTestCase {
     }
 
     func testJBLSenseLiteScanPlanIncludesConnectedTarget() {
+        let kind = DeviceBatterySampler.inferredBluetoothKind(
+            name: "JBL Sense Lite", minorType: "Headset", vendorID: nil, field: "single"
+        )
         let jblTarget = BluetoothBatteryTarget(
             id: "bluetooth:jbl",
             name: "JBL Sense Lite",
@@ -1253,7 +1327,7 @@ final class DeviceBatterySamplingPolicyTests: XCTestCase {
             vendorID: nil,
             productID: nil,
             model: nil,
-            kind: .bluetooth,
+            kind: kind,
             detail: "Headset",
             isConnected: true
         )
@@ -1262,6 +1336,7 @@ final class DeviceBatterySamplingPolicyTests: XCTestCase {
 
         XCTAssertEqual(plan.eligibleTargets.map(\.id), ["bluetooth:jbl"])
         XCTAssertEqual(plan.gattTargetIDs, ["bluetooth:jbl"])
+        XCTAssertEqual(plan.jblTargetIDs, ["bluetooth:jbl"])
     }
 
     func testJBLDisconnectedTargetIsNotEligible() {

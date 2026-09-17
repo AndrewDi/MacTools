@@ -687,6 +687,9 @@ private func deviceDetailText(
 }
 
 func deviceSymbolName(for item: DeviceBatteryItem) -> String {
+    if item.source == "JBLExcelPoint" {
+        return item.componentIdentity?.role == .chargingCase ? "bolt.circle" : "headphones"
+    }
     let haystack = [
         item.name,
         item.model,
@@ -734,12 +737,6 @@ func deviceSymbolName(for item: DeviceBatteryItem) -> String {
         }
         return airPodsSymbolName(in: haystack, part: .all)
     case .bluetooth, .magicAccessory, .other:
-        if haystack.contains("jbl") {
-            if item.componentIdentity?.role == .chargingCase {
-                return "bolt.circle"
-            }
-            return "headphones"
-        }
         if containsAny(haystack, ["iphone", "phone", "mobile phone", "手机"]) {
             return "iphone.gen2"
         }

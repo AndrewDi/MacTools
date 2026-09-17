@@ -19,18 +19,38 @@ protocol DeviceBatterySampling: Sendable {
     ) async -> [DeviceBatteryItem]
 }
 
+enum DeviceBatteryBluetoothScanScope: Equatable, Sendable {
+    case none
+    case allConnected
+    case newlyConnected
+
+    func targets(
+        from targets: [BluetoothBatteryTarget],
+        previouslyConnected: Set<DeviceBatteryDeviceIdentity>
+    ) -> [BluetoothBatteryTarget] {
+        targets.filter { target in
+            guard target.isConnected else { return false }
+            switch self {
+            case .none: return false
+            case .allConnected: return true
+            case .newlyConnected: return !previouslyConnected.contains(target.deviceIdentity)
+            }
+        }
+    }
+}
+
 struct DeviceBatteryBluetoothSamplingOptions: Equatable, Sendable {
     let forceProfileRefresh: Bool
-    let performActiveScan: Bool
+    let scanScope: DeviceBatteryBluetoothScanScope
     let revalidateSupplementalState: Bool
 
     init(
         forceProfileRefresh: Bool,
-        performActiveScan: Bool,
+        scanScope: DeviceBatteryBluetoothScanScope,
         revalidateSupplementalState: Bool = false
     ) {
         self.forceProfileRefresh = forceProfileRefresh
-        self.performActiveScan = performActiveScan
+        self.scanScope = scanScope
         self.revalidateSupplementalState = revalidateSupplementalState
     }
 }
@@ -105,6 +125,7 @@ actor DeviceBatterySampler: DeviceBatterySampling {
     private var bluetoothPowerLogState = DeviceBatteryIncrementalLogState()
     private var batteryCenterLogState = DeviceBatteryIncrementalLogState()
     private var supplementalItemCache = DeviceBatterySupplementalItemCache()
+    private var connectedDeviceIdentities: Set<DeviceBatteryDeviceIdentity> = []
 
     init(
         localization: PluginLocalization = PluginLocalization(bundle: .main),
@@ -147,6 +168,10 @@ actor DeviceBatterySampler: DeviceBatterySampling {
         ))
         baseItems = Self.deduplicated(baseItems)
         let targets = Self.bluetoothBatteryTargets(from: bluetoothData)
+        let scanTargets = options.scanScope.targets(
+            from: targets,
+            previouslyConnected: connectedDeviceIdentities
+        )
         let shouldReadBatteryCenterLog = !targets.isEmpty
             || !bluetoothData.connectedDevices.isEmpty
             || !bluetoothData.batteryDevices.isEmpty
@@ -191,9 +216,9 @@ actor DeviceBatterySampler: DeviceBatterySampling {
                 localization: localization
             )
             : DeviceBatteryIncrementalLogItems(items: [], completion: .completed)
-        async let activeScanItems = options.performActiveScan
+        async let activeScanItems = !scanTargets.isEmpty
             ? DeviceBatteryBluetoothScanner.collectBatteryDevices(
-                targets: targets,
+                targets: scanTargets,
                 referenceDate: referenceDate,
                 localization: localization
             )
@@ -218,10 +243,11 @@ actor DeviceBatterySampler: DeviceBatterySampling {
         }
 
         let connectedTargets = targets.filter(\.isConnected)
+        connectedDeviceIdentities = Set(connectedTargets.map(\.deviceIdentity))
         supplementalItemCache.update(
             with: (powerLogItems?.items ?? []) + (batteryLogItems?.items ?? []) + scannedItems,
             knownTargetIdentities: Set(targets.map(\.deviceIdentity)),
-            connectedTargetIdentities: Set(connectedTargets.map(\.deviceIdentity)),
+            connectedTargetIdentities: connectedDeviceIdentities,
             referenceDate: referenceDate
         )
         let singleBatteryDevices = Set(targets.compactMap { target in
@@ -2187,9 +2213,6 @@ actor DeviceBatterySampler: DeviceBatterySampling {
         if field == "case" || field == "left" || field == "right" {
             return .airPodsPart
         }
-        if JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name) {
-            return .bluetooth
-        }
         if let productID,
            let isHeadphone = AppleBluetoothProductCatalog.isHeadphoneProduct(
                forProductID: productID
@@ -2232,7 +2255,7 @@ actor DeviceBatterySampler: DeviceBatterySampling {
     }
 
     private static func bluetoothBatteryTargets(from profile: BluetoothProfile) -> [BluetoothBatteryTarget] {
-        let targets = profile.batteryDevices.map { device in
+        profile.batteryDevices.map { device in
             let productID = stringValue(device.info["device_productID"])
             let vendorID = stringValue(device.info["device_vendorID"])
             let model = productID.flatMap { AppleBluetoothProductCatalog.modelName(forProductID: $0) }
@@ -2253,7 +2276,6 @@ actor DeviceBatterySampler: DeviceBatterySampling {
                 deviceIdentity: deviceIdentity
             )
         }
-        return targets
     }
 
     static func matchingBluetoothPowerLogTarget(
@@ -3744,10 +3766,14 @@ struct DeviceBatteryBluetoothScanPlan {
     let eligibleTargets: [BluetoothBatteryTarget]
     let advertisementTargetIDs: Set<String>
     let gattTargetIDs: Set<String>
+    let jblTargetIDs: Set<String>
 
     init(targets: [BluetoothBatteryTarget]) {
         let gattTargets = targets.filter { target in
-            target.isConnected && (target.kind == .bluetooth || target.kind == .magicAccessory)
+            target.isConnected && (
+                target.kind == .bluetooth || target.kind == .magicAccessory
+                    || JBLSenseLiteBLEBatteryParser.isJBLEarbuds(target.name)
+            )
         }
         let advertisementTargets = targets.filter { target in
             target.isConnected
@@ -3761,6 +3787,9 @@ struct DeviceBatteryBluetoothScanPlan {
         }
         advertisementTargetIDs = Set(advertisementTargets.map(\.id))
         gattTargetIDs = Set(gattTargets.map(\.id))
+        jblTargetIDs = Set(gattTargets.filter {
+            JBLSenseLiteBLEBatteryParser.isJBLEarbuds($0.name)
+        }.map(\.id))
     }
 
     private static func supportsAdvertisementBattery(target: BluetoothBatteryTarget) -> Bool {
@@ -3788,15 +3817,41 @@ enum DeviceBatteryBluetoothScanPolicy {
     static func discoveryMode(
         advertisementTargetIDs: Set<String>,
         gattTargetIDs: Set<String>,
-        registeredGATTTargetIDs: Set<String>
+        registeredGATTTargetIDs: Set<String>,
+        jblTargetIDs: Set<String> = []
     ) -> DeviceBatteryBluetoothDiscoveryMode {
-        if !advertisementTargetIDs.isEmpty {
+        if !advertisementTargetIDs.isEmpty
+            || !jblTargetIDs.isSubset(of: registeredGATTTargetIDs) {
             return .allAdvertisements
         }
         if !gattTargetIDs.isSubset(of: registeredGATTTargetIDs) {
             return .batteryService
         }
         return .none
+    }
+
+    static func gattTarget(
+        named name: String,
+        targets: [BluetoothBatteryTarget],
+        eligibleTargetIDs: Set<String>
+    ) -> BluetoothBatteryTarget? {
+        guard let name = normalizedTargetName(name) else { return nil }
+        let eligibleTargets = targets.filter { eligibleTargetIDs.contains($0.id) }
+        let exact = eligibleTargets.filter { normalizedTargetName($0.name) == name }
+        if !exact.isEmpty {
+            return exact.count == 1 ? exact[0] : nil
+        }
+        guard JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name) else { return nil }
+        let matches = eligibleTargets.filter {
+            guard let targetName = normalizedTargetName($0.name),
+                  JBLSenseLiteBLEBatteryParser.isJBLEarbuds(targetName) else { return false }
+            return jblBaseName(targetName) == jblBaseName(name)
+        }
+        return matches.count == 1 ? matches[0] : nil
+    }
+
+    private static func jblBaseName(_ name: String) -> String {
+        name.hasSuffix("-le") ? String(name.dropLast(3)) : name
     }
 
     static func advertisementTarget(
@@ -3871,13 +3926,11 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
     // JBL ExcelPoint service for proprietary battery notifications
     private static let jblExcelPointService = CBUUID(string: JBLSenseLiteBLEBatteryParser.excelPointServiceUUID)
     private static let jblExcelPointRX = CBUUID(string: JBLSenseLiteBLEBatteryParser.rxCharacteristicUUID)
-    private static let jblExcelPointTX = CBUUID(string: JBLSenseLiteBLEBatteryParser.txCharacteristicUUID)
-    private static let jblClientCharacteristicConfig = CBUUID(string: "2902")
 
     private let targets: [BluetoothBatteryTarget]
-    private let targetsByName: [String: [BluetoothBatteryTarget]]
     private let advertisementTargetIDs: Set<String>
     private let gattTargetIDs: Set<String>
+    private let jblTargetIDs: Set<String>
     private let referenceDate: Date
     private let localization: PluginLocalization
     private var centralManager: CBCentralManager?
@@ -3890,8 +3943,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
     private var peripheralHasJBLService: Set<UUID> = []
     private var advertisementReadingsByTargetID: [String: [DeviceBatteryBluetoothPowerLogComponent: DeviceBatteryAppleHeadphoneAdvertisementReading]] = [:]
     private var completedTargetIDs: Set<String> = []
-    private var registeredGATTTargetIDs: Set<String> = []
-    private var discoveredNames: Set<String> = []
+    private var targetByPeripheralID: [UUID: BluetoothBatteryTarget] = [:]
     private var discoveryMode = DeviceBatteryBluetoothDiscoveryMode.none
     private var timeoutTask: Task<Void, Never>?
     private var didFinish = false
@@ -3902,10 +3954,12 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
         localization: PluginLocalization
     ) async -> [DeviceBatteryItem] {
         let plan = DeviceBatteryBluetoothScanPlan(targets: targets)
+        guard !plan.eligibleTargets.isEmpty else { return [] }
         let reader = DeviceBatteryBluetoothScanner(
             targets: plan.eligibleTargets,
             advertisementTargetIDs: plan.advertisementTargetIDs,
             gattTargetIDs: plan.gattTargetIDs,
+            jblTargetIDs: plan.jblTargetIDs,
             referenceDate: referenceDate,
             localization: localization
         )
@@ -3922,15 +3976,14 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
         targets: [BluetoothBatteryTarget],
         advertisementTargetIDs: Set<String>,
         gattTargetIDs: Set<String>,
+        jblTargetIDs: Set<String>,
         referenceDate: Date,
         localization: PluginLocalization
     ) {
         self.targets = targets
-        self.targetsByName = Dictionary(grouping: targets) { target in
-            Self.targetNameKey(target.name)
-        }
         self.advertisementTargetIDs = advertisementTargetIDs
         self.gattTargetIDs = gattTargetIDs
+        self.jblTargetIDs = jblTargetIDs
         self.referenceDate = referenceDate
         self.localization = localization
         super.init()
@@ -3959,33 +4012,39 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
             return
         }
 
-        // Retrieve already-connected peripherals with standard battery service
-        let connectedPeripherals = central.retrieveConnectedPeripherals(
-            withServices: [Self.batteryService]
-        )
-        for peripheral in connectedPeripherals {
-            register(peripheral, central: central)
+        // Prefer the vendor service when a device also exposes a standard battery service.
+        if !jblTargetIDs.isEmpty {
+            for peripheral in central.retrieveConnectedPeripherals(withServices: [Self.jblExcelPointService]) {
+                register(peripheral, central: central)
+            }
+        }
+        if !gattTargetIDs.isEmpty {
+            for peripheral in central.retrieveConnectedPeripherals(withServices: [Self.batteryService]) {
+                register(peripheral, central: central)
+            }
         }
 
-        // Retrieve connected JBL peripherals via ExcelPoint service
-        let jblConnectedPeripherals = central.retrieveConnectedPeripherals(
-            withServices: [Self.jblExcelPointService]
+        discoveryMode = DeviceBatteryBluetoothScanPolicy.discoveryMode(
+            advertisementTargetIDs: advertisementTargetIDs,
+            gattTargetIDs: gattTargetIDs,
+            registeredGATTTargetIDs: Set(targetByPeripheralID.values.map(\.id)),
+            jblTargetIDs: jblTargetIDs
         )
-        for peripheral in jblConnectedPeripherals {
-            register(peripheral, central: central)
+        switch discoveryMode {
+        case .none:
+            break
+        case .batteryService:
+            central.scanForPeripherals(
+                withServices: [Self.batteryService],
+                options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+            )
+        case .allAdvertisements:
+            central.scanForPeripherals(
+                withServices: nil,
+                options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+            )
         }
-
-        // Only scan when there are eligible targets to discover
-        let expectedTargetIDs = advertisementTargetIDs.union(gattTargetIDs)
-        guard !expectedTargetIDs.isEmpty else {
-            finishIfComplete()
-            return
-        }
-
-        central.scanForPeripherals(
-            withServices: nil,
-            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
-        )
+        finishIfComplete()
     }
 
     func centralManager(
@@ -3995,12 +4054,14 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
         rssi RSSI: NSNumber
     ) {
         guard !didFinish else { return }
-        let name = peripheral.name ?? "nil"
         let shouldRegisterByBatteryService = discoveryMode == .batteryService
             || Self.advertisesBatteryService(advertisementData)
-        let shouldRegisterJBL = JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name)
-            && jblTargetMatching(name: name) != nil
-        if shouldRegisterByBatteryService || shouldRegisterJBL {
+        let isJBLDiscovery = peripheral.name.flatMap { name in
+            DeviceBatteryBluetoothScanPolicy.gattTarget(
+                named: name, targets: targets, eligibleTargetIDs: jblTargetIDs
+            )
+        } != nil
+        if shouldRegisterByBatteryService || isJBLDiscovery {
             register(peripheral, central: central)
         }
         collectAdvertisementBattery(peripheral: peripheral, advertisementData: advertisementData)
@@ -4092,6 +4153,8 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
     ) {
         guard !didFinish else { return }
         guard error == nil, let characteristics = service.characteristics else {
+            // An auxiliary service failure must not end a pending ExcelPoint read.
+            guard !peripheralHasJBLService.contains(peripheral.identifier) else { return }
             pendingPeripheralIDs.remove(peripheral.identifier)
             markCompletedTarget(for: peripheral)
             finishIfComplete()
@@ -4113,7 +4176,8 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
             }
         }
 
-        if !didRead, service.uuid == Self.batteryService {
+        if !didRead, service.uuid == Self.batteryService,
+           !peripheralHasJBLService.contains(peripheral.identifier) {
             pendingPeripheralIDs.remove(peripheral.identifier)
             markCompletedTarget(for: peripheral)
             finishIfComplete()
@@ -4175,49 +4239,31 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
 
     private func register(_ peripheral: CBPeripheral, central: CBCentralManager) {
         guard !didFinish,
-              let name = peripheral.name?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !name.isEmpty,
-              !discoveredNames.contains(Self.targetNameKey(name))
+              targetByPeripheralID[peripheral.identifier] == nil,
+              let name = peripheral.name,
+              let target = DeviceBatteryBluetoothScanPolicy.gattTarget(
+                  named: name, targets: targets, eligibleTargetIDs: gattTargetIDs
+              ),
+              !targetByPeripheralID.values.contains(where: { $0.id == target.id })
         else {
             return
         }
 
-        let target = uniqueTarget(named: name, eligibleTargetIDs: gattTargetIDs)
-            ?? anyTargetNamed(name)
-                ?? jblTargetMatching(name: name)
-
-        guard let target else {
-            return
-        }
-
-        discoveredNames.insert(Self.targetNameKey(name))
-        registeredGATTTargetIDs.insert(target.id)
+        targetByPeripheralID[peripheral.identifier] = target
         peripheralsByID[peripheral.identifier] = peripheral
         pendingPeripheralIDs.insert(peripheral.identifier)
         peripheral.delegate = self
-
         connectionsStartedByReader.insert(peripheral.identifier)
         central.connect(peripheral, options: nil)
     }
 
-    private func jblTargetMatching(name: String) -> BluetoothBatteryTarget? {
-        guard JBLSenseLiteBLEBatteryParser.isJBLEarbuds(name) else { return nil }
-        let lowered = name.lowercased()
-        return targets.first { target in
-            gattTargetIDs.contains(target.id)
-                && JBLSenseLiteBLEBatteryParser.isJBLEarbuds(target.name)
-                && (lowered.hasPrefix(target.name.lowercased())
-                    || target.name.lowercased().hasPrefix(lowered))
-        }
-    }
-
     private func discoverServices(for peripheral: CBPeripheral) {
         guard !didFinish else { return }
-        peripheral.discoverServices([
-            Self.batteryService,
-            Self.deviceInformationService,
-            Self.jblExcelPointService
-        ])
+        var services = [Self.batteryService, Self.deviceInformationService]
+        if let target = target(for: peripheral), jblTargetIDs.contains(target.id) {
+            services.append(Self.jblExcelPointService)
+        }
+        peripheral.discoverServices(services)
     }
 
     private func collectAdvertisementBattery(
@@ -4264,17 +4310,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
         }
         let expectedTargetIDs = advertisementTargetIDs.union(gattTargetIDs)
 
-        // Also check if all JBL peripherals have received their readings
-        let allJBLPeripheralsCompleted = peripheralHasJBLService.allSatisfy { peripheralID in
-            jblBatteryReadingByID[peripheralID]?.isValid == true
-                || !pendingPeripheralIDs.contains(peripheralID)
-        }
-
-        guard completedTargetIDs.isSuperset(of: expectedTargetIDs),
-              allJBLPeripheralsCompleted
-        else {
-            return
-        }
+        guard completedTargetIDs.isSuperset(of: expectedTargetIDs) else { return }
 
         finish()
     }
@@ -4358,8 +4394,7 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
         // Standard Battery Service items
         items.append(contentsOf: readingByID.compactMap { peripheralID, reading in
             guard let peripheral = peripheralsByID[peripheralID],
-                  let name = peripheral.name,
-                  let target = uniqueTarget(named: name, eligibleTargetIDs: gattTargetIDs),
+                  let target = target(for: peripheral),
                   let level = reading.level
             else {
                 return nil
@@ -4385,129 +4420,41 @@ private final class DeviceBatteryBluetoothScanner: NSObject,
             )
         })
 
-        // JBL ExcelPoint battery items with component detail
         items.append(contentsOf: jblBatteryReadingByID.flatMap { peripheralID, reading -> [DeviceBatteryItem] in
-            guard let peripheral = peripheralsByID[peripheralID],
-                  let name = peripheral.name
-            else {
-                return []
-            }
-
-            // JBL devices may not be in gattTargetIDs, so use name lookup
-            // across all targets to get the correct identity
-            let target = uniqueTarget(named: name, eligibleTargetIDs: gattTargetIDs)
-                ?? anyTargetNamed(name)
-                ?? jblTargetMatching(name: name)
-            let deviceIdentity = target?.deviceIdentity
-                ?? DeviceBatteryDeviceIdentity.bluetooth(peripheral.identifier.uuidString)
-            let groupID = deviceIdentity.key
-
-            var componentItems: [DeviceBatteryItem] = []
-
-            // Left ear battery
-            if let leftLevel = reading.leftBattery {
-                let component = DeviceBatteryBluetoothPowerLogComponent.left
-                componentItems.append(DeviceBatteryItem(
-                    id: "jbl-\(peripheral.identifier.uuidString)-left",
-                    deviceIdentity: deviceIdentity,
-                    name: jblComponentName(deviceName: name, component: component),
-                    model: target?.model,
-                    kind: target?.kind ?? .bluetooth,
-                    level: leftLevel,
+            guard let target = targetByPeripheralID[peripheralID] else { return [] }
+            let levels: [(DeviceBatteryBluetoothPowerLogComponent, Int?)] = [
+                (.left, reading.leftBattery),
+                (.right, reading.rightBattery),
+                (.chargingCase, reading.caseBattery)
+            ]
+            return levels.compactMap { component, level in
+                guard let level else { return nil }
+                return DeviceBatteryItem(
+                    id: "jbl-\(target.id)-\(component.componentRole.rawValue)",
+                    deviceIdentity: target.deviceIdentity,
+                    name: jblComponentName(deviceName: target.name, component: component),
+                    model: target.model,
+                    kind: target.kind,
+                    level: level,
                     chargeState: .unknown,
-                    parentName: name,
+                    parentName: target.name,
                     source: "JBLExcelPoint",
                     lastUpdated: referenceDate,
-                    isConnected: true,
-                    detail: target?.detail,
+                    isConnected: target.isConnected,
+                    detail: target.detail,
                     componentIdentity: DeviceBatteryComponentIdentity(
-                        groupID: groupID,
+                        groupID: target.deviceIdentity.key,
                         role: component.componentRole
                     )
-                ))
+                )
             }
-
-            // Right ear battery
-            if let rightLevel = reading.rightBattery {
-                let component = DeviceBatteryBluetoothPowerLogComponent.right
-                componentItems.append(DeviceBatteryItem(
-                    id: "jbl-\(peripheral.identifier.uuidString)-right",
-                    deviceIdentity: deviceIdentity,
-                    name: jblComponentName(deviceName: name, component: component),
-                    model: target?.model,
-                    kind: target?.kind ?? .bluetooth,
-                    level: rightLevel,
-                    chargeState: .unknown,
-                    parentName: name,
-                    source: "JBLExcelPoint",
-                    lastUpdated: referenceDate,
-                    isConnected: true,
-                    detail: target?.detail,
-                    componentIdentity: DeviceBatteryComponentIdentity(
-                        groupID: groupID,
-                        role: component.componentRole
-                    )
-                ))
-            }
-
-            // Case battery
-            if let caseLevel = reading.caseBattery {
-                let component = DeviceBatteryBluetoothPowerLogComponent.chargingCase
-                componentItems.append(DeviceBatteryItem(
-                    id: "jbl-\(peripheral.identifier.uuidString)-case",
-                    deviceIdentity: deviceIdentity,
-                    name: jblComponentName(deviceName: name, component: component),
-                    model: target?.model,
-                    kind: target?.kind ?? .bluetooth,
-                    level: caseLevel,
-                    chargeState: .unknown,
-                    parentName: name,
-                    source: "JBLExcelPoint",
-                    lastUpdated: referenceDate,
-                    isConnected: true,
-                    detail: target?.detail,
-                    componentIdentity: DeviceBatteryComponentIdentity(
-                        groupID: groupID,
-                        role: component.componentRole
-                    )
-                ))
-            }
-
-            return componentItems
         })
 
         return items
     }
 
     private func target(for peripheral: CBPeripheral) -> BluetoothBatteryTarget? {
-        guard let name = peripheral.name else { return nil }
-        return uniqueTarget(named: name, eligibleTargetIDs: gattTargetIDs)
-            ?? jblTargetMatching(name: name)
-    }
-
-    private func uniqueTarget(
-        named name: String,
-        eligibleTargetIDs: Set<String>
-    ) -> BluetoothBatteryTarget? {
-        let candidates = targetsByName[Self.targetNameKey(name), default: []].filter { target in
-            eligibleTargetIDs.contains(target.id)
-        }
-        guard candidates.count == 1 else {
-            return nil
-        }
-        return candidates[0]
-    }
-
-    private func anyTargetNamed(_ name: String) -> BluetoothBatteryTarget? {
-        let candidates = targetsByName[Self.targetNameKey(name), default: []]
-        guard candidates.count == 1 else {
-            return nil
-        }
-        return candidates[0]
-    }
-
-    private static func targetNameKey(_ name: String) -> String {
-        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        targetByPeripheralID[peripheral.identifier]
     }
 
     private func firstNonEmpty(_ values: String?...) -> String? {

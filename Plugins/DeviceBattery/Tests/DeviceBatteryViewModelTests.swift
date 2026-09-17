@@ -205,9 +205,57 @@ final class DeviceBatteryViewModelTests: XCTestCase {
         let options = await sampler.options()
         XCTAssertEqual(options.count, 2)
         XCTAssertFalse(options[0].revalidateSupplementalState)
-        XCTAssertTrue(options[0].performActiveScan)
+        XCTAssertEqual(options[0].scanScope, .allConnected)
         XCTAssertTrue(options[1].revalidateSupplementalState)
-        XCTAssertFalse(options[1].performActiveScan)
+        XCTAssertEqual(options[1].scanScope, .none)
+        viewModel.stop()
+    }
+
+    func testConnectionEventsDuringCollectionQueueOneRefreshWithoutRestartingTheRead() async {
+        let sampler = SuspendedBluetoothSampler()
+        let bluetoothObserver = RecordingBluetoothConnectionObserver()
+        let viewModel = DeviceBatteryViewModel(
+            sampler: sampler,
+            vendorHIDMonitor: RecordingVendorHIDBatteryMonitor(),
+            bluetoothConnectionObserver: bluetoothObserver,
+            schedule: DeviceBatterySamplingSchedule(
+                internalBatteryFallback: 30,
+                bluetoothBackground: 30,
+                bluetoothComponentVisible: 30,
+                appleMobileBackground: 30,
+                appleMobileComponentVisible: 30,
+                bluetoothConnectionDebounce: 0.01,
+                activityResumeDelay: 0.01
+            )
+        )
+        viewModel.setLowBatteryMonitoringEnabled(true)
+        viewModel.start(
+            includeInternalBattery: false,
+            includeBluetoothDevices: true,
+            includeAppleMobileDevices: false,
+            includeVendorHIDDevices: false
+        )
+        for _ in 0..<100 {
+            if await sampler.hasStartedFirstCollection() { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+
+        bluetoothObserver.sendConnectionChange()
+        bluetoothObserver.sendConnectionChange()
+        try? await Task.sleep(for: .milliseconds(50))
+        let optionsDuringRead = await sampler.options()
+        XCTAssertEqual(optionsDuringRead.count, 1)
+        await sampler.resumeFirstCollection()
+
+        for _ in 0..<100 {
+            if (await sampler.options()).count >= 2 { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        let options = await sampler.options()
+        XCTAssertEqual(options.count, 2)
+        XCTAssertEqual(options.first?.scanScope, .allConnected)
+        XCTAssertEqual(options.last?.scanScope, .newlyConnected)
+        XCTAssertEqual(options.last?.forceProfileRefresh, true)
         viewModel.stop()
     }
 
@@ -398,6 +446,9 @@ final class DeviceBatteryViewModelTests: XCTestCase {
             DeviceBatterySamplingCounts(internalBattery: 2, bluetooth: 2, appleMobile: 1),
             sampler: sampler
         )
+        let options = await sampler.bluetoothOptions()
+        XCTAssertEqual(options.last?.scanScope, .newlyConnected)
+        XCTAssertEqual(options.last?.forceProfileRefresh, true)
         viewModel.stop()
     }
 
