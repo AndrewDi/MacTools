@@ -47,6 +47,7 @@ final class DeviceBatteryViewModel: ObservableObject {
     private var activityResumeTask: Task<Void, Never>?
     private var pendingVisibleBluetoothRefresh = false
     private var pendingVisibleAppleMobileRefresh = false
+    private var pendingConnectionRefresh = false
     private var activeCollectionIDs: Set<UUID> = []
     private var collectionSourcesByID: [UUID: DeviceBatterySource] = [:]
 
@@ -205,7 +206,7 @@ final class DeviceBatteryViewModel: ObservableObject {
                 bluetoothConnectionObserver.start()
                 restartBluetoothSampling(
                     forceProfileRefresh: true,
-                    performActiveScan: true,
+                    scanScope: .allConnected,
                     revalidateSupplementalState: isComponentPanelVisible
                 )
             } else {
@@ -216,6 +217,7 @@ final class DeviceBatteryViewModel: ObservableObject {
                 bluetoothEventTask = nil
                 discardCollections(for: .bluetooth)
                 pendingVisibleBluetoothRefresh = false
+                pendingConnectionRefresh = false
             }
         }
 
@@ -360,7 +362,7 @@ final class DeviceBatteryViewModel: ObservableObject {
         restartInternalBatterySampling()
         restartBluetoothSampling(
             forceProfileRefresh: forceBluetoothProfileRefresh,
-            performActiveScan: true,
+            scanScope: .allConnected,
             revalidateSupplementalState: isComponentPanelVisible
         )
         restartAppleMobileSampling(revalidateImmediately: isComponentPanelVisible)
@@ -379,7 +381,7 @@ final class DeviceBatteryViewModel: ObservableObject {
 
     private func restartBluetoothSampling(
         forceProfileRefresh: Bool,
-        performActiveScan: Bool,
+        scanScope: DeviceBatteryBluetoothScanScope,
         revalidateSupplementalState: Bool = false,
         initialDelay: TimeInterval = 0
     ) {
@@ -391,7 +393,7 @@ final class DeviceBatteryViewModel: ObservableObject {
             guard let self else { return }
             await self.runBluetoothLoop(
                 forceProfileRefresh: forceProfileRefresh,
-                performInitialActiveScan: performActiveScan,
+                initialScanScope: scanScope,
                 revalidateInitialSupplementalState: revalidateSupplementalState,
                 initialDelay: initialDelay
             )
@@ -428,7 +430,7 @@ final class DeviceBatteryViewModel: ObservableObject {
 
     private func runBluetoothLoop(
         forceProfileRefresh: Bool,
-        performInitialActiveScan: Bool,
+        initialScanScope: DeviceBatteryBluetoothScanScope,
         revalidateInitialSupplementalState: Bool,
         initialDelay: TimeInterval = 0
     ) async {
@@ -441,26 +443,35 @@ final class DeviceBatteryViewModel: ObservableObject {
         }
 
         var shouldForceProfileRefresh = forceProfileRefresh
-        var shouldPerformActiveScan = performInitialActiveScan
+        var scanScope = initialScanScope
         var shouldRevalidateSupplementalState = revalidateInitialSupplementalState
 
         while !Task.isCancelled {
             await refreshBluetooth(
                 forceProfileRefresh: shouldForceProfileRefresh,
-                performActiveScan: shouldPerformActiveScan,
+                scanScope: scanScope,
                 revalidateSupplementalState: shouldRevalidateSupplementalState
             )
+            guard !Task.isCancelled else { return }
+            if pendingConnectionRefresh, bluetoothEventTask == nil {
+                pendingConnectionRefresh = false
+                pendingVisibleBluetoothRefresh = false
+                shouldForceProfileRefresh = true
+                scanScope = .newlyConnected
+                shouldRevalidateSupplementalState = true
+                continue
+            }
             if pendingVisibleBluetoothRefresh,
                isComponentPanelVisible,
                includeBluetoothDevices {
                 pendingVisibleBluetoothRefresh = false
                 shouldForceProfileRefresh = false
-                shouldPerformActiveScan = false
+                scanScope = .none
                 shouldRevalidateSupplementalState = true
                 continue
             }
             shouldForceProfileRefresh = false
-            shouldPerformActiveScan = true
+            scanScope = .allConnected
             shouldRevalidateSupplementalState = false
 
             do {
@@ -519,7 +530,7 @@ final class DeviceBatteryViewModel: ObservableObject {
 
     private func refreshBluetooth(
         forceProfileRefresh: Bool,
-        performActiveScan: Bool,
+        scanScope: DeviceBatteryBluetoothScanScope,
         revalidateSupplementalState: Bool
     ) async {
         let collectionID = beginCollection(source: .bluetooth)
@@ -529,7 +540,7 @@ final class DeviceBatteryViewModel: ObservableObject {
             referenceDate: referenceDate,
             options: DeviceBatteryBluetoothSamplingOptions(
                 forceProfileRefresh: forceProfileRefresh,
-                performActiveScan: performActiveScan,
+                scanScope: scanScope,
                 revalidateSupplementalState: revalidateSupplementalState
             )
         )
@@ -573,6 +584,8 @@ final class DeviceBatteryViewModel: ObservableObject {
             return
         }
 
+        pendingConnectionRefresh = true
+
         bluetoothEventTask?.cancel()
         bluetoothEventTask = Task { @MainActor [weak self, schedule] in
             do {
@@ -588,9 +601,12 @@ final class DeviceBatteryViewModel: ObservableObject {
                 return
             }
             self.bluetoothEventTask = nil
+            // The collection loop consumes the request after its current read finishes.
+            guard !self.isCollecting(.bluetooth) else { return }
+            self.pendingConnectionRefresh = false
             self.restartBluetoothSampling(
                 forceProfileRefresh: true,
-                performActiveScan: true,
+                scanScope: .newlyConnected,
                 revalidateSupplementalState: self.isComponentPanelVisible
             )
         }
@@ -632,7 +648,7 @@ final class DeviceBatteryViewModel: ObservableObject {
             } else {
                 restartBluetoothSampling(
                     forceProfileRefresh: shouldForceBluetoothProfileRefresh,
-                    performActiveScan: true,
+                    scanScope: .allConnected,
                     revalidateSupplementalState: true
                 )
             }
@@ -658,7 +674,7 @@ final class DeviceBatteryViewModel: ObservableObject {
         if includeBluetoothDevices, !isCollecting(.bluetooth) {
             restartBluetoothSampling(
                 forceProfileRefresh: false,
-                performActiveScan: true,
+                scanScope: .allConnected,
                 initialDelay: remainingDelay(
                     since: sourceUpdateDates[.bluetooth],
                     interval: schedule.bluetoothBackground,
@@ -743,6 +759,7 @@ final class DeviceBatteryViewModel: ObservableObject {
         activityResumeTask = nil
         pendingVisibleBluetoothRefresh = false
         pendingVisibleAppleMobileRefresh = false
+        pendingConnectionRefresh = false
         activeCollectionIDs.removeAll()
         collectionSourcesByID.removeAll()
         rebuildSnapshot()
