@@ -687,6 +687,9 @@ private func deviceDetailText(
 }
 
 func deviceSymbolName(for item: DeviceBatteryItem) -> String {
+    if item.source == "JBLExcelPoint" {
+        return item.componentIdentity?.role == .chargingCase ? "bolt.circle" : "headphones"
+    }
     let haystack = [
         item.name,
         item.model,
