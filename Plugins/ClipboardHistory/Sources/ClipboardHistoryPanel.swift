@@ -25,6 +25,7 @@ private struct ClipboardItemShortcutSheet: View {
     let assignment: ClipboardItemShortcutStore.Assignment?
     let onAssign: (ClipboardItemShortcutStore.Lifetime?, ShortcutBinding?) async -> PluginShortcutRecordingResult
     let onRemove: () -> Void
+    let onOpenShortcutSettings: () -> Void
 
     @State private var lifetime: ClipboardItemShortcutStore.Lifetime?
     @State private var recordedBinding: ShortcutBinding?
@@ -37,7 +38,8 @@ private struct ClipboardItemShortcutSheet: View {
         allowsUntilRemoved: Bool,
         assignment: ClipboardItemShortcutStore.Assignment?,
         onAssign: @escaping (ClipboardItemShortcutStore.Lifetime?, ShortcutBinding?) async -> PluginShortcutRecordingResult,
-        onRemove: @escaping () -> Void
+        onRemove: @escaping () -> Void,
+        onOpenShortcutSettings: @escaping () -> Void
     ) {
         self.localization = localization
         self.existingBindingText = existingBindingText
@@ -45,6 +47,7 @@ private struct ClipboardItemShortcutSheet: View {
         self.assignment = assignment
         self.onAssign = onAssign
         self.onRemove = onRemove
+        self.onOpenShortcutSettings = onOpenShortcutSettings
         _lifetime = State(initialValue: assignment == nil ? .fiveMinutes : nil)
     }
 
@@ -94,6 +97,13 @@ private struct ClipboardItemShortcutSheet: View {
                 Text(errorMessage)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.red)
+                Button(localization.string(
+                    "itemShortcut.openSettings", defaultValue: "Open Actions & Shortcuts…"
+                )) {
+                    dismiss()
+                    onOpenShortcutSettings()
+                }
+                .controlSize(.small)
             }
             HStack {
                 if assignment != nil {
@@ -2091,6 +2101,7 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
     private let shortcutBindingProvider: (String) -> ShortcutBinding?
     private let shortcutSettingsContextProvider: () -> PluginSettingsContext?
     private let onOpenSettings: () -> Void
+    private let onOpenShortcutSettings: () -> Void
     private let model = ClipboardHistoryPanelModel()
     private var panel: KeyablePanel?
     private var isPositioningPanel = false
@@ -2128,7 +2139,8 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
             ClipboardHistoryPlugin.defaultPanelShortcutBinding($0)
         },
         shortcutSettingsContextProvider: @escaping () -> PluginSettingsContext? = { nil },
-        onOpenSettings: @escaping () -> Void = {}
+        onOpenSettings: @escaping () -> Void = {},
+        onOpenShortcutSettings: @escaping () -> Void = {}
     ) {
         self.historyController = historyController
         self.savedLibraryController = savedLibraryController
@@ -2145,6 +2157,7 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
         self.shortcutBindingProvider = shortcutBindingProvider
         self.shortcutSettingsContextProvider = shortcutSettingsContextProvider
         self.onOpenSettings = onOpenSettings
+        self.onOpenShortcutSettings = onOpenShortcutSettings
         self.exportCoordinator = ClipboardHistoryExportCoordinator(
             historyController: historyController,
             localization: localization,
@@ -2641,7 +2654,8 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
                     self?.shortcutSettingsContextProvider()
                 },
                 onClose: { [weak self] in self?.close() },
-                onOpenSettings: { [weak self] in self?.openSettings() }
+                onOpenSettings: { [weak self] in self?.openSettings() },
+                onOpenShortcutSettings: { [weak self] in self?.openShortcutSettings() }
             )
             .environment(\.locale, PluginRuntimeLocalization.locale)
             .environment(
@@ -2657,6 +2671,11 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
     func openSettings() {
         close(restorePreviousApplication: false)
         onOpenSettings()
+    }
+
+    func openShortcutSettings() {
+        close(restorePreviousApplication: false)
+        onOpenShortcutSettings()
     }
 
     private func copyCombinedItemsAndClose(ids: [UUID]) {
@@ -3783,6 +3802,7 @@ struct ClipboardHistoryPanelView: View {
     let shortcutSettingsContextProvider: () -> PluginSettingsContext?
     let onClose: () -> Void
     let onOpenSettings: () -> Void
+    let onOpenShortcutSettings: () -> Void
     let localization: PluginLocalization
 
     @ObservedObject private var settings: ClipboardHistorySettingsStore
@@ -3832,7 +3852,8 @@ struct ClipboardHistoryPanelView: View {
         shortcutTextProvider: @escaping (String) -> String?,
         shortcutSettingsContextProvider: @escaping () -> PluginSettingsContext?,
         onClose: @escaping () -> Void,
-        onOpenSettings: @escaping () -> Void = {}
+        onOpenSettings: @escaping () -> Void = {},
+        onOpenShortcutSettings: @escaping () -> Void = {}
     ) {
         self.controller = controller
         self.savedLibraryController = savedLibraryController
@@ -3866,6 +3887,7 @@ struct ClipboardHistoryPanelView: View {
         self.shortcutSettingsContextProvider = shortcutSettingsContextProvider
         self.onClose = onClose
         self.onOpenSettings = onOpenSettings
+        self.onOpenShortcutSettings = onOpenShortcutSettings
         _settings = ObservedObject(wrappedValue: controller.settings)
     }
 
@@ -4017,12 +4039,14 @@ struct ClipboardHistoryPanelView: View {
                 existingBindingText: shortcutSettingsContextProvider()?
                     .shortcutItem(definitionID: ClipboardItemShortcutStore.definitionID(for: request.itemID))?
                     .bindingText,
-                allowsUntilRemoved: savedLibraryController.items.contains { $0.id == request.itemID },
+                allowsUntilRemoved: savedLibraryController.items.contains { $0.id == request.itemID }
+                    || controller.items.contains { $0.id == request.itemID && $0.isSaved },
                 assignment: itemShortcutAssignment(request.itemID),
                 onAssign: { lifetime, binding in
                     await onAssignItemShortcut(request.itemID, lifetime, binding)
                 },
-                onRemove: { onRemoveItemShortcut(request.itemID) }
+                onRemove: { onRemoveItemShortcut(request.itemID) },
+                onOpenShortcutSettings: onOpenShortcutSettings
             )
         }
         .alert(item: $clearRequest) { request in

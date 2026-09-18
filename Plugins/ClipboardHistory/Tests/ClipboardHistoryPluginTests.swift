@@ -326,6 +326,136 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         await host.waitForScheduledPluginStateRebuildForTests()
         XCTAssertFalse(host.shortcutItems.contains { $0.id == shortcutID })
         XCTAssertGreaterThan(registrar.unregisteredCount, 0)
+        XCTAssertNil(defaults.data(forKey: "shortcut.customization.\(shortcutID)"))
+    }
+
+    func testSavedClipSupportsLastingShortcutAndRemovesItWhenUnSaved() async throws {
+        let item = ClipboardHistoryItem(
+            id: UUID(), text: "Saved content", capturedAt: Date(),
+            sourceApplication: nil, isPinned: false, lastUsedAt: nil,
+            isInHistory: false,
+            savedMetadata: ClipboardHistorySavedMetadata(title: "Template A")
+        )
+        let persistence = BlockingClipboardHistoryPersistence(items: [item])
+        persistence.allowSaveToFinish()
+        let board = PluginTestClipboardPasteboard()
+        let sender = FakeClipboardPasteCommandSender()
+        let plugin = makePlugin(
+            pasteboard: board, persistence: persistence,
+            pasteCommandSender: sender, frontmostProcessIdentifier: { 42 }
+        )
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        await waitUntilLoaded(plugin.controller)
+        let savedLibraryLoaded = await waitUntil { plugin.savedLibraryController.isLoaded }
+        XCTAssertTrue(savedLibraryLoaded)
+
+        let result = await plugin.assignItemShortcut(
+            itemID: item.id, lifetime: .untilRemoved,
+            binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+        )
+        XCTAssertEqual(result, .accepted)
+        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id)?.expiresAt)
+        XCTAssertEqual(plugin.itemShortcutStore.assignment(for: item.id)?.source.rawValue, "saved")
+        XCTAssertEqual(plugin.shortcutDefinitions.first {
+            $0.id == ClipboardItemShortcutStore.definitionID(for: item.id)
+        }?.title, "Template A")
+
+        plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: item.id))
+        let pasted = await waitUntil { sender.sendCount == 1 }
+        XCTAssertTrue(pasted)
+        XCTAssertEqual(board.text, "Saved content")
+        let deleted = await plugin.controller.deleteSavedItem(id: item.id)
+        XCTAssertTrue(deleted)
+        let removed = await waitUntil { plugin.itemShortcutStore.assignment(for: item.id) == nil }
+        XCTAssertTrue(removed)
+    }
+
+    func testTemporaryItemLoadFailureAndCancellationKeepShortcut() async throws {
+        let item = ClipboardHistoryItem(
+            id: UUID(), text: "Template", capturedAt: Date(),
+            sourceApplication: nil, isPinned: false, lastUsedAt: nil
+        )
+        let persistence = BlockingClipboardHistoryPersistence(items: [item])
+        persistence.allowSaveToFinish()
+        let hud = FakeClipboardPrivacyHUDPresenter()
+        let plugin = makePlugin(
+            persistence: persistence, privacyHUDPresenter: hud,
+            frontmostProcessIdentifier: { 42 }
+        )
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        await waitUntilLoaded(plugin.controller)
+        let savedLibraryLoaded = await waitUntil { plugin.savedLibraryController.isLoaded }
+        XCTAssertTrue(savedLibraryLoaded)
+        let assigned = await plugin.assignItemShortcut(
+            itemID: item.id, lifetime: .oneHour,
+            binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+        )
+        XCTAssertEqual(assigned, .accepted)
+
+        item.configurePayloadLoader({ throw ClipboardHistoryPayloadAccessError.unavailable }, discardCachedPayload: true)
+        plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: item.id))
+        await plugin.waitForItemShortcutPasteForTesting()
+        XCTAssertNotNil(plugin.itemShortcutStore.assignment(for: item.id))
+        XCTAssertEqual(hud.failures.count, 1)
+
+        item.configurePayloadLoader({ throw CancellationError() }, discardCachedPayload: true)
+        plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: item.id))
+        await plugin.waitForItemShortcutPasteForTesting()
+        XCTAssertNotNil(plugin.itemShortcutStore.assignment(for: item.id))
+        XCTAssertEqual(hud.failures.count, 1)
+    }
+
+    func testItemShortcutRejectsAnotherPluginsActionBinding() async throws {
+        let suite = "ClipboardItemShortcutActionConflictTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let item = ClipboardHistoryItem(
+            id: UUID(), text: "Template", capturedAt: Date(),
+            sourceApplication: nil, isPinned: false, lastUsedAt: nil
+        )
+        let persistence = BlockingClipboardHistoryPersistence(items: [item])
+        persistence.allowSaveToFinish()
+        let plugin = makePlugin(
+            persistence: persistence,
+            storage: UserDefaultsPluginStorage(pluginID: ClipboardHistoryPlugin.pluginID, userDefaults: defaults)
+        )
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        let actionPlugin = ClipboardShortcutConflictActionPlugin()
+        let manager = GlobalShortcutManager(registrar: FakeCarbonHotKeyRegistrar())
+        let host = PluginHost(
+            plugins: [actionPlugin, plugin],
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: manager
+        )
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        await waitUntilLoaded(plugin.controller)
+        let savedLibraryLoaded = await waitUntil { plugin.savedLibraryController.isLoaded }
+        XCTAssertTrue(savedLibraryLoaded)
+        let binding = ShortcutBinding(keyCode: 1, modifiers: [.command, .option, .control])
+        let reference = actionPlugin.actionCatalogEntries[0].reference
+        XCTAssertNil(host.setActionShortcutBindingAndReturnError(binding, for: reference))
+
+        let result = await plugin.assignItemShortcut(itemID: item.id, lifetime: .oneDay, binding: binding)
+        guard case let .rejected(message) = result else { return XCTFail("Expected duplicate binding rejection") }
+        XCTAssertTrue(message.contains("Other Plugin"))
+        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
+        XCTAssertTrue(manager.debugRegistrationsForTests.contains {
+            $0.binding == binding && $0.shortcutID.hasPrefix("action-shortcut.")
+        })
     }
 
     func testSnippetClipboardWriteResetsImplicitQueueBeforeBlockedUsageSaveAndPreservesExplicitQueue() async throws {
@@ -2728,5 +2858,44 @@ private final class FakeClipboardPrivacyHUDPresenter: ClipboardPrivacyHUDPresent
 
     func dismiss() {
         dismissCount += 1
+    }
+}
+
+@MainActor
+private final class ClipboardShortcutConflictActionPlugin: MacToolsPlugin, PluginActionProviding {
+    let metadata = PluginMetadata(
+        id: "clipboard-shortcut-conflict-action-test",
+        title: "Other Plugin",
+        iconName: "keyboard",
+        iconTint: .blue,
+        order: 1,
+        defaultDescription: "Tests action shortcut ownership"
+    )
+    var onStateChange: (() -> Void)?
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+
+    var actionDefinitions: [ActionDefinition] {
+        [ActionDefinition(
+            key: ActionKey(providerID: metadata.id, actionID: "run"),
+            title: "Other Action",
+            description: "Run another action",
+            systemImage: "keyboard",
+            externalInvocationPolicy: .allowed,
+            capabilities: [.foregroundInteractive]
+        )]
+    }
+
+    var actionCatalogEntries: [ActionCatalogEntry] {
+        [ActionCatalogEntry(
+            reference: ActionReference(key: ActionKey(providerID: metadata.id, actionID: "run")),
+            title: "Other Action"
+        )]
+    }
+
+    func actionAvailability(for reference: ActionReference) -> ActionAvailability { .available }
+
+    func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        ActionExecutionHandle { .succeeded(message: nil) }
     }
 }

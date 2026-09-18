@@ -380,6 +380,14 @@ final class ClipboardHistoryPlugin:
         },
         onOpenSettings: { [weak self] in
             self?.requestSettingsPresentation?()
+        },
+        onOpenShortcutSettings: {
+            guard let urlTypes = Bundle.main.object(forInfoDictionaryKey: "CFBundleURLTypes") as? [[String: Any]],
+                  let scheme = urlTypes.compactMap({ ($0["CFBundleURLSchemes"] as? [String])?.first }).first,
+                  let url = URL(string: "\(scheme)://app/settings/features/actions-and-shortcuts") else {
+                return
+            }
+            NSWorkspace.shared.open(url)
         }
     )
 
@@ -528,12 +536,9 @@ final class ClipboardHistoryPlugin:
 
         itemShortcutStore.onRemoved = { [weak self] removed in
             guard let self else { return }
+            let context = self.inlineShortcutSettingsContextProvider?()
             for assignment in removed {
-                let definitionID = assignment.definitionID
-                if let item = self.inlineShortcutSettingsContextProvider?()
-                    .shortcutItem(definitionID: definitionID) {
-                    self.inlineShortcutSettingsContextProvider?().clearShortcut(for: item.id)
-                }
+                context?.resetShortcut(for: "\(Self.pluginID).shortcut.\(assignment.definitionID)")
             }
             self.itemShortcutTailTask?.cancel()
             self.onStateChange?()
@@ -964,8 +969,7 @@ final class ClipboardHistoryPlugin:
             ),
         ]
         return fixed + itemShortcutStore.assignments.map { assignment in
-            let name = savedLibraryController.items.first { $0.id == assignment.itemID }?.title
-                ?? localization.string("quickPaste.historyItem", defaultValue: "History item")
+            let name = itemShortcutTitle(id: assignment.itemID)
             return PluginShortcutDefinition(
                 id: assignment.definitionID,
                 title: name,
@@ -1839,7 +1843,8 @@ final class ClipboardHistoryPlugin:
         itemShortcutStore.expireIfNeeded()
         itemShortcutStore.removeMissingItems(
             historyIDs: Set(controller.items.map(\.id)),
-            savedIDs: Set(savedLibraryController.items.map(\.id))
+            savedIDs: Set(controller.savedItems.map(\.id))
+                .union(savedLibraryController.items.map(\.id))
         )
     }
 
@@ -1859,14 +1864,14 @@ final class ClipboardHistoryPlugin:
         do {
             if let saved = savedLibraryController.items.first(where: { $0.id == itemID }) {
                 defer { saved.discardCachedPayloadIfReloadable() }
-                source = saved.isSnippet ? .snippet : .saved
+                source = .snippet
                 snapshot = ClipboardSequentialPasteSnapshot(
                     sourceItemID: itemID, payload: try await saved.loadPayloadAsync(),
                     expandsSnippetVariables: saved.isSnippet
                 )
             } else if let history = controller.items.first(where: { $0.id == itemID }) {
                 defer { history.discardCachedPayloadIfReloadable() }
-                source = .history
+                source = history.isSaved ? .saved : .history
                 snapshot = ClipboardSequentialPasteSnapshot(
                     sourceItemID: itemID, payload: try await history.loadPayloadAsync(),
                     expandsSnippetVariables: false
@@ -1879,13 +1884,16 @@ final class ClipboardHistoryPlugin:
                 "itemShortcut.unavailable", defaultValue: "This item is unavailable"
             ))
         }
+        let itemStillAvailable = switch source {
+        case .history: controller.items.contains { $0.id == itemID }
+        case .saved: controller.items.contains { $0.id == itemID && $0.isSaved }
+        case .snippet: savedLibraryController.items.contains { $0.id == itemID }
+        }
         guard itemShortcutLifecycleGeneration == lifecycleGeneration,
               itemShortcutRequestGeneration[itemID] == generation,
               !Task.isCancelled,
               snapshot.payloadByteCount <= ClipboardSequentialPasteSession.maximumPayloadByteCount,
-              (source == .history
-                ? controller.items.contains(where: { $0.id == itemID })
-                : savedLibraryController.items.contains(where: { $0.id == itemID })) else {
+              itemStillAvailable else {
             return .rejected(localization.string("itemShortcut.unavailable", defaultValue: "This item is unavailable"))
         }
         let previous = itemShortcutStore.assignment(for: itemID)
@@ -1942,6 +1950,10 @@ final class ClipboardHistoryPlugin:
         }
     }
 
+    func waitForItemShortcutPasteForTesting() async {
+        await itemShortcutTailTask?.value
+    }
+
     private func performItemShortcutPaste(
         _ assignment: ClipboardItemShortcutStore.Assignment,
         targetProcessIdentifier: pid_t?
@@ -1958,28 +1970,40 @@ final class ClipboardHistoryPlugin:
         }
         guard let targetProcessIdentifier,
               frontmostProcessIdentifier() == targetProcessIdentifier,
-              itemShortcutStore.isCurrent(assignment.id, itemID: assignment.itemID) else { return }
+              itemShortcutStore.isCurrent(assignment.id, itemID: assignment.itemID),
+              controller.isLoaded, savedLibraryController.isLoaded else { return }
         let snapshot: ClipboardSequentialPasteSnapshot
         do {
-            if assignment.source == .history,
-               let item = controller.items.first(where: { $0.id == assignment.itemID }) {
+            if assignment.source == .snippet {
+                guard let item = savedLibraryController.items.first(where: { $0.id == assignment.itemID }) else {
+                    removeItemShortcut(itemID: assignment.itemID)
+                    return
+                }
+                defer { item.discardCachedPayloadIfReloadable() }
+                snapshot = ClipboardSequentialPasteSnapshot(
+                    sourceItemID: item.id, payload: try await item.loadPayloadAsync(),
+                    expandsSnippetVariables: true
+                )
+            } else {
+                guard let item = controller.items.first(where: { $0.id == assignment.itemID }),
+                      assignment.source != .saved || item.isSaved else {
+                    removeItemShortcut(itemID: assignment.itemID)
+                    return
+                }
                 defer { item.discardCachedPayloadIfReloadable() }
                 snapshot = ClipboardSequentialPasteSnapshot(
                     sourceItemID: item.id, payload: try await item.loadPayloadAsync(),
                     expandsSnippetVariables: false
                 )
-            } else if assignment.source != .history,
-                      let item = savedLibraryController.items.first(where: { $0.id == assignment.itemID }) {
-                defer { item.discardCachedPayloadIfReloadable() }
-                snapshot = ClipboardSequentialPasteSnapshot(
-                    sourceItemID: item.id, payload: try await item.loadPayloadAsync(),
-                    expandsSnippetVariables: item.isSnippet
-                )
-            } else {
-                throw ClipboardHistoryPayloadAccessError.unavailable
             }
+        } catch is CancellationError {
+            return
         } catch {
-            removeItemShortcut(itemID: assignment.itemID)
+            if !Task.isCancelled, itemShortcutStore.isCurrent(assignment.id, itemID: assignment.itemID) {
+                privacyHUDPresenter.showFailure(localization.string(
+                    "hud.quickPaste.unavailable", defaultValue: "Quick Paste item is unavailable"
+                ))
+            }
             return
         }
         guard snapshot.payloadByteCount <= ClipboardSequentialPasteSession.maximumPayloadByteCount else { return }
@@ -2439,6 +2463,21 @@ final class ClipboardHistoryPlugin:
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty else { return nil }
         return String(title.prefix(100))
+    }
+
+    private func itemShortcutTitle(id: UUID) -> String {
+        if let snippet = savedLibraryController.items.first(where: { $0.id == id }) {
+            return String(snippet.title.prefix(80))
+        }
+        guard let item = controller.items.first(where: { $0.id == id }) else {
+            return localization.string("quickPaste.historyItem", defaultValue: "History item")
+        }
+        if let savedTitle = item.savedMetadata?.title, !savedTitle.isEmpty {
+            return String(savedTitle.prefix(80))
+        }
+        let preview = itemTitle(id: id)
+            ?? localization.string("quickPaste.historyItem", defaultValue: "History item")
+        return "\(String(preview.prefix(60))) · \(item.capturedAt.formatted(date: .abbreviated, time: .standard))"
     }
 
     private static func localizedContentKindTitle(
