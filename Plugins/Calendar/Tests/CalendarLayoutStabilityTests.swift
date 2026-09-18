@@ -99,6 +99,10 @@ final class CalendarLayoutStabilityTests: XCTestCase {
             styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = fixture.view
+        PluginPresentationSafety.prepareForWindowOrdering(
+            window,
+            windows: [window]
+        )
         window.orderFront(nil)
         defer { window.close() }
         fixture.model.start()

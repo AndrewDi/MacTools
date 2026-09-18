@@ -98,6 +98,10 @@ final class CalendarEventPopoverTests: XCTestCase {
         window.isReleasedWhenClosed = false
         let source = NSView(frame: NSRect(x: 160, y: 100, width: 36, height: 36))
         window.contentView?.addSubview(source)
+        PluginPresentationSafety.prepareForWindowOrdering(
+            window,
+            windows: [window]
+        )
         window.orderFront(nil)
         return (window, source)
     }
