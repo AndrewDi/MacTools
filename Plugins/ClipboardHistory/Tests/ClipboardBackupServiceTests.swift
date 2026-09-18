@@ -222,6 +222,49 @@ final class ClipboardBackupServiceTests: XCTestCase {
         XCTAssertEqual(retained.saved, 1)
     }
 
+    func testMergeRestoreOmitsProvisionalSavedMembershipFromLocalStage() throws {
+        let source = try Fixture(), destination = try Fixture()
+        let local = clip()
+        let metadata = try XCTUnwrap(local.savedMetadata)
+        try destination.history.save([local])
+        try source.snippets.save(snippet(), payloadChanged: true)
+        _ = try source.service.backUp(
+            to: source.archive, password: password,
+            scope: ClipboardBackupScope(history: false, saved: false, snippets: true)
+        )
+
+        let exclusions = [local.id: metadata]
+        let preview = try destination.service.preview(
+            url: source.archive, password: password, excludingSavedMetadata: exclusions
+        )
+        try destination.service.commit(preview, excludingSavedMetadata: exclusions)
+        let restoredLocal = try XCTUnwrap(destination.history.load().first { $0.id == local.id })
+        XCTAssertTrue(restoredLocal.isInHistory)
+        XCTAssertFalse(restoredLocal.isSaved)
+        XCTAssertEqual(try destination.snippets.load().count, 1)
+    }
+
+    func testReplacementRollbackOmitsProvisionalSavedMembership() throws {
+        let source = try Fixture(), destination = try Fixture()
+        let local = clip()
+        let metadata = try XCTUnwrap(local.savedMetadata)
+        try destination.history.save([local])
+        try source.history.save([clip(text: "incoming")])
+        _ = try source.service.backUp(to: source.archive, password: password, scope: full)
+
+        let exclusions = [local.id: metadata]
+        let preview = try destination.service.preview(
+            url: source.archive, password: password, replacing: true,
+            excludingSavedMetadata: exclusions
+        )
+        try destination.service.commit(preview, excludingSavedMetadata: exclusions)
+        let rollback = try destination.service.previewRollback()
+        try destination.service.commit(rollback)
+        let restoredLocal = try XCTUnwrap(destination.history.load().first { $0.id == local.id })
+        XCTAssertTrue(restoredLocal.isInHistory)
+        XCTAssertFalse(restoredLocal.isSaved)
+    }
+
     func testMergeMatchingIDsCombinesMembershipAndNewerMetadata() throws {
         let source = try Fixture(), destination = try Fixture()
         let id = UUID()

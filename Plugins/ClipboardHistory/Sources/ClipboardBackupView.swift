@@ -555,10 +555,17 @@ struct ClipboardBackupSheet: View {
                 self.password = ""; confirmation = ""; model.completed = true
             }
         } else if action == .rollback {
-            model.run(operation: { progress in try service.previewRollback(progress: progress) }) { model.preview = $0; missingOffset = 0; noticeOffset = 0; loadMissingPaths(); loadNotices() }
+            let excludedSavedMetadata = provisionalSavedMetadata()
+            model.run(operation: { progress in
+                try service.previewRollback(excludingSavedMetadata: excludedSavedMetadata, progress: progress)
+            }) { model.preview = $0; missingOffset = 0; noticeOffset = 0; loadMissingPaths(); loadNotices() }
         } else if let sourceURL {
             let password = password, replacing = replacing
-            model.run(operation: { progress in try service.preview(url: sourceURL, password: password, replacing: replacing, progress: progress) }) {
+            let excludedSavedMetadata = provisionalSavedMetadata()
+            model.run(operation: { progress in
+                try service.preview(url: sourceURL, password: password, replacing: replacing,
+                                    excludingSavedMetadata: excludedSavedMetadata, progress: progress)
+            }) {
                 model.preview = $0; missingOffset = 0; noticeOffset = 0; loadMissingPaths(); loadNotices()
             }
         }
@@ -585,8 +592,10 @@ struct ClipboardBackupSheet: View {
     private func commit(acceptingKeywordCapacityLoss: Bool = false) {
         guard let preview = model.preview else { return }
         let service = service
+        let excludedSavedMetadata = provisionalSavedMetadata()
         model.run(operation: { progress in
-            try service.commit(preview, acceptingKeywordCapacityLoss: acceptingKeywordCapacityLoss, progress: progress)
+            try service.commit(preview, acceptingKeywordCapacityLoss: acceptingKeywordCapacityLoss,
+                               excludingSavedMetadata: excludedSavedMetadata, progress: progress)
             return preview.summary
         }) {
             password = ""; confirmation = ""; model.restored($0)

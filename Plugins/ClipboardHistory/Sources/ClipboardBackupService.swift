@@ -123,6 +123,7 @@ final class ClipboardBackupService: @unchecked Sendable {
     }
 
     func preview(url: URL, password: String, replacing: Bool = false,
+                 excludingSavedMetadata: [UUID: ClipboardHistorySavedMetadata] = [:],
                  progress: @Sendable (ClipboardBackupPhase) -> Void = { _ in }) throws -> ClipboardBackupPreview {
         progress(.reading)
         let directory = try directory()
@@ -160,13 +161,15 @@ final class ClipboardBackupService: @unchecked Sendable {
               manifest.scope.saved || counts.saved == 0,
               manifest.scope.snippets || counts.snippets == 0 else { throw ClipboardBackupError.invalidArchive }
         let result = try stage(incoming: incoming, directory: directory, key: key, manifest: manifest,
-                               missing: missing, replacing: replacing, progress: progress)
+                               missing: missing, replacing: replacing,
+                               excludingSavedMetadata: excludingSavedMetadata, progress: progress)
         succeeded = true
         return result
     }
 
     /// The rollback is local and already device encrypted; authentication is still checked per row.
-    func previewRollback(progress: @Sendable (ClipboardBackupPhase) -> Void = { _ in }) throws -> ClipboardBackupPreview {
+    func previewRollback(excludingSavedMetadata: [UUID: ClipboardHistorySavedMetadata] = [:],
+                         progress: @Sendable (ClipboardBackupPhase) -> Void = { _ in }) throws -> ClipboardBackupPreview {
         let directory = try directory()
         var succeeded = false
         defer { if !succeeded { try? FileManager.default.removeItem(at: directory) } }
@@ -187,13 +190,15 @@ final class ClipboardBackupService: @unchecked Sendable {
             try references.addMissingReferences(counts.missing)
         }
         let result = try stage(incoming: incoming, directory: directory, key: key, manifest: manifest,
-                               missing: missing, replacing: true, progress: progress)
+                               missing: missing, replacing: true,
+                               excludingSavedMetadata: excludingSavedMetadata, progress: progress)
         succeeded = true
         return result
     }
 
     private func stage(incoming: ClipboardBackupDatabase, directory: URL, key: SymmetricKey,
                        manifest: ClipboardBackupManifest, missing: Int, replacing: Bool,
+                       excludingSavedMetadata: [UUID: ClipboardHistorySavedMetadata],
                        progress: @Sendable (ClipboardBackupPhase) -> Void) throws -> ClipboardBackupPreview {
         let staged = try ClipboardBackupDatabase(url: directory.appendingPathComponent("staged.sqlite3"), key: key, create: true)
         let fingerprint = try access.withActiveAccess {
@@ -212,6 +217,9 @@ final class ClipboardBackupService: @unchecked Sendable {
         }
         var summary = ClipboardBackupSummary(missingFileReferences: missing)
         try notices.transaction { try staged.transaction {
+            try removeProvisionalSavedMembership(
+                from: staged, into: .main, matching: excludingSavedMetadata
+            )
             if replacing {
                 // Iterate a separate connection so deleting/updating rows cannot disturb the cursor.
                 let original = try ClipboardBackupDatabase(url: directory.appendingPathComponent("original.sqlite3"), key: key, create: true)
@@ -288,7 +296,25 @@ final class ClipboardBackupService: @unchecked Sendable {
         }
     }
 
+    private func removeProvisionalSavedMembership(
+        from database: ClipboardBackupDatabase,
+        into schema: ClipboardBackupDatabase.Schema,
+        matching metadataByID: [UUID: ClipboardHistorySavedMetadata]
+    ) throws {
+        let fullScope = ClipboardBackupScope(history: true, saved: true, snippets: true)
+        for (id, metadata) in metadataByID {
+            guard let original = try database.lookup(table: .items, id: id),
+                  try original.history.savedMetadata == metadata else { continue }
+            if let retained = try original.selected(scope: fullScope, excludingSavedMetadata: metadata) {
+                try database.put(retained, into: schema)
+            } else {
+                try database.remove(original, from: schema)
+            }
+        }
+    }
+
     func commit(_ preview: ClipboardBackupPreview, acceptingKeywordCapacityLoss: Bool = false,
+                excludingSavedMetadata: [UUID: ClipboardHistorySavedMetadata] = [:],
                 progress: @Sendable (ClipboardBackupPhase) -> Void = { _ in }) throws {
         guard !preview.requiresKeywordCapacityConfirmation || acceptingKeywordCapacityLoss else {
             throw ClipboardBackupError.keywordCapacityConfirmationRequired
@@ -336,6 +362,9 @@ final class ClipboardBackupService: @unchecked Sendable {
                         try live.execute("DELETE FROM recovery.\(table.rawValue)")
                         try live.execute("INSERT INTO recovery.\(table.rawValue) SELECT id,metadata,payload FROM main.\(table.rawValue)")
                     }
+                    try removeProvisionalSavedMembership(
+                        from: live, into: .recovery, matching: excludingSavedMetadata
+                    )
                 }
                 try checkpoint?("beforeCommit")
                 try Task.checkCancellation()
