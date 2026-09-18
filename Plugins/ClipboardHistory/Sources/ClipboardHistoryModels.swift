@@ -258,6 +258,12 @@ struct ClipboardHistoryPayload: Codable, Equatable, Sendable {
 
     var plainText: String? { plainTexts.first }
 
+    var hasSinglePlainTextRepresentation: Bool {
+        pasteboardItems.count == 1
+            && pasteboardItems[0].representations.count == 1
+            && pasteboardItems[0].representations[0].typeIdentifier == ClipboardRepresentationType.plainText
+    }
+
     var fileURLs: [URL] {
         representations.compactMap { representation in
             guard representation.typeIdentifier == ClipboardRepresentationType.fileURL,
@@ -642,15 +648,8 @@ struct ClipboardHistoryItem: Codable, Equatable, Identifiable, Sendable {
     let fileReferenceCount: Int
     let linkURLs: [URL]
     let representationTypeIdentifiers: [String]
-    var isPlainTextOnly: Bool {
-        kind == .plainText
-            && !representationTypeIdentifiers.isEmpty
-            && representationTypeIdentifiers.count < ClipboardHistoryPayload.maximumMetadataRepresentationTypeCount
-            && representationTypeIdentifiers.allSatisfy { identifier in
-                identifier == ClipboardRepresentationType.plainText
-                    || UTType(identifier)?.conforms(to: .plainText) == true
-            }
-    }
+    let hasSinglePlainTextRepresentation: Bool?
+    var isPlainTextOnly: Bool { hasSinglePlainTextRepresentation == true }
     private(set) var semanticTraits: Set<ClipboardHistorySemanticTrait>
     let payloadDigest: Data
     let allowsRichTextImport: Bool
@@ -695,6 +694,7 @@ struct ClipboardHistoryItem: Codable, Equatable, Identifiable, Sendable {
         fileReferenceCount = completeFileURLs.count
         linkURLs = payload.metadataLinkURLs
         representationTypeIdentifiers = payload.metadataRepresentationTypeIdentifiers
+        hasSinglePlainTextRepresentation = payload.hasSinglePlainTextRepresentation
         payloadDigest = precomputedPayloadDigest ?? Self.digest(payload)
         allowsRichTextImport = ClipboardRichTextPreviewPolicy.allowsFormattedImport(payload)
         textCharacterCount = searchableText.count
@@ -785,6 +785,7 @@ struct ClipboardHistoryItem: Codable, Equatable, Identifiable, Sendable {
         fileReferenceCount: Int? = nil,
         linkURLs: [URL] = [],
         representationTypeIdentifiers: [String],
+        hasSinglePlainTextRepresentation: Bool? = nil,
         semanticTraits: Set<ClipboardHistorySemanticTrait>? = nil,
         searchIndex: ClipboardHistorySearchIndex? = nil,
         payloadDigest: Data,
@@ -814,6 +815,7 @@ struct ClipboardHistoryItem: Codable, Equatable, Identifiable, Sendable {
         self.fileReferenceCount = max(fileURLs.count, fileReferenceCount ?? fileURLs.count)
         self.linkURLs = linkURLs
         self.representationTypeIdentifiers = representationTypeIdentifiers
+        self.hasSinglePlainTextRepresentation = hasSinglePlainTextRepresentation
         let boundedImageSearchText = imageSearchText.map {
             String($0.prefix(Self.maximumSearchableCharacterCount))
         }
@@ -948,6 +950,7 @@ struct ClipboardHistoryItem: Codable, Equatable, Identifiable, Sendable {
         fileReferenceCount = completeFileURLs.count
         linkURLs = payload.metadataLinkURLs
         representationTypeIdentifiers = payload.metadataRepresentationTypeIdentifiers
+        hasSinglePlainTextRepresentation = payload.hasSinglePlainTextRepresentation
         imageSearchText = try container.decodeIfPresent(String.self, forKey: .imageSearchText).map {
             String($0.prefix(Self.maximumSearchableCharacterCount))
         }
@@ -1010,6 +1013,7 @@ struct ClipboardHistoryItem: Codable, Equatable, Identifiable, Sendable {
             && lhs.fileReferenceCount == rhs.fileReferenceCount
             && lhs.linkURLs == rhs.linkURLs
             && lhs.representationTypeIdentifiers == rhs.representationTypeIdentifiers
+            && lhs.hasSinglePlainTextRepresentation == rhs.hasSinglePlainTextRepresentation
             && lhs.semanticTraits == rhs.semanticTraits
             && lhs.payloadDigest == rhs.payloadDigest
             && lhs.allowsRichTextImport == rhs.allowsRichTextImport

@@ -1948,7 +1948,7 @@ final class ClipboardHistoryPlugin:
                     "itemShortcut.plainTextUnavailable", defaultValue: "This item has no plain text to paste."
                 ))
             }
-            guard !item.isPlainTextOnly || previous != nil else {
+            guard !snapshot.payload.hasSinglePlainTextRepresentation || previous != nil else {
                 return .rejected(localization.string(
                     "itemShortcut.textOnly.description",
                     defaultValue: "This item contains only plain text, so one shortcut covers both paste styles."
@@ -2106,7 +2106,7 @@ final class ClipboardHistoryPlugin:
             return
         }
         guard snapshot.payloadByteCount <= ClipboardSequentialPasteSession.maximumPayloadByteCount else { return }
-        let fileURLs = snapshot.payload.fileURLs
+        let fileURLs = assignment.pasteFormat == .original ? snapshot.payload.fileURLs : []
         let filesAvailable = await Task.detached(priority: .userInitiated) {
             fileURLs.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }
         }.value

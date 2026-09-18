@@ -25,11 +25,16 @@ private struct ClipboardItemShortcutSheet: View {
     let bindingText: (ClipboardItemShortcutStore.PasteFormat) -> String?
     let isUnsavedHistoryItem: Bool
     let isSnippet: Bool
-    let isTextOnly: Bool
+    let initialTextOnly: Bool?
+    let historyItem: ClipboardHistoryItem?
     let isPlainTextAvailable: Bool
     let onAssign: (ClipboardItemShortcutStore.PasteFormat, ClipboardItemShortcutStore.Lifetime?, ShortcutBinding?) async -> PluginShortcutRecordingResult
     let onRemove: (ClipboardItemShortcutStore.PasteFormat) -> Void
     let onOpenShortcutSettings: () -> Void
+    @State private var resolvedTextOnly: Bool?
+
+    private var isTextOnly: Bool { initialTextOnly ?? resolvedTextOnly ?? false }
+    private var isResolvingTextOnly: Bool { initialTextOnly == nil && resolvedTextOnly == nil }
 
     private var hasOriginalShortcut: Bool {
         store.assignment(for: itemID, pasteFormat: .original) != nil
@@ -47,40 +52,48 @@ private struct ClipboardItemShortcutSheet: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             Text(localization.string("quickPaste.sheet.title", defaultValue: "Item Shortcut"))
                 .font(PluginSettingsTheme.Typography.pageTitle)
-            ClipboardItemShortcutModeSection(
-                localization: localization, format: primaryFormat, store: store, storeItemID: itemID,
-                bindingText: bindingText(primaryFormat), isUnsavedHistoryItem: isUnsavedHistoryItem,
-                isTextOnly: isTextOnly, isLegacyDuplicate: false,
-                onAssign: onAssign, onRemove: onRemove,
-                onOpenShortcutSettings: onOpenShortcutSettings
-            )
-            .id(primaryFormat)
-            if !isSnippet {
-                if !isTextOnly || (hasOriginalShortcut && hasPlainTextShortcut) {
-                    Divider()
-                }
-                if isTextOnly && hasOriginalShortcut && hasPlainTextShortcut {
-                    ClipboardItemShortcutModeSection(
-                        localization: localization, format: .plainText, store: store, storeItemID: itemID,
-                        bindingText: bindingText(.plainText), isUnsavedHistoryItem: isUnsavedHistoryItem,
-                        isTextOnly: true, isLegacyDuplicate: true,
-                        onAssign: onAssign, onRemove: onRemove,
-                        onOpenShortcutSettings: onOpenShortcutSettings
-                    )
-                } else if !isTextOnly && isPlainTextAvailable {
-                    ClipboardItemShortcutModeSection(
-                        localization: localization, format: .plainText, store: store, storeItemID: itemID,
-                        bindingText: bindingText(.plainText), isUnsavedHistoryItem: isUnsavedHistoryItem,
-                        isTextOnly: false, isLegacyDuplicate: false,
-                        onAssign: onAssign, onRemove: onRemove,
-                        onOpenShortcutSettings: onOpenShortcutSettings
-                    )
-                } else if !isTextOnly {
-                    Label(localization.string(
-                        "itemShortcut.plainTextUnavailable", defaultValue: "This item has no plain text to paste."
-                    ), systemImage: "textformat")
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.secondary)
+            if isResolvingTextOnly {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel(localization.string(
+                        "quickPaste.sheet.title", defaultValue: "Item Shortcut"
+                    ))
+            } else {
+                ClipboardItemShortcutModeSection(
+                    localization: localization, format: primaryFormat, store: store, storeItemID: itemID,
+                    bindingText: bindingText(primaryFormat), isUnsavedHistoryItem: isUnsavedHistoryItem,
+                    isTextOnly: isTextOnly, isLegacyDuplicate: false,
+                    onAssign: onAssign, onRemove: onRemove,
+                    onOpenShortcutSettings: onOpenShortcutSettings
+                )
+                .id(primaryFormat)
+                if !isSnippet {
+                    if !isTextOnly || (hasOriginalShortcut && hasPlainTextShortcut) {
+                        Divider()
+                    }
+                    if isTextOnly && hasOriginalShortcut && hasPlainTextShortcut {
+                        ClipboardItemShortcutModeSection(
+                            localization: localization, format: .plainText, store: store, storeItemID: itemID,
+                            bindingText: bindingText(.plainText), isUnsavedHistoryItem: isUnsavedHistoryItem,
+                            isTextOnly: true, isLegacyDuplicate: true,
+                            onAssign: onAssign, onRemove: onRemove,
+                            onOpenShortcutSettings: onOpenShortcutSettings
+                        )
+                    } else if !isTextOnly && isPlainTextAvailable {
+                        ClipboardItemShortcutModeSection(
+                            localization: localization, format: .plainText, store: store, storeItemID: itemID,
+                            bindingText: bindingText(.plainText), isUnsavedHistoryItem: isUnsavedHistoryItem,
+                            isTextOnly: false, isLegacyDuplicate: false,
+                            onAssign: onAssign, onRemove: onRemove,
+                            onOpenShortcutSettings: onOpenShortcutSettings
+                        )
+                    } else if !isTextOnly {
+                        Label(localization.string(
+                            "itemShortcut.plainTextUnavailable", defaultValue: "This item has no plain text to paste."
+                        ), systemImage: "textformat")
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                    }
                 }
             }
             HStack {
@@ -91,6 +104,16 @@ private struct ClipboardItemShortcutSheet: View {
         }
         .padding(20)
         .frame(minWidth: 500)
+        .task(id: itemID) {
+            guard initialTextOnly == nil else { return }
+            guard let historyItem else {
+                resolvedTextOnly = false
+                return
+            }
+            defer { historyItem.discardCachedPayloadIfReloadable() }
+            resolvedTextOnly = (try? await historyItem.loadPayloadAsync())?
+                .hasSinglePlainTextRepresentation ?? false
+        }
     }
 }
 
@@ -4183,8 +4206,10 @@ struct ClipboardHistoryPanelView: View {
                     $0.id == request.itemID && !$0.isSaved
                 },
                 isSnippet: savedLibraryController.items.contains { $0.id == request.itemID },
-                isTextOnly: savedLibraryController.items.contains { $0.id == request.itemID }
-                    || controller.items.first(where: { $0.id == request.itemID })?.isPlainTextOnly == true,
+                initialTextOnly: savedLibraryController.items.contains { $0.id == request.itemID }
+                    ? true : controller.items.first(where: { $0.id == request.itemID })?
+                        .hasSinglePlainTextRepresentation,
+                historyItem: controller.items.first(where: { $0.id == request.itemID }),
                 isPlainTextAvailable: controller.items.first(where: { $0.id == request.itemID })
                     .map(ClipboardPlainTextConversion.isAvailable(for:)) ?? false,
                 onAssign: { format, lifetime, binding in

@@ -340,6 +340,102 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         XCTAssertEqual(sender.sendCount, 2)
     }
 
+    func testMissingFileCanStillPasteItsPathAsPlainText() async throws {
+        let missingURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("missing-clipboard-file-\(UUID().uuidString)")
+        let item = ClipboardHistoryItem(
+            id: UUID(),
+            payload: ClipboardHistoryPayload(pasteboardItems: [
+                .init(representations: [
+                    .init(typeIdentifier: ClipboardRepresentationType.fileURL,
+                          data: Data(missingURL.absoluteString.utf8)),
+                ]),
+            ]),
+            capturedAt: Date(), sourceApplication: nil, isPinned: false, lastUsedAt: nil
+        )
+        let persistence = BlockingClipboardHistoryPersistence(items: [item])
+        persistence.allowSaveToFinish()
+        let board = PluginTestClipboardPasteboard()
+        let sender = FakeClipboardPasteCommandSender()
+        let plugin = makePlugin(
+            pasteboard: board, persistence: persistence,
+            pasteCommandSender: sender, frontmostProcessIdentifier: { 42 }
+        )
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        await waitUntilLoaded(plugin.controller)
+        let savedLoaded = await waitUntil { plugin.savedLibraryController.isLoaded }
+        XCTAssertTrue(savedLoaded)
+
+        let assigned = await plugin.assignItemShortcut(
+            itemID: item.id, pasteFormat: .plainText, lifetime: .oneHour,
+            binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+        )
+        XCTAssertEqual(assigned, .accepted)
+        plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(
+            for: item.id, pasteFormat: .plainText
+        ))
+        let pasted = await waitUntil { sender.sendCount == 1 }
+        XCTAssertTrue(pasted)
+        XCTAssertEqual(board.payload, .plainText(missingURL.path))
+    }
+
+    func testMultiplePlainTextPasteboardItemsKeepTwoShortcutModes() async throws {
+        let payload = ClipboardHistoryPayload(pasteboardItems: ["First", "Second"].map { text in
+            .init(representations: [
+                .init(typeIdentifier: ClipboardRepresentationType.plainText, data: Data(text.utf8)),
+            ])
+        })
+        let item = ClipboardHistoryItem(
+            id: UUID(), payload: payload, capturedAt: Date(),
+            sourceApplication: nil, isPinned: false, lastUsedAt: nil
+        )
+        let persistence = BlockingClipboardHistoryPersistence(items: [item])
+        persistence.allowSaveToFinish()
+        let board = PluginTestClipboardPasteboard()
+        let sender = FakeClipboardPasteCommandSender()
+        let plugin = makePlugin(
+            pasteboard: board, persistence: persistence,
+            pasteCommandSender: sender, frontmostProcessIdentifier: { 42 }
+        )
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        await waitUntilLoaded(plugin.controller)
+        let savedLoaded = await waitUntil { plugin.savedLibraryController.isLoaded }
+        XCTAssertTrue(savedLoaded)
+
+        let original = await plugin.assignItemShortcut(
+            itemID: item.id, lifetime: .oneHour,
+            binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+        )
+        let plain = await plugin.assignItemShortcut(
+            itemID: item.id, pasteFormat: .plainText, lifetime: .oneHour,
+            binding: ShortcutBinding(keyCode: 2, modifiers: [.command, .option])
+        )
+        XCTAssertEqual(original, .accepted)
+        XCTAssertEqual(plain, .accepted)
+
+        plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: item.id))
+        let originalPasted = await waitUntil { sender.sendCount == 1 }
+        XCTAssertTrue(originalPasted)
+        XCTAssertEqual(board.payload, payload)
+
+        plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(
+            for: item.id, pasteFormat: .plainText
+        ))
+        let plainPasted = await waitUntil { sender.sendCount == 2 }
+        XCTAssertTrue(plainPasted)
+        XCTAssertEqual(board.payload, .plainText("First"))
+    }
+
     func testTextOnlyItemUsesOneShortcutButKeepsAnExistingSecondAssignment() async throws {
         let item = ClipboardHistoryItem(
             id: UUID(), text: "Plain content", capturedAt: Date(),

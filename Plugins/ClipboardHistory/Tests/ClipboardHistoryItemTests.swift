@@ -20,6 +20,26 @@ final class ClipboardHistoryItemTests: XCTestCase {
             .init(typeIdentifier: "com.example.custom-content", data: Data([1])),
         ])
         XCTAssertFalse(additionalData.isPlainTextOnly)
+
+        let alternateTextType = item(representations: [
+            .init(typeIdentifier: "public.utf16-plain-text", data: Data([0, 72])),
+        ])
+        XCTAssertFalse(alternateTextType.isPlainTextOnly)
+
+        let multipleItems = ClipboardHistoryItem(
+            id: UUID(),
+            payload: ClipboardHistoryPayload(pasteboardItems: [
+                .init(representations: [
+                    .init(typeIdentifier: ClipboardRepresentationType.plainText, data: Data("First".utf8)),
+                ]),
+                .init(representations: [
+                    .init(typeIdentifier: ClipboardRepresentationType.plainText, data: Data("Second".utf8)),
+                ]),
+            ]),
+            capturedAt: Date(), sourceApplication: nil, isPinned: false, lastUsedAt: nil
+        )
+        XCTAssertFalse(multipleItems.isPlainTextOnly)
+        XCTAssertEqual(multipleItems.representationTypeIdentifiers, plain.representationTypeIdentifiers)
     }
 
     private func item(representations: [ClipboardStoredRepresentation]) -> ClipboardHistoryItem {
