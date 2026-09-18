@@ -7,8 +7,6 @@ import MacToolsPluginKit
 enum FeatureSettingsPane: Hashable {
     case actionsAndShortcuts
     case automation
-    case dashboardLayout
-    case featurePanelLayout
     case marketplace
     case configuration(String)
 }
@@ -126,10 +124,8 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         switch self {
         case .openSettings, .openCommandPalette:
             .general
-        case .toggleDashboard:
-            .feature(.dashboardLayout)
-        case .toggleFeaturePanel:
-            .feature(.featurePanelLayout)
+        case .toggleDashboard, .toggleFeaturePanel:
+            .feature(.actionsAndShortcuts)
         }
     }
 
@@ -142,34 +138,6 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         }
     }
 
-}
-
-private extension FeatureSettingsPane {
-    init(landingPage: PluginSettingsLandingPage) {
-        switch landingPage {
-        case .dashboard:
-            self = .dashboardLayout
-        case .featurePanel:
-            self = .featurePanelLayout
-        case .marketplace:
-            self = .marketplace
-        }
-    }
-
-    var landingPage: PluginSettingsLandingPage? {
-        switch self {
-        case .actionsAndShortcuts, .automation:
-            nil
-        case .dashboardLayout:
-            .dashboard
-        case .featurePanelLayout:
-            .featurePanel
-        case .marketplace:
-            .marketplace
-        case .configuration:
-            nil
-        }
-    }
 }
 
 struct PluginHostCapabilities: Equatable, Sendable {
@@ -2287,39 +2255,10 @@ final class PluginHost: ObservableObject {
         appPresentationHandler?(.settings(.feature(.actionsAndShortcuts)))
     }
 
-    /// Chooses the entry page for a normal Plugins-tab selection. Explicit
-    /// navigation to Marketplace or a plugin configuration bypasses this so
-    /// the requested destination is always respected.
-    func pluginSettingsLandingPage() -> FeatureSettingsPane {
-        let dashboardIsAvailable = !dashboardLayoutItems.isEmpty || !dashboardHiddenLayoutItems.isEmpty
-        let featurePanelIsAvailable = !featurePanelLayoutItems.isEmpty || !featurePanelHiddenLayoutItems.isEmpty
-
-        let landingPage: PluginSettingsLandingPage
-        if !dashboardIsAvailable && !featurePanelIsAvailable {
-            landingPage = .marketplace
-        } else if let savedPage = pluginDisplayPreferencesStore.lastPluginSettingsLandingPage(),
-                  isAvailable(savedPage, dashboardIsAvailable: dashboardIsAvailable, featurePanelIsAvailable: featurePanelIsAvailable) {
-            landingPage = savedPage
-        } else if dashboardIsAvailable {
-            landingPage = .dashboard
-        } else {
-            landingPage = .featurePanel
-        }
-
-        // This automatic route must not replace the user's saved choice. For
-        // example, temporarily having only settings-only plugins should not
-        // make Marketplace their permanent landing page after they install a
-        // layout-capable plugin again.
-        return FeatureSettingsPane(landingPage: landingPage)
-    }
-
     @discardableResult
     func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) -> Bool {
         switch pane {
-        case .actionsAndShortcuts, .automation, .dashboardLayout, .featurePanelLayout, .marketplace:
-            if let landingPage = pane.landingPage {
-                pluginDisplayPreferencesStore.setLastPluginSettingsLandingPage(landingPage)
-            }
+        case .actionsAndShortcuts, .automation, .marketplace:
             return true
         case let .configuration(pluginID):
             guard pluginSettingsItems.contains(where: { $0.id == pluginID }) else {
@@ -5605,21 +5544,6 @@ final class PluginHost: ObservableObject {
     private func trimSettingsViewCache(keeping settingsPluginIDs: Set<String>) {
         settingsViewCache = settingsViewCache.filter {
             settingsPluginIDs.contains($0.key.pluginID)
-        }
-    }
-
-    private func isAvailable(
-        _ landingPage: PluginSettingsLandingPage,
-        dashboardIsAvailable: Bool,
-        featurePanelIsAvailable: Bool
-    ) -> Bool {
-        switch landingPage {
-        case .dashboard:
-            dashboardIsAvailable
-        case .featurePanel:
-            featurePanelIsAvailable
-        case .marketplace:
-            true
         }
     }
 

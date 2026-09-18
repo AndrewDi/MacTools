@@ -543,27 +543,15 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
-    func testSurfaceOnlyPluginNavigatesToAndRevealsItsFeaturePanelRow() throws {
+    func testPanelOnlyPluginWithoutSettingsOrMarketplaceDoesNotCreateNavigationResult() {
         let plugin = SurfaceOnlySearchTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
-        let result = try XCTUnwrap(
-            MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
-                $0.title == plugin.metadata.title
-            }
-        )
-
-        XCTAssertEqual(
-            result.action,
-            .navigate(
-                destination: .plugins(.featurePanelLayout),
-                target: .surface(
-                    SurfaceSettingsSearchTarget(
-                        surface: .featurePanel,
-                        pluginID: plugin.metadata.id
-                    )
-                )
-            )
-        )
+        XCTAssertTrue(host.pluginSettingsItems.isEmpty)
+        XCTAssertTrue(host.pluginManagementItems.isEmpty)
+        let index = MacToolsSearchIndexBuilder.build(pluginHost: host)
+        XCTAssertFalse(index.items.contains {
+            $0.kind == .navigation && $0.title == plugin.metadata.title
+        }, "A runtime-only plugin must not create a link to a removed or unavailable settings page")
     }
 
     func testSearchUsesTitleDescriptionAndKeywordsWithAllTokenMatching() {
@@ -591,8 +579,6 @@ final class MacToolsSearchTests: XCTestCase {
         XCTAssertEqual(
             results.map(\.id),
             [
-                "navigation.dashboard",
-                "navigation.feature-panel",
                 "navigation.actions-and-shortcuts",
                 "navigation.automation",
                 "navigation.marketplace",

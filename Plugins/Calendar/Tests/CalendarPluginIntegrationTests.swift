@@ -244,20 +244,38 @@ final class CalendarPluginIntegrationTests: XCTestCase {
         plugin.panelSurfaceDidBecomeVisible(.component)
         defer { plugin.panelSurfaceDidBecomeHidden(.component) }
         plugin.handleSettingsAction(.setSelection(controlID: "alternate-calendar", optionID: "chinese"))
-        for scheme in [ColorScheme.light, .dark] {
-            let theme = PluginComponentTheme.system(colorScheme: scheme, contrast: .standard)
+        var appearances = [ColorScheme.light, .dark].map { scheme in
+            (name: "system-\(scheme)", scheme: scheme, contrast: ColorSchemeContrast.standard,
+             theme: PluginComponentTheme.system(colorScheme: scheme, contrast: .standard))
+        }
+        for id in ["builtin.solarized-light", "builtin.catppuccin-mocha"] {
+            let definition = try XCTUnwrap(MenuBarPanelBuiltInThemes.all.first { $0.id == id })
+            let scheme = MenuBarPanelThemeResolver.colorScheme(for: definition.appearance)
+            for contrast in [ColorSchemeContrast.standard, .increased] {
+                appearances.append((name: "\(id)-\(contrast)", scheme: scheme, contrast: contrast,
+                    theme: MenuBarPanelThemeResolver.resolve(definition: definition,
+                        colorScheme: scheme, contrast: contrast).componentTheme))
+            }
+        }
+        for appearance in appearances {
+            let scheme = appearance.scheme
+            let theme = appearance.theme
             let view = NSHostingView(rootView: plugin.makeView(context: PluginComponentContext(
                 pluginID: "calendar", dismiss: {}, isPanelVisible: true
             ))
+            .foregroundStyle(theme.text.primary)
             .environment(\.pluginComponentTheme, theme)
             .environment(\.colorScheme, scheme)
             .background(theme.surfaces.panel))
-            view.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+            let nativeAppearance: NSAppearance.Name = appearance.contrast == .increased
+                ? (scheme == .dark ? .accessibilityHighContrastDarkAqua : .accessibilityHighContrastAqua)
+                : (scheme == .dark ? .darkAqua : .aqua)
+            view.appearance = NSAppearance(named: nativeAppearance)
             view.frame = CGRect(x: 0, y: 0, width: 304, height: 608)
             try await settleLayout(view)
             let groupedHeight = plugin.descriptor.span.height
             XCTAssertLessThanOrEqual(groupedHeight, 76)
-            try attachSnapshot(view, spanHeight: groupedHeight, name: "Calendar-grouped-\(scheme)")
+            try attachSnapshot(view, spanHeight: groupedHeight, name: "Calendar-grouped-\(appearance.name)")
 
             plugin.handleSettingsAction(.setSelection(controlID: "agenda-day-count", optionID: "1"))
             try await settleLayout(view)
@@ -268,7 +286,7 @@ final class CalendarPluginIntegrationTests: XCTestCase {
 
             plugin.handleSettingsAction(.setSelection(controlID: "alternate-calendar", optionID: "none"))
             try await settleLayout(view)
-            try attachSnapshot(view, spanHeight: plugin.descriptor.span.height, name: "Calendar-grouped-none-\(scheme)")
+            try attachSnapshot(view, spanHeight: plugin.descriptor.span.height, name: "Calendar-grouped-none-\(appearance.name)")
             plugin.handleSettingsAction(.setSelection(controlID: "alternate-calendar", optionID: "chinese"))
             try await settleLayout(view)
             XCTAssertEqual(plugin.descriptor.span.height, groupedHeight)

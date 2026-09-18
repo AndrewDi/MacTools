@@ -33,6 +33,7 @@ Apple separates optional alternate calendars from region-based holiday subscript
 ## Panel behavior
 
 - Dates sit directly on the shared card without permanent tile backgrounds. Today uses an accent outline, and hover adds a temporary fill. Date numbers remain centered when the alternate calendar is None; event dots occupy a separate bottom overlay and never shift the date text. Changing the alternate calendar preserves the measured panel height until the content actually resizes. The month header uses compact previous and next icons around a localized Today text button, with localized help and accessibility labels.
+- Hover surfaces use the component theme's control-hover token. Today uses primary text and the same theme outline in the month and agenda, including weekends; accent colors identify the date without replacing readable small text. Holiday and makeup-workday labels use neutral chip surfaces to retain small-text contrast. Event markers preserve their source calendar colors, including on adjacent-month dates.
 - Only dates with events appear as groups, ordered chronologically. Today has a highlighted date badge; yesterday and tomorrow use relative labels.
 - Each event shows its title, time or all-day label, calendar name, and original calendar color. Clicking an event opens the group's date in system Calendar.
 - The month and agenda share one continuous card with a subtle internal divider and no gap or separate rounded background. Events are not truncated to three per day; lists taller than 256 points scroll inside the card.

@@ -89,7 +89,9 @@ struct PanelComponentLibrary: View {
     @State private var query = ""
     @State private var selection: String?
     @State private var errorMessage: String?
+    @State private var presentationFocus = MenuBarPanelPopoverFocus()
     @FocusState private var searchFocused: Bool
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         let items = PanelComponentLibraryItem.catalog(in: pluginHost, matching: query)
@@ -108,8 +110,9 @@ struct PanelComponentLibrary: View {
                             .help(FeatureL10n.string("清除搜索"))
                     }
                 }
-                .padding(7)
-                .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .modifier(PanelComponentLibrarySearchFieldStyle())
                 .padding([.top, .horizontal], 12)
 
                 List(selection: Binding(get: { selected?.id }, set: { selection = $0 })) {
@@ -147,6 +150,7 @@ struct PanelComponentLibrary: View {
                             Text(FeatureL10n.string("点击预览，添加到当前面板"))
                                 .font(.subheadline).foregroundStyle(.secondary)
                         }
+                        .padding(.trailing, 36)
                         .padding(20)
 
                         GeometryReader { geometry in
@@ -187,17 +191,47 @@ struct PanelComponentLibrary: View {
         }
         .frame(width: 660, height: 440)
         .background(Color(nsColor: .windowBackgroundColor))
+        .background(MenuBarPanelPopoverFocusLifecycle(focus: presentationFocus).allowsHitTesting(false))
+        .overlay(alignment: .topTrailing) {
+            closeButton.padding(16)
+        }
         .accessibilityIdentifier("panel.library")
         .onAppear { selection = selected?.id; searchFocused = true }
+        .onExitCommand(perform: close)
         .onChange(of: items.map(\.id)) { _, ids in
             if !ids.contains(selection ?? "") { selection = ids.first }
         }
     }
 
+    private var closeButton: some View {
+        Button(action: close) {
+            Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .frame(width: 28, height: 28)
+                .contentShape(Circle())
+        }
+        .buttonStyle(PanelComponentLibraryCloseButtonStyle())
+        .help(AppL10n.settings("panelTheme.close", defaultValue: "关闭"))
+        .accessibilityLabel(AppL10n.settings("panelTheme.close", defaultValue: "关闭"))
+        .accessibilityIdentifier("panel.library.close")
+    }
+
+    private func close() {
+        searchFocused = false
+        presentationFocus.end()
+        dismiss()
+    }
+
     private func preview(_ item: PanelComponentLibraryPreviewItem, columnWidth: CGFloat) -> some View {
         let size = PanelComponentLibraryLayout.previewSize(item.sourceSize, columnWidth: columnWidth)
         return Button {
-            errorMessage = onAdd(item.entry) ? nil : FeatureL10n.string("组件暂不可用，请稍后重试。")
+            guard onAdd(item.entry) else {
+                errorMessage = FeatureL10n.string("组件暂不可用，请稍后重试。")
+                return
+            }
+            errorMessage = nil
+            close()
         } label: {
             PanelComponentLibraryPreview(size: item.sourceSize) {
                 switch item {
@@ -216,6 +250,50 @@ struct PanelComponentLibrary: View {
         .help(item.title)
         .accessibilityLabel(item.title + ", " + FeatureL10n.string("添加组件"))
         .accessibilityIdentifier("panel.library.add.\(item.id)")
+    }
+}
+
+private struct PanelComponentLibrarySearchFieldStyle: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        Group {
+            if reduceTransparency {
+                content.background(Color(nsColor: .controlBackgroundColor), in: Capsule())
+            } else if #available(macOS 26.0, *) {
+                content.glassEffect(.regular, in: Capsule())
+            } else {
+                content.background(.regularMaterial, in: Capsule())
+            }
+        }
+        .overlay {
+            if contrast == .increased {
+                Capsule().strokeBorder(.primary.opacity(0.5), lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
+        }
+    }
+}
+
+private struct PanelComponentLibraryCloseButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        CloseLabel(configuration: configuration)
+    }
+
+    private struct CloseLabel: View {
+        let configuration: ButtonStyleConfiguration
+        @State private var isHovered = false
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        var body: some View {
+            configuration.label
+                .foregroundStyle(Color.secondary)
+                .opacity(configuration.isPressed ? 0.8 : (isHovered ? 1 : 0.65))
+                .contentShape(Circle())
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovered)
+                .onHover { isHovered = $0 }
+        }
     }
 }
 

@@ -155,7 +155,7 @@ private struct CalendarHeaderView: View {
                     .truncationMode(.tail)
                     .padding(.horizontal, 4)
                     .frame(minWidth: 32, maxWidth: 48, minHeight: 20, maxHeight: 20)
-                    .background(isTodayHovered ? theme.surfaces.nested : .clear,
+                    .background(isTodayHovered ? theme.surfaces.controlHover : .clear,
                                 in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
@@ -185,7 +185,7 @@ private struct CalendarIconButton: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(isHovered ? theme.text.primary : theme.text.secondary)
                 .frame(width: 24, height: 20)
-                .background(isHovered ? theme.surfaces.nested : .clear,
+                .background(isHovered ? theme.surfaces.controlHover : .clear,
                             in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                 .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         }
@@ -265,7 +265,7 @@ private struct CalendarMonthGrid: View {
     }
 }
 
-private struct CalendarDayCell: View {
+struct CalendarDayCell: View {
     let day: CalendarDayModel
     let isHovered: Bool
     let localization: PluginLocalization
@@ -298,15 +298,13 @@ private struct CalendarDayCell: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .bottom) {
                 CalendarEventDots(events: day.visibleEvents)
-                    .opacity(day.isInDisplayedMonth ? 1 : 0.45)
                     .padding(.bottom, 2)
             }
-            .background(isHovered ? theme.surfaces.nested : .clear,
+            .background(isHovered ? theme.surfaces.controlHover : .clear,
                         in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
                 if day.isToday {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(theme.dataSeries.primary, lineWidth: 1.5)
+                    CalendarTodayOutline()
                 }
             }
             .overlay(alignment: .topTrailing) {
@@ -322,6 +320,8 @@ private struct CalendarDayCell: View {
     }
 
     private var primaryTextStyle: Color {
+        if day.isToday { return theme.text.primary }
+
         if day.isInDisplayedMonth {
             return day.isWeekend ? theme.text.secondary : theme.text.primary
         }
@@ -359,6 +359,18 @@ private struct CalendarDayCell: View {
     }
 }
 
+struct CalendarTodayOutline: View {
+    @Environment(\.pluginComponentTheme) private var theme
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .strokeBorder(theme.dataSeries.primary, lineWidth: contrast == .increased ? 2 : 1.5)
+            .accessibilityHidden(true)
+            .allowsHitTesting(false)
+    }
+}
+
 private struct CalendarHolidayBadge: View {
     let kind: CalendarHolidayKind
     let localization: PluginLocalization
@@ -369,14 +381,7 @@ private struct CalendarHolidayBadge: View {
             .font(.system(size: 7, weight: .bold))
             .foregroundStyle(theme.text.primary)
             .frame(width: 12, height: 12)
-            .background(
-                Circle()
-                    .fill(
-                        theme.interaction.selection(
-                            kind == .holiday ? theme.dataSeries.tertiary : theme.dataSeries.secondary
-                        )
-                    )
-            )
+            .background(theme.surfaces.chip, in: Circle())
     }
 }
 

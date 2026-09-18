@@ -1117,20 +1117,13 @@ struct MenuBarUnifiedPanelContent: View {
                     }
                 )
                 .frame(height: MenuBarPanelLayout.editingActionBarHeight)
-                .popover(isPresented: $showsComponentLibrary, arrowEdge: .top) {
+                .popover(isPresented: $showsComponentLibrary, arrowEdge: .trailing) {
                     PanelComponentLibrary(pluginHost: pluginHost, panelID: model.selectedTab.id) { entry in
                         guard pluginHost.addPanelEntry(entry, to: model.selectedTab.id) else { return false }
                         layoutEditingSession.reset()
                         additionRevealRequest = UUID()
-                        showsComponentLibrary = false
                         return true
                     }
-                    .background {
-                        MenuWindowAccessor { window in
-                            if let window { MenuBarPanelWindowRegistry.markEditingPopover(window) }
-                        }.allowsHitTesting(false)
-                    }
-                    .onExitCommand { showsComponentLibrary = false }
                 }
             }
         }
@@ -1451,16 +1444,6 @@ struct MenuBarPanelEditingActionBar: View {
                 panelToDelete = selectedPanel
             }
             .accessibilityIdentifier("menuBarPanel.delete")
-            .popover(item: $panelToDelete, arrowEdge: .top) { panel in
-                // Retain the addressed panel until the confirmation finishes closing.
-                MenuBarPanelDeleteConfirmation(panel: panel, onCancel: { panelToDelete = nil }) {
-                    let error = onDeletePanel(panel.id)
-                    if error == nil { panelToDelete = nil }
-                    return error
-                }
-                .controlSize(.regular)
-                .onExitCommand { panelToDelete = nil }
-            }
             MenuBarPanelEditingButton(title: FeatureL10n.string("添加面板"), emphasis: .standard,
                                       isEnabled: canAddPanel, action: onAddPanel)
                 .accessibilityIdentifier("menuBarPanel.add")
@@ -1469,6 +1452,16 @@ struct MenuBarPanelEditingActionBar: View {
         .padding(.vertical, MenuBarPanelLayout.editingActionBarVerticalPadding)
         .controlSize(.small)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .popover(item: $panelToDelete, arrowEdge: .trailing) { panel in
+            // Retain the addressed panel until the confirmation finishes closing.
+            MenuBarPanelDeleteConfirmation(panel: panel, onCancel: { panelToDelete = nil }) {
+                let error = onDeletePanel(panel.id)
+                if error == nil { panelToDelete = nil }
+                return error
+            }
+            .controlSize(.regular)
+            .onExitCommand { panelToDelete = nil }
+        }
         .onChange(of: selectedPanel?.id) { _, _ in panelToDelete = nil }
     }
 }

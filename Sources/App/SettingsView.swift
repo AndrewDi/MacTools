@@ -35,14 +35,10 @@ private func settingsNavigationTitle(
         FeatureL10n.string("操作与快捷键")
     case .plugins(.automation):
         FeatureL10n.string("自动化")
-    case .plugins(.dashboardLayout):
-        AppL10n.settings("plugins.sidebar.dashboard", defaultValue: "仪表盘")
-    case .plugins(.featurePanelLayout):
-        AppL10n.settings("plugins.sidebar.featurePanel", defaultValue: "功能面板")
     case .plugins(.marketplace):
-        AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "市场")
+        AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "插件市场")
     case .marketplaceDetail:
-        AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "市场")
+        AppL10n.settings("plugins.sidebar.marketplace", defaultValue: "插件市场")
     case let .plugins(.configuration(pluginID)):
         configurationItems.first { $0.id == pluginID }?.title
             ?? AppL10n.settings("tab.plugins", defaultValue: "插件")
@@ -63,8 +59,6 @@ struct SettingsView: View {
     let appearanceUserDefaults: UserDefaults
     let commandPaletteRecentStore: CommandPaletteRecentStore
     @StateObject private var uninstallConfirmationSession = PluginUninstallConfirmationSession()
-    var showDashboard: () -> Void = {}
-    var showFeaturePanel: () -> Void = {}
 
     var body: some View {
         // Recreate native AppKit-backed controls when the shared locale changes.
@@ -124,9 +118,7 @@ struct SettingsView: View {
                     menuBarIconGallery: menuBarIconGallery,
                     launchAtLoginController: launchAtLoginController,
                     menuBarPanelThemeStore: menuBarPanelThemeStore,
-                    appearanceUserDefaults: appearanceUserDefaults,
-                    showDashboard: showDashboard,
-                    showFeaturePanel: showFeaturePanel
+                    appearanceUserDefaults: appearanceUserDefaults
                 )
             }
             .frame(
@@ -3140,24 +3132,6 @@ private struct SettingsSidebar: View {
             )
             .tag(destination)
             .id(destination)
-        case .plugins(.dashboardLayout):
-            SettingsSidebarRow(
-                title: title,
-                systemImage: "square.grid.2x2",
-                iconTint: .blue,
-                shortcutNumber: shortcutNumber
-            )
-            .tag(destination)
-            .id(destination)
-        case .plugins(.featurePanelLayout):
-            SettingsSidebarRow(
-                title: title,
-                systemImage: "switch.2",
-                iconTint: .purple,
-                shortcutNumber: shortcutNumber
-            )
-            .tag(destination)
-            .id(destination)
         case .plugins(.marketplace):
             SettingsSidebarRow(
                 title: title,
@@ -3755,8 +3729,6 @@ private struct SettingsDetailPane: View {
     @ObservedObject var launchAtLoginController: LaunchAtLoginController
     @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
     let appearanceUserDefaults: UserDefaults
-    let showDashboard: () -> Void
-    let showFeaturePanel: () -> Void
 
     @ViewBuilder
     var body: some View {
@@ -3785,9 +3757,7 @@ private struct SettingsDetailPane: View {
                 pluginHost: pluginHost,
                 navigationCoordinator: navigationCoordinator,
                 selectedPane: pane,
-                uninstallConfirmationSession: uninstallConfirmationSession,
-                showDashboard: showDashboard,
-                showFeaturePanel: showFeaturePanel
+                uninstallConfirmationSession: uninstallConfirmationSession
             )
         case let .marketplaceDetail(target):
             MarketplacePluginDetailView(
@@ -3804,8 +3774,6 @@ private struct PluginSettingsDestinationPane: View {
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let selectedPane: FeatureSettingsPane
     @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
-    let showDashboard: () -> Void
-    let showFeaturePanel: () -> Void
 
     var body: some View {
         detail
@@ -3824,72 +3792,6 @@ private struct PluginSettingsDestinationPane: View {
                 pluginHost: pluginHost,
                 navigationCoordinator: navigationCoordinator
             )
-        case .dashboardLayout:
-            SurfaceLayoutSettingsView(
-                navigationCoordinator: navigationCoordinator,
-                surface: .dashboard,
-                description: AppL10n.settings(
-                    "plugins.dashboard.description",
-                    defaultValue: "拖拽调整仪表盘组件的排列顺序。"
-                ),
-                systemImage: "square.grid.2x2",
-                items: pluginHost.dashboardLayoutItems,
-                hiddenItems: pluginHost.dashboardHiddenLayoutItems,
-                openButtonTitle: AppL10n.settings("plugins.dashboard.open", defaultValue: "打开仪表盘"),
-                emptyTitle: AppL10n.settings("plugins.dashboard.empty.title", defaultValue: "暂无仪表盘组件"),
-                emptyDescription: AppL10n.settings(
-                    "plugins.dashboard.empty.description",
-                    defaultValue: "已安装且支持仪表盘的插件会显示在这里。"
-                ),
-                onMove: { pluginID, targetOffset in
-                    pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .dashboard)
-                },
-                onSetVisible: { pluginID, isVisible in
-                    pluginHost.setPluginVisible(isVisible, id: pluginID, on: .dashboard)
-                },
-                onResetOrder: { pluginHost.resetPluginOrder(on: .dashboard) },
-                onOpenPanel: showDashboard,
-                configurationPluginIDs: Set(pluginHost.pluginSettingsItems.map(\.pluginID)),
-                uninstallConfirmationSession: uninstallConfirmationSession,
-                onOpenSettings: pluginHost.presentPluginSettings(pluginID:),
-                onOpenMarketplace: pluginHost.presentPluginMarketplace,
-                onUninstall: { pluginID in
-                    try pluginHost.uninstallDynamicPlugin(pluginID: pluginID)
-                }
-            )
-        case .featurePanelLayout:
-            SurfaceLayoutSettingsView(
-                navigationCoordinator: navigationCoordinator,
-                surface: .featurePanel,
-                description: AppL10n.settings(
-                    "plugins.featurePanel.description",
-                    defaultValue: "拖拽调整功能面板操作的排列顺序。"
-                ),
-                systemImage: "switch.2",
-                items: pluginHost.featurePanelLayoutItems,
-                hiddenItems: pluginHost.featurePanelHiddenLayoutItems,
-                openButtonTitle: AppL10n.settings("plugins.featurePanel.open", defaultValue: "打开功能面板"),
-                emptyTitle: AppL10n.settings("plugins.featurePanel.empty.title", defaultValue: "暂无功能面板操作"),
-                emptyDescription: AppL10n.settings(
-                    "plugins.featurePanel.empty.description",
-                    defaultValue: "已安装且支持功能面板的插件会显示在这里。"
-                ),
-                onMove: { pluginID, targetOffset in
-                    pluginHost.movePlugin(id: pluginID, toOffset: targetOffset, on: .featurePanel)
-                },
-                onSetVisible: { pluginID, isVisible in
-                    pluginHost.setPluginVisible(isVisible, id: pluginID, on: .featurePanel)
-                },
-                onResetOrder: { pluginHost.resetPluginOrder(on: .featurePanel) },
-                onOpenPanel: showFeaturePanel,
-                configurationPluginIDs: Set(pluginHost.pluginSettingsItems.map(\.pluginID)),
-                uninstallConfirmationSession: uninstallConfirmationSession,
-                onOpenSettings: pluginHost.presentPluginSettings(pluginID:),
-                onOpenMarketplace: pluginHost.presentPluginMarketplace,
-                onUninstall: { pluginID in
-                    try pluginHost.uninstallDynamicPlugin(pluginID: pluginID)
-                }
-            )
         case .marketplace:
             PluginManagementSettingsView(
                 pluginHost: pluginHost,
@@ -3907,305 +3809,6 @@ private struct PluginSettingsDestinationPane: View {
 
     private func configurationItem(for pluginID: String) -> PluginSettingsPageItem? {
         pluginHost.pluginSettingsItems.first { $0.id == pluginID }
-    }
-}
-
-private struct SurfaceLayoutSettingsView: View {
-    @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
-    let surface: PluginDisplaySurface
-    let description: String
-    let systemImage: String
-    let items: [PluginSurfaceLayoutItem]
-    let hiddenItems: [PluginSurfaceLayoutItem]
-    let openButtonTitle: String
-    let emptyTitle: String
-    let emptyDescription: String
-    let onMove: (String, Int) -> Void
-    let onSetVisible: (String, Bool) -> Void
-    let onResetOrder: () -> Void
-    let onOpenPanel: () -> Void
-    let configurationPluginIDs: Set<String>
-    @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
-    let onOpenSettings: (String) -> Void
-    let onOpenMarketplace: () -> Void
-    let onUninstall: (String) throws -> Void
-    @State private var pendingUninstallItem: PluginUninstallConfirmation?
-    @State private var uninstallErrorMessage: String?
-    @State private var activeSearchTarget: SurfaceSettingsSearchTarget?
-    @State private var clearSearchTargetTask: Task<Void, Never>?
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            SettingsGroupedFormPageScaffold(
-                introduction: SettingsPageIntroductionConfiguration(
-                    description: description
-                ),
-                introductionAccessory: {
-                    Button(AppL10n.settings(
-                        "plugins.layout.restoreDefaultOrder",
-                        defaultValue: "恢复默认排列"
-                    ), action: onResetOrder)
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .disabled(items.count < 2)
-
-                    Button(action: onOpenPanel) {
-                        Label(openButtonTitle, systemImage: "rectangle.on.rectangle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                }
-            ) { widths in
-                if uninstallConfirmationSession.isConfirmationPaused {
-                    Section {
-                        PluginUninstallConfirmationPausedBanner(session: uninstallConfirmationSession)
-                            .settingsGroupedFormRowWidth(widths.sectionLayout)
-                    }
-                }
-
-                Section {
-                    if items.isEmpty {
-                        ContentUnavailableView(
-                            emptyTitle,
-                            systemImage: systemImage,
-                            description: Text(emptyDescription)
-                        )
-                        .frame(maxWidth: .infinity, minHeight: 180)
-                        .settingsGroupedFormRowWidth(widths.sectionLayout)
-                    } else {
-                        FeatureManagementTableView(
-                            items: items.map {
-                                FeatureManagementTableItem(
-                                    surfaceItem: $0,
-                                    hasSettings: configurationPluginIDs.contains($0.id)
-                                )
-                            },
-                            mode: .surface(surface),
-                            highlightedPluginID: highlightedPluginID(in: items),
-                            onMove: onMove,
-                            onSetVisible: onSetVisible,
-                            onOpenSettings: onOpenSettings,
-                            onOpenMarketplace: onOpenMarketplace,
-                            onRequestUninstall: requestUninstall
-                        )
-                        .frame(height: FeatureManagementTableView.preferredHeight(for: items.count))
-                        .overlay(alignment: .topLeading) {
-                            SurfaceLayoutSearchAnchors(
-                                surface: surface,
-                                items: items,
-                                isHidden: false
-                            )
-                        }
-                        .settingsGroupedFormRowWidth(widths.sectionLayout)
-                        .listRowInsets(EdgeInsets())
-                    }
-                }
-
-                if !hiddenItems.isEmpty {
-                    Section {
-                        FeatureManagementTableView(
-                            items: hiddenItems.map {
-                                FeatureManagementTableItem(
-                                    surfaceItem: $0,
-                                    hasSettings: configurationPluginIDs.contains($0.id)
-                                )
-                            },
-                            mode: .surface(surface),
-                            isReorderEnabled: false,
-                            highlightedPluginID: highlightedPluginID(in: hiddenItems),
-                            onSetVisible: onSetVisible,
-                            onOpenSettings: onOpenSettings,
-                            onOpenMarketplace: onOpenMarketplace,
-                            onRequestUninstall: requestUninstall
-                        )
-                        .frame(height: FeatureManagementTableView.preferredHeight(for: hiddenItems.count))
-                        .overlay(alignment: .topLeading) {
-                            SurfaceLayoutSearchAnchors(
-                                surface: surface,
-                                items: hiddenItems,
-                                isHidden: true
-                            )
-                        }
-                        .settingsGroupedFormRowWidth(widths.sectionLayout)
-                        .listRowInsets(EdgeInsets())
-                    } header: {
-                        SettingsGroupedFormSectionHeader(
-                            title: hiddenSectionTitle,
-                            systemImage: "eye.slash",
-                            layoutWidth: widths.readableContent
-                        )
-                    }
-                }
-            }
-            .onAppear {
-                applySearchRevealRequest(
-                    navigationCoordinator.searchRevealRequest,
-                    proxy: proxy
-                )
-            }
-            .onChange(of: navigationCoordinator.searchRevealRequest) { _, request in
-                applySearchRevealRequest(request, proxy: proxy)
-            }
-        }
-        .onDisappear {
-            clearSearchTargetTask?.cancel()
-            clearSearchTargetTask = nil
-            if let activeSearchTarget {
-                navigationCoordinator.clearSearchRevealRequest(
-                    matching: .surface(activeSearchTarget)
-                )
-            }
-            activeSearchTarget = nil
-        }
-        .sheet(item: $pendingUninstallItem) { item in
-            PluginUninstallConfirmationSheet(
-                confirmation: item,
-                session: uninstallConfirmationSession,
-                onConfirm: uninstall
-            )
-        }
-        .alert(
-            AppL10n.plugins("plugin.marketplace.operationFailed.title", defaultValue: "插件操作失败"),
-            isPresented: Binding(
-                get: { uninstallErrorMessage != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        uninstallErrorMessage = nil
-                    }
-                }
-            )
-        ) {
-            Button(AppL10n.settings("common.ok", defaultValue: "好"), role: .cancel) {}
-        } message: {
-            Text(uninstallErrorMessage ?? "")
-        }
-    }
-
-    private func highlightedPluginID(
-        in candidates: [PluginSurfaceLayoutItem]
-    ) -> String? {
-        guard
-            let pluginID = activeSearchTarget?.pluginID,
-            candidates.contains(where: { $0.id == pluginID })
-        else {
-            return nil
-        }
-
-        return pluginID
-    }
-
-    private func applySearchRevealRequest(
-        _ request: SettingsSearchRevealRequest?,
-        proxy: ScrollViewProxy
-    ) {
-        guard
-            let request,
-            case let .surface(target) = request.target,
-            target.surface == surface
-        else {
-            return
-        }
-
-        let isHidden: Bool
-        if items.contains(where: { $0.id == target.pluginID }) {
-            isHidden = false
-        } else if hiddenItems.contains(where: { $0.id == target.pluginID }) {
-            isHidden = true
-        } else {
-            navigationCoordinator.clearSearchRevealRequest(request)
-            return
-        }
-
-        clearSearchTargetTask?.cancel()
-        activeSearchTarget = target
-
-        DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.2)) {
-                proxy.scrollTo(target.scrollID(isHidden: isHidden), anchor: .center)
-            }
-        }
-
-        clearSearchTargetTask = Task { @MainActor in
-            do {
-                try await Task.sleep(for: .seconds(2))
-            } catch {
-                return
-            }
-
-            activeSearchTarget = nil
-            navigationCoordinator.clearSearchRevealRequest(request)
-        }
-    }
-
-    private func requestUninstall(_ pluginID: String) {
-        guard let item = (items + hiddenItems).first(where: { $0.id == pluginID && $0.canUninstall }) else {
-            return
-        }
-
-        let confirmation = PluginUninstallConfirmation(
-            pluginID: item.id,
-            pluginTitle: item.title,
-            surfaceCapabilitySummary: pluginCapabilitySummary(item.capabilities),
-            removesDataOnUninstall: item.removesDataOnUninstall
-        )
-        if uninstallConfirmationSession.shouldConfirmUninstall(
-            removesData: confirmation.removesDataOnUninstall
-        ) {
-            pendingUninstallItem = confirmation
-        } else {
-            uninstall(confirmation)
-        }
-    }
-
-    private var hiddenSectionTitle: String {
-        switch surface {
-        case .dashboard:
-            return AppL10n.settingsFormat(
-                "plugins.dashboard.hiddenSectionFormat",
-                defaultValue: "已在仪表盘隐藏（%d）",
-                hiddenItems.count
-            )
-        case .featurePanel:
-            return AppL10n.settingsFormat(
-                "plugins.featurePanel.hiddenSectionFormat",
-                defaultValue: "已在功能面板隐藏（%d）",
-                hiddenItems.count
-            )
-        }
-    }
-
-    private func uninstall(_ confirmation: PluginUninstallConfirmation) {
-        do {
-            try onUninstall(confirmation.pluginID)
-        } catch {
-            uninstallErrorMessage = error.localizedDescription
-        }
-    }
-}
-
-private struct SurfaceLayoutSearchAnchors: View {
-    let surface: PluginDisplaySurface
-    let items: [PluginSurfaceLayoutItem]
-    let isHidden: Bool
-
-    var body: some View {
-        VStack(spacing: FeatureManagementTableView.rowSpacing) {
-            ForEach(items) { item in
-                Color.clear
-                    .frame(maxWidth: .infinity)
-                    .frame(height: FeatureManagementTableView.rowHeight)
-                    .id(
-                        SurfaceSettingsSearchTarget(
-                            surface: surface,
-                            pluginID: item.id
-                        )
-                        .scrollID(isHidden: isHidden)
-                    )
-            }
-        }
-        .padding(.top, FeatureManagementTableView.verticalContentInset)
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
     }
 }
 

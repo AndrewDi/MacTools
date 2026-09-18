@@ -156,10 +156,6 @@ final class MenuBarStatusItemController: NSObject {
         pluginHost.statusItemButtonFrameProvider = { [weak self] in
             self?.statusItemButtonScreenRect()
         }
-        windowRouter.setPanelPresentationActions(
-            showDashboard: { [weak self] in self?.showDashboard() },
-            showFeaturePanel: { [weak self] in self?.showFeaturePanel() }
-        )
         windowRouter.setProgrammaticSettingsPresentationAction { [weak self] in
             self?.requestPanelClose()
         }

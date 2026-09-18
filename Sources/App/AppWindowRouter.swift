@@ -381,25 +381,6 @@ struct StandaloneCommandPaletteRootView: View {
     }
 }
 
-enum SettingsPanelPresentationTarget {
-    case dashboard
-    case featurePanel
-}
-
-struct SettingsPanelPresentationActions {
-    var showDashboard: () -> Void = {}
-    var showFeaturePanel: () -> Void = {}
-
-    func present(_ target: SettingsPanelPresentationTarget) {
-        switch target {
-        case .dashboard:
-            showDashboard()
-        case .featurePanel:
-            showFeaturePanel()
-        }
-    }
-}
-
 enum SettingsWindowLayout {
     static let defaultContentSize = NSSize(width: 1040, height: 720)
     static let minimumContentSize = NSSize(width: 860, height: 560)
@@ -469,7 +450,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
     private var runtimeLocaleCancellable: AnyCancellable?
     private var appDeactivationObserver: NSObjectProtocol?
     private var appearanceObserver: NSObjectProtocol?
-    private var panelPresentationActions = SettingsPanelPresentationActions()
     private var onProgrammaticSettingsPresentation: () -> Void = {}
 
     static var settingsWindowTitle: String {
@@ -672,16 +652,6 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         preference.apply(to: commandPalettePanel?.contentView)
     }
 
-    func setPanelPresentationActions(
-        showDashboard: @escaping () -> Void,
-        showFeaturePanel: @escaping () -> Void
-    ) {
-        panelPresentationActions = SettingsPanelPresentationActions(
-            showDashboard: showDashboard,
-            showFeaturePanel: showFeaturePanel
-        )
-    }
-
     func setProgrammaticSettingsPresentationAction(_ action: @escaping () -> Void) {
         onProgrammaticSettingsPresentation = action
     }
@@ -771,13 +741,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
                 menuBarPanelThemeStore: menuBarPanelThemeStore,
                 sidebarPreferences: settingsSidebarPreferences,
                 appearanceUserDefaults: appearanceUserDefaults,
-                commandPaletteRecentStore: commandPaletteRecentStore,
-                showDashboard: { [weak self] in
-                    self?.panelPresentationActions.present(.dashboard)
-                },
-                showFeaturePanel: { [weak self] in
-                    self?.panelPresentationActions.present(.featurePanel)
-                }
+                commandPaletteRecentStore: commandPaletteRecentStore
             )
         )
         hostingView.sizingOptions = []
