@@ -240,6 +240,7 @@ final class ClipboardHistoryPlugin:
     private var activeItemShortcutAssignments: Set<UUID> = []
     private var waitingItemShortcutAssignments: [UUID: [CheckedContinuation<Void, Never>]] = [:]
     private var itemShortcutLifecycleGeneration: UInt64 = 0
+    private var pendingShortcutSaveRollbacks: [UUID: ClipboardHistorySavedMetadata] = [:]
     private let accessibilityTrusted: () -> Bool
     private let accessibilityRequester: (Bool) -> Bool
     private let frontmostProcessIdentifier: () -> pid_t?
@@ -565,6 +566,7 @@ final class ClipboardHistoryPlugin:
         }
         controller.onChange = { [weak self] in
             self?.preparePanelWhenReady()
+            self?.retryPendingShortcutSaveRollbacksWhenReady()
             self?.pruneItemShortcutsWhenReady()
             self?.onStateChange?()
         }
@@ -1543,6 +1545,7 @@ final class ClipboardHistoryPlugin:
         }
         controller.resumeAfterBackup(restored: restored)
         savedLibraryController.start()
+        retryPendingShortcutSaveRollbacksWhenReady()
         synchronizeKeywordExpansion()
         preparePanelWhenReady()
         onStateChange?()
@@ -1584,6 +1587,7 @@ final class ClipboardHistoryPlugin:
         invalidatePendingItemShortcutWork()
         if reason == .uninstalling {
             itemShortcutStore.removeAll()
+            pendingShortcutSaveRollbacks.removeAll()
         }
         isPanelPreparationPending = false
         isBackingUpClipboard = false
@@ -1902,6 +1906,33 @@ final class ClipboardHistoryPlugin:
         )
     }
 
+    private func undoShortcutSaveWhenAvailable(id: UUID, metadata: ClipboardHistorySavedMetadata) async {
+        guard !itemShortcutStore.assignments.contains(where: { $0.itemID == id && $0.source == .saved }) else {
+            pendingShortcutSaveRollbacks.removeValue(forKey: id)
+            return
+        }
+        if !isBackingUpClipboard && controller.isLoaded {
+            await controller.undoShortcutSave(id: id, metadata: metadata)
+        }
+        if controller.items.first(where: { $0.id == id })?.savedMetadata == metadata {
+            pendingShortcutSaveRollbacks[id] = metadata
+        } else if pendingShortcutSaveRollbacks[id] == metadata {
+            pendingShortcutSaveRollbacks.removeValue(forKey: id)
+        }
+    }
+
+    private func retryPendingShortcutSaveRollbacksWhenReady() {
+        guard !isBackingUpClipboard, controller.isLoaded,
+              !pendingShortcutSaveRollbacks.isEmpty else { return }
+        let rollbacks = pendingShortcutSaveRollbacks
+        pendingShortcutSaveRollbacks.removeAll()
+        for (id, metadata) in rollbacks {
+            Task { @MainActor [weak self] in
+                await self?.undoShortcutSaveWhenAvailable(id: id, metadata: metadata)
+            }
+        }
+    }
+
     func assignItemShortcut(
         itemID: UUID,
         pasteFormat: ClipboardItemShortcutStore.PasteFormat = .original,
@@ -2001,7 +2032,7 @@ final class ClipboardHistoryPlugin:
                   !Task.isCancelled,
                   controller.items.contains(where: { $0.id == itemID && $0.isSaved }) else {
                 if let automaticallySavedMetadata {
-                    await controller.undoShortcutSave(id: itemID, metadata: automaticallySavedMetadata)
+                    await undoShortcutSaveWhenAvailable(id: itemID, metadata: automaticallySavedMetadata)
                 }
                 return .rejected(localization.string(
                     "itemShortcut.unavailable", defaultValue: "This item is unavailable"
@@ -2022,7 +2053,7 @@ final class ClipboardHistoryPlugin:
                 if let previous { itemShortcutStore.restore(previous) }
                 else { _ = itemShortcutStore.remove(itemID: itemID, pasteFormat: pasteFormat) }
                 if let automaticallySavedMetadata {
-                    await controller.undoShortcutSave(id: itemID, metadata: automaticallySavedMetadata)
+                    await undoShortcutSaveWhenAvailable(id: itemID, metadata: automaticallySavedMetadata)
                 }
                 return .rejected(localization.string("itemShortcut.recordUnavailable", defaultValue: "Shortcut settings are unavailable."))
             }
@@ -2031,7 +2062,7 @@ final class ClipboardHistoryPlugin:
                 if let previous { itemShortcutStore.restore(previous) }
                 else { _ = itemShortcutStore.remove(itemID: itemID, pasteFormat: pasteFormat) }
                 if let automaticallySavedMetadata {
-                    await controller.undoShortcutSave(id: itemID, metadata: automaticallySavedMetadata)
+                    await undoShortcutSaveWhenAvailable(id: itemID, metadata: automaticallySavedMetadata)
                 }
                 return result
             }

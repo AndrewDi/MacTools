@@ -510,6 +510,50 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
     }
 
+    func testBackupSuspensionRollsBackRejectedLastingShortcutSaveAfterResume() async {
+        let item = historyItem()
+        let persistence = BlockingClipboardHistoryPersistence(items: [item])
+        persistence.allowSaveToFinish()
+        let plugin = makePlugin(persistence: persistence)
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        let loaded = await waitUntil { plugin.controller.isLoaded && plugin.savedLibraryController.isLoaded }
+        XCTAssertTrue(loaded)
+
+        let originalOnChange = plugin.controller.onChange
+        var suspendedAfterSave = false
+        plugin.controller.onChange = { [weak plugin] in
+            originalOnChange?()
+            guard let plugin, !suspendedAfterSave,
+                  plugin.controller.items.first(where: { $0.id == item.id })?.isSaved == true else { return }
+            suspendedAfterSave = true
+            plugin.suspendForClipboardBackup()
+        }
+        let result = await plugin.assignItemShortcut(
+            itemID: item.id, lifetime: .untilRemoved,
+            binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+        )
+        XCTAssertTrue(suspendedAfterSave)
+        guard case .rejected = result else {
+            XCTFail("Assignment should be rejected when backup starts during its save")
+            return
+        }
+        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
+        XCTAssertTrue(plugin.controller.items.first(where: { $0.id == item.id })?.isSaved == true)
+
+        plugin.resumeAfterClipboardBackup(restored: true)
+        let rolledBack = await waitUntil(timeout: .seconds(3)) {
+            plugin.controller.isLoaded
+                && plugin.controller.items.first(where: { $0.id == item.id })?.isSaved == false
+        }
+        XCTAssertTrue(rolledBack)
+        XCTAssertFalse(persistence.savedItems.first(where: { $0.id == item.id })?.isSaved ?? true)
+    }
+
     func testMissingFileCanStillPasteItsPathAsPlainText() async throws {
         let missingURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("missing-clipboard-file-\(UUID().uuidString)")
