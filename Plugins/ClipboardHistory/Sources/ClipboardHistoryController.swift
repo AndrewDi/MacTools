@@ -1891,10 +1891,15 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
         case saved(ClipboardHistorySavedMetadata)
     }
 
-    func saveForShortcutIfNeeded(id: UUID) async -> ShortcutSaveResult {
+    func saveForShortcutIfNeeded(
+        id: UUID,
+        onProvisionalSave: (ClipboardHistorySavedMetadata) -> Void = { _ in }
+    ) async -> ShortcutSaveResult {
         guard let item = items.first(where: { $0.id == id }) else { return .unavailable }
         if item.isSaved { return .alreadySaved }
         let metadata = ClipboardHistorySavedMetadata(title: suggestedSavedTitle(for: item), savedAt: Date())
+        // A backup can read the committed save before this async call returns to its caller.
+        onProvisionalSave(metadata)
         let saved = await mutateItemsDurably(targetIDs: [id]) { items in
             guard let index = items.firstIndex(where: { $0.id == id }), !items[index].isSaved else { return nil }
             var updated = items

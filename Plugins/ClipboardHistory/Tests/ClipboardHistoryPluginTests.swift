@@ -526,10 +526,12 @@ final class ClipboardHistoryPluginTests: XCTestCase {
 
         let originalOnChange = plugin.controller.onChange
         var suspendedAfterSave = false
+        var provisionalAtSuspension: ClipboardHistorySavedMetadata?
         plugin.controller.onChange = { [weak plugin] in
             originalOnChange?()
             guard let plugin, !suspendedAfterSave,
                   plugin.controller.items.first(where: { $0.id == item.id })?.isSaved == true else { return }
+            provisionalAtSuspension = plugin.provisionalSavedMetadataForBackup()[item.id]
             suspendedAfterSave = true
             plugin.suspendForClipboardBackup()
         }
@@ -543,7 +545,10 @@ final class ClipboardHistoryPluginTests: XCTestCase {
             return
         }
         XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
-        XCTAssertTrue(plugin.controller.items.first(where: { $0.id == item.id })?.isSaved == true)
+        let savedMetadata = plugin.controller.items.first(where: { $0.id == item.id })?.savedMetadata
+        XCTAssertNotNil(savedMetadata)
+        XCTAssertEqual(provisionalAtSuspension, savedMetadata)
+        XCTAssertEqual(plugin.provisionalSavedMetadataForBackup()[item.id], savedMetadata)
 
         plugin.resumeAfterClipboardBackup(restored: true)
         let rolledBack = await waitUntil(timeout: .seconds(3)) {
@@ -552,6 +557,7 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         }
         XCTAssertTrue(rolledBack)
         XCTAssertFalse(persistence.savedItems.first(where: { $0.id == item.id })?.isSaved ?? true)
+        XCTAssertNil(plugin.provisionalSavedMetadataForBackup()[item.id])
     }
 
     func testMissingFileCanStillPasteItsPathAsPlainText() async throws {

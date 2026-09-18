@@ -81,6 +81,7 @@ final class ClipboardBackupService: @unchecked Sendable {
     }
 
     func backUp(to url: URL, password: String, scope: ClipboardBackupScope,
+                excludingSavedMetadata: [UUID: ClipboardHistorySavedMetadata] = [:],
                 progress: @Sendable (ClipboardBackupPhase) -> Void = { _ in }) throws -> ClipboardBackupManifest {
         guard !scope.isEmpty else { throw ClipboardBackupError.invalidArchive }
         let resolved = url.standardizedFileURL.resolvingSymlinksInPath()
@@ -99,7 +100,9 @@ final class ClipboardBackupService: @unchecked Sendable {
             defer { try? source.execute("ROLLBACK") }
             try source.forEach { original in
                 try checkpoint?("reading")
-                guard let record = try original.selected(scope: scope) else { return }
+                guard let record = try original.selected(
+                    scope: scope, excludingSavedMetadata: excludingSavedMetadata[original.id]
+                ) else { return }
                 let counts = try record.validate(maximumItemBytes: maximumItemBytes)
                 try checkpoint?("encrypting")
                 try writer.append(record)

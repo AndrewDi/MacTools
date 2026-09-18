@@ -188,6 +188,40 @@ final class ClipboardBackupServiceTests: XCTestCase {
         }
     }
 
+    func testBackupExcludesOnlyMatchingProvisionalSavedMembership() throws {
+        let source = try Fixture()
+        let item = clip()
+        try source.history.save([item])
+        let metadata = try XCTUnwrap(item.savedMetadata)
+
+        let filtered = try source.service.backUp(
+            to: source.archive, password: password, scope: full,
+            excludingSavedMetadata: [item.id: metadata]
+        )
+        XCTAssertEqual(filtered.history, 1)
+        XCTAssertEqual(filtered.saved, 0)
+        let destination = try Fixture()
+        let preview = try destination.service.preview(url: source.archive, password: password)
+        try destination.service.commit(preview)
+        let restored = try XCTUnwrap(destination.history.load().first)
+        XCTAssertTrue(restored.isInHistory)
+        XCTAssertFalse(restored.isSaved)
+
+        let savedOnly = ClipboardBackupScope(history: false, saved: true, snippets: false)
+        let omitted = try source.service.backUp(
+            to: source.archive, password: password, scope: savedOnly,
+            excludingSavedMetadata: [item.id: metadata]
+        )
+        XCTAssertEqual(omitted.records, 0)
+
+        let differentMetadata = ClipboardHistorySavedMetadata(title: "A different save")
+        let retained = try source.service.backUp(
+            to: source.archive, password: password, scope: savedOnly,
+            excludingSavedMetadata: [item.id: differentMetadata]
+        )
+        XCTAssertEqual(retained.saved, 1)
+    }
+
     func testMergeMatchingIDsCombinesMembershipAndNewerMetadata() throws {
         let source = try Fixture(), destination = try Fixture()
         let id = UUID()

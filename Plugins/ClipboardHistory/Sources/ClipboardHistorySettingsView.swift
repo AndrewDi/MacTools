@@ -117,6 +117,7 @@ struct ClipboardHistorySettingsView: View {
     private let backupService: (() -> ClipboardBackupService?)?
     private let onBackupSuspend: () -> Void
     private let onBackupResume: (Bool) -> Void
+    private let provisionalSavedMetadataForBackup: () -> [UUID: ClipboardHistorySavedMetadata]
     @State private var clearRequest: ClipboardHistorySettingsClearRequest?
     @State private var setupDestination: ClipboardHistorySetupDestination?
     @State private var isHistoryAdvancedExpanded = false
@@ -143,7 +144,8 @@ struct ClipboardHistorySettingsView: View {
         onRemoveItemShortcut: @escaping (UUID, ClipboardItemShortcutStore.PasteFormat) -> Void = { _, _ in },
         backupService: (() -> ClipboardBackupService?)? = nil,
         onBackupSuspend: @escaping () -> Void = {},
-        onBackupResume: @escaping (Bool) -> Void = { _ in }
+        onBackupResume: @escaping (Bool) -> Void = { _ in },
+        provisionalSavedMetadataForBackup: @escaping () -> [UUID: ClipboardHistorySavedMetadata] = { [:] }
     ) {
         self.controller = controller
         self.savedLibraryController = savedLibraryController
@@ -156,6 +158,7 @@ struct ClipboardHistorySettingsView: View {
         self.backupService = backupService
         self.onBackupSuspend = onBackupSuspend
         self.onBackupResume = onBackupResume
+        self.provisionalSavedMetadataForBackup = provisionalSavedMetadataForBackup
         _settings = ObservedObject(wrappedValue: controller.settings)
         _presentation = StateObject(wrappedValue: ClipboardHistorySettingsPresentationModel(
             controller: controller,
@@ -1119,7 +1122,8 @@ struct ClipboardHistorySettingsView: View {
                     controller: controller,
                     makeService: backupService,
                     suspend: onBackupSuspend,
-                    resume: onBackupResume
+                    resume: onBackupResume,
+                    provisionalSavedMetadata: provisionalSavedMetadataForBackup
                 )
             }
             if let errorMessage = presentation.snapshot.historyErrorMessage {

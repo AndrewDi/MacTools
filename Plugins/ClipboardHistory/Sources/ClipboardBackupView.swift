@@ -112,6 +112,7 @@ struct ClipboardBackupRegion: View {
     let makeService: () -> ClipboardBackupService?
     let suspend: () -> Void
     let resume: (Bool) -> Void
+    let provisionalSavedMetadata: () -> [UUID: ClipboardHistorySavedMetadata]
     @State private var action: Action?
     enum Action: String, Identifiable { case backup, restore, rollback; var id: String { rawValue } }
 
@@ -138,7 +139,8 @@ struct ClipboardBackupRegion: View {
                 ClipboardBackupSheet(action: action, service: service, localization: localization,
                                      historyCount: history.count,
                                      historyBytes: history.reduce(0) { $0 + $1.payloadByteCount },
-                                     suspend: suspend, resume: resume)
+                                     suspend: suspend, resume: resume,
+                                     provisionalSavedMetadata: provisionalSavedMetadata)
             }
         }
     }
@@ -171,6 +173,7 @@ struct ClipboardBackupSheet: View {
     let historyBytes: Int
     let suspend: () -> Void
     let resume: (Bool) -> Void
+    let provisionalSavedMetadata: () -> [UUID: ClipboardHistorySavedMetadata]
     @Environment(\.dismiss) private var dismiss
     @StateObject private var model: ClipboardBackupPresentation
     @State private var scope = ClipboardBackupScope()
@@ -189,6 +192,7 @@ struct ClipboardBackupSheet: View {
     init(action: ClipboardBackupRegion.Action, service: ClipboardBackupService,
          localization: PluginLocalization, historyCount: Int, historyBytes: Int,
          suspend: @escaping () -> Void, resume: @escaping (Bool) -> Void,
+         provisionalSavedMetadata: @escaping () -> [UUID: ClipboardHistorySavedMetadata] = { [:] },
          initialFileURL: URL? = nil, presentation: ClipboardBackupPresentation = ClipboardBackupPresentation()) {
         self.action = action
         self.service = service
@@ -197,6 +201,7 @@ struct ClipboardBackupSheet: View {
         self.historyBytes = historyBytes
         self.suspend = suspend
         self.resume = resume
+        self.provisionalSavedMetadata = provisionalSavedMetadata
         _sourceURL = State(initialValue: initialFileURL)
         _model = StateObject(wrappedValue: presentation)
     }
@@ -542,7 +547,11 @@ struct ClipboardBackupSheet: View {
         if action == .backup {
             guard let url = sourceURL else { return }
             let password = password, scope = scope
-            model.run(operation: { progress in try service.backUp(to: url, password: password, scope: scope, progress: progress) }) { _ in
+            let excludedSavedMetadata = provisionalSavedMetadata()
+            model.run(operation: { progress in
+                try service.backUp(to: url, password: password, scope: scope,
+                                   excludingSavedMetadata: excludedSavedMetadata, progress: progress)
+            }) { _ in
                 self.password = ""; confirmation = ""; model.completed = true
             }
         } else if action == .rollback {
