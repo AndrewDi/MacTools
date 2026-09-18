@@ -25,33 +25,57 @@ private struct ClipboardItemShortcutSheet: View {
     let bindingText: (ClipboardItemShortcutStore.PasteFormat) -> String?
     let isUnsavedHistoryItem: Bool
     let isSnippet: Bool
+    let isTextOnly: Bool
     let isPlainTextAvailable: Bool
     let onAssign: (ClipboardItemShortcutStore.PasteFormat, ClipboardItemShortcutStore.Lifetime?, ShortcutBinding?) async -> PluginShortcutRecordingResult
     let onRemove: (ClipboardItemShortcutStore.PasteFormat) -> Void
     let onOpenShortcutSettings: () -> Void
+
+    private var hasOriginalShortcut: Bool {
+        store.assignment(for: itemID, pasteFormat: .original) != nil
+    }
+
+    private var hasPlainTextShortcut: Bool {
+        store.assignment(for: itemID, pasteFormat: .plainText) != nil
+    }
+
+    private var primaryFormat: ClipboardItemShortcutStore.PasteFormat {
+        isTextOnly && !hasOriginalShortcut && hasPlainTextShortcut ? .plainText : .original
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
             Text(localization.string("quickPaste.sheet.title", defaultValue: "Item Shortcut"))
                 .font(PluginSettingsTheme.Typography.pageTitle)
             ClipboardItemShortcutModeSection(
-                localization: localization, format: .original, store: store, storeItemID: itemID,
-                bindingText: bindingText(.original), isUnsavedHistoryItem: isUnsavedHistoryItem,
-                isSnippet: isSnippet,
+                localization: localization, format: primaryFormat, store: store, storeItemID: itemID,
+                bindingText: bindingText(primaryFormat), isUnsavedHistoryItem: isUnsavedHistoryItem,
+                isTextOnly: isTextOnly, isLegacyDuplicate: false,
                 onAssign: onAssign, onRemove: onRemove,
                 onOpenShortcutSettings: onOpenShortcutSettings
             )
+            .id(primaryFormat)
             if !isSnippet {
-                Divider()
-                if isPlainTextAvailable {
+                if !isTextOnly || (hasOriginalShortcut && hasPlainTextShortcut) {
+                    Divider()
+                }
+                if isTextOnly && hasOriginalShortcut && hasPlainTextShortcut {
                     ClipboardItemShortcutModeSection(
                         localization: localization, format: .plainText, store: store, storeItemID: itemID,
                         bindingText: bindingText(.plainText), isUnsavedHistoryItem: isUnsavedHistoryItem,
-                        isSnippet: false,
+                        isTextOnly: true, isLegacyDuplicate: true,
                         onAssign: onAssign, onRemove: onRemove,
                         onOpenShortcutSettings: onOpenShortcutSettings
                     )
-                } else {
+                } else if !isTextOnly && isPlainTextAvailable {
+                    ClipboardItemShortcutModeSection(
+                        localization: localization, format: .plainText, store: store, storeItemID: itemID,
+                        bindingText: bindingText(.plainText), isUnsavedHistoryItem: isUnsavedHistoryItem,
+                        isTextOnly: false, isLegacyDuplicate: false,
+                        onAssign: onAssign, onRemove: onRemove,
+                        onOpenShortcutSettings: onOpenShortcutSettings
+                    )
+                } else if !isTextOnly {
                     Label(localization.string(
                         "itemShortcut.plainTextUnavailable", defaultValue: "This item has no plain text to paste."
                     ), systemImage: "textformat")
@@ -78,7 +102,8 @@ private struct ClipboardItemShortcutModeSection: View {
     @ObservedObject var store: ClipboardItemShortcutStore
     let bindingText: String?
     let isUnsavedHistoryItem: Bool
-    let isSnippet: Bool
+    let isTextOnly: Bool
+    let isLegacyDuplicate: Bool
     let onAssign: (ClipboardItemShortcutStore.PasteFormat, ClipboardItemShortcutStore.Lifetime?, ShortcutBinding?) async -> PluginShortcutRecordingResult
     let onRemove: (ClipboardItemShortcutStore.PasteFormat) -> Void
     let onOpenShortcutSettings: () -> Void
@@ -102,7 +127,8 @@ private struct ClipboardItemShortcutModeSection: View {
         storeItemID: UUID,
         bindingText: String?,
         isUnsavedHistoryItem: Bool,
-        isSnippet: Bool,
+        isTextOnly: Bool,
+        isLegacyDuplicate: Bool,
         onAssign: @escaping (ClipboardItemShortcutStore.PasteFormat, ClipboardItemShortcutStore.Lifetime?, ShortcutBinding?) async -> PluginShortcutRecordingResult,
         onRemove: @escaping (ClipboardItemShortcutStore.PasteFormat) -> Void,
         onOpenShortcutSettings: @escaping () -> Void
@@ -113,7 +139,8 @@ private struct ClipboardItemShortcutModeSection: View {
         self.storeItemID = storeItemID
         self.bindingText = bindingText
         self.isUnsavedHistoryItem = isUnsavedHistoryItem
-        self.isSnippet = isSnippet
+        self.isTextOnly = isTextOnly
+        self.isLegacyDuplicate = isLegacyDuplicate
         self.onAssign = onAssign
         self.onRemove = onRemove
         self.onOpenShortcutSettings = onOpenShortcutSettings
@@ -124,6 +151,9 @@ private struct ClipboardItemShortcutModeSection: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             Label(title, systemImage: format == .plainText ? "textformat" : "doc.on.clipboard")
                 .font(PluginSettingsTheme.Typography.sectionTitle)
+                .foregroundStyle(.secondary)
+            Text(description)
+                .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
             PluginSettingsShortcutRecorderControl(
                 title: title,
@@ -203,12 +233,35 @@ private struct ClipboardItemShortcutModeSection: View {
     }
 
     private var title: String {
-        if isSnippet {
-            return localization.string("common.paste", defaultValue: "Paste")
+        if isTextOnly && !isLegacyDuplicate {
+            return localization.string("itemShortcut.format.textOnly", defaultValue: "Paste Text")
         }
         return format == .plainText
             ? localization.string("itemShortcut.format.plainText", defaultValue: "Paste as Plain Text")
             : localization.string("itemShortcut.format.original", defaultValue: "Paste Original")
+    }
+
+    private var description: String {
+        if isTextOnly {
+            return isLegacyDuplicate
+                ? localization.string(
+                    "itemShortcut.textOnly.existingPlain",
+                    defaultValue: "This existing shortcut pastes the same text. You can keep or remove it."
+                )
+                : localization.string(
+                    "itemShortcut.textOnly.description",
+                    defaultValue: "This item contains only plain text, so one shortcut covers both paste styles."
+                )
+        }
+        return format == .plainText
+            ? localization.string(
+                "itemShortcut.format.plainText.description",
+                defaultValue: "Pastes text only, without formatting or other data. Images use recognized text; files use paths."
+            )
+            : localization.string(
+                "itemShortcut.format.original.description",
+                defaultValue: "Preserves formatting and other original clipboard data."
+            )
     }
 
     private func lifetimeTitle(_ option: ClipboardItemShortcutStore.Lifetime) -> String {
@@ -4130,6 +4183,8 @@ struct ClipboardHistoryPanelView: View {
                     $0.id == request.itemID && !$0.isSaved
                 },
                 isSnippet: savedLibraryController.items.contains { $0.id == request.itemID },
+                isTextOnly: savedLibraryController.items.contains { $0.id == request.itemID }
+                    || controller.items.first(where: { $0.id == request.itemID })?.isPlainTextOnly == true,
                 isPlainTextAvailable: controller.items.first(where: { $0.id == request.itemID })
                     .map(ClipboardPlainTextConversion.isAvailable(for:)) ?? false,
                 onAssign: { format, lifetime, binding in

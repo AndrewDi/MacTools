@@ -978,21 +978,44 @@ final class ClipboardHistoryPlugin:
         ]
         return fixed + itemShortcutStore.assignments.map { assignment in
             let name = itemShortcutTitle(id: assignment.itemID)
+            let isTextOnly = assignment.source == .snippet
+                || controller.items.first(where: { $0.id == assignment.itemID })?.isPlainTextOnly == true
+            let isLegacyDuplicate = isTextOnly && assignment.pasteFormat == .plainText
+                && itemShortcutStore.assignment(for: assignment.itemID, pasteFormat: .original) != nil
             let formatName: String
-            if assignment.source == .snippet {
-                formatName = localization.string("common.paste", defaultValue: "Paste")
+            if isTextOnly && !isLegacyDuplicate {
+                formatName = localization.string("itemShortcut.format.textOnly", defaultValue: "Paste Text")
             } else if assignment.pasteFormat == .plainText {
                 formatName = localization.string("itemShortcut.format.plainText", defaultValue: "Paste as Plain Text")
             } else {
                 formatName = localization.string("itemShortcut.format.original", defaultValue: "Paste Original")
             }
+            let formatDescription: String
+            if isTextOnly {
+                formatDescription = isLegacyDuplicate
+                    ? localization.string(
+                        "itemShortcut.textOnly.existingPlain",
+                        defaultValue: "This existing shortcut pastes the same text. You can keep or remove it."
+                    )
+                    : localization.string(
+                        "itemShortcut.textOnly.description",
+                        defaultValue: "This item contains only plain text, so one shortcut covers both paste styles."
+                    )
+            } else if assignment.pasteFormat == .plainText {
+                formatDescription = localization.string(
+                    "itemShortcut.format.plainText.description",
+                    defaultValue: "Pastes text only, without formatting or other data. Images use recognized text; files use paths."
+                )
+            } else {
+                formatDescription = localization.string(
+                    "itemShortcut.format.original.description",
+                    defaultValue: "Preserves formatting and other original clipboard data."
+                )
+            }
             return PluginShortcutDefinition(
                 id: assignment.definitionID,
                 title: "\(name) — \(formatName)",
-                description: localization.string(
-                    "itemShortcut.description",
-                    defaultValue: "Paste this item until its shortcut expires or is removed."
-                ),
+                description: formatDescription,
                 actionID: assignment.definitionID,
                 scope: .global,
                 defaultBinding: nil,
@@ -1916,6 +1939,7 @@ final class ClipboardHistoryPlugin:
               itemStillAvailable else {
             return .rejected(localization.string("itemShortcut.unavailable", defaultValue: "This item is unavailable"))
         }
+        let previous = itemShortcutStore.assignment(for: itemID, pasteFormat: pasteFormat)
         if pasteFormat == .plainText {
             guard source != .snippet,
                   let item = controller.items.first(where: { $0.id == itemID }),
@@ -1924,8 +1948,13 @@ final class ClipboardHistoryPlugin:
                     "itemShortcut.plainTextUnavailable", defaultValue: "This item has no plain text to paste."
                 ))
             }
+            guard !item.isPlainTextOnly || previous != nil else {
+                return .rejected(localization.string(
+                    "itemShortcut.textOnly.description",
+                    defaultValue: "This item contains only plain text, so one shortcut covers both paste styles."
+                ))
+            }
         }
-        let previous = itemShortcutStore.assignment(for: itemID, pasteFormat: pasteFormat)
         guard (binding != nil || previous != nil), (lifetime != nil || previous != nil) else {
             return .rejected(localization.string(
                 "itemShortcut.recordFirst", defaultValue: "Record a shortcut first."

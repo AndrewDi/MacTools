@@ -642,6 +642,15 @@ struct ClipboardHistoryItem: Codable, Equatable, Identifiable, Sendable {
     let fileReferenceCount: Int
     let linkURLs: [URL]
     let representationTypeIdentifiers: [String]
+    var isPlainTextOnly: Bool {
+        kind == .plainText
+            && !representationTypeIdentifiers.isEmpty
+            && representationTypeIdentifiers.count < ClipboardHistoryPayload.maximumMetadataRepresentationTypeCount
+            && representationTypeIdentifiers.allSatisfy { identifier in
+                identifier == ClipboardRepresentationType.plainText
+                    || UTType(identifier)?.conforms(to: .plainText) == true
+            }
+    }
     private(set) var semanticTraits: Set<ClipboardHistorySemanticTrait>
     let payloadDigest: Data
     let allowsRichTextImport: Bool
