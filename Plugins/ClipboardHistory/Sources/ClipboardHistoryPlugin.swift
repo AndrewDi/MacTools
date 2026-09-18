@@ -1511,9 +1511,17 @@ final class ClipboardHistoryPlugin:
         onStateChange?()
     }
 
+    private func invalidatePendingItemShortcutWork() {
+        itemShortcutLifecycleGeneration &+= 1
+        itemShortcutRequestGeneration.removeAll()
+        itemShortcutTailTask?.cancel()
+        itemShortcutTailTask = nil
+    }
+
     func suspendForClipboardBackup() {
         guard !isBackingUpClipboard else { return }
         isBackingUpClipboard = true
+        invalidatePendingItemShortcutWork()
         cancelPendingSequentialPastes()
         cancelSequentialQueueCreation()
         sequentialHUDPreviewTask?.cancel()
@@ -1573,10 +1581,7 @@ final class ClipboardHistoryPlugin:
     }
 
     func deactivate(reason: PluginDeactivationReason) {
-        itemShortcutLifecycleGeneration &+= 1
-        itemShortcutRequestGeneration.removeAll()
-        itemShortcutTailTask?.cancel()
-        itemShortcutTailTask = nil
+        invalidatePendingItemShortcutWork()
         if reason == .uninstalling {
             itemShortcutStore.removeAll()
         }
@@ -1912,7 +1917,8 @@ final class ClipboardHistoryPlugin:
         let lifecycleGeneration = itemShortcutLifecycleGeneration
         await waitForItemShortcutAssignmentSlot(itemID: itemID)
         defer { finishItemShortcutAssignment(itemID: itemID) }
-        guard itemShortcutLifecycleGeneration == lifecycleGeneration,
+        guard !isBackingUpClipboard,
+              itemShortcutLifecycleGeneration == lifecycleGeneration,
               itemShortcutRequestGeneration[requestKey] == generation,
               !Task.isCancelled else {
             return .rejected(localization.string("itemShortcut.unavailable", defaultValue: "This item is unavailable"))
@@ -1947,7 +1953,8 @@ final class ClipboardHistoryPlugin:
         case .saved: controller.items.contains { $0.id == itemID && $0.isSaved }
         case .snippet: savedLibraryController.items.contains { $0.id == itemID }
         }
-        guard itemShortcutLifecycleGeneration == lifecycleGeneration,
+        guard !isBackingUpClipboard,
+              itemShortcutLifecycleGeneration == lifecycleGeneration,
               itemShortcutRequestGeneration[requestKey] == generation,
               !Task.isCancelled,
               snapshot.payloadByteCount <= ClipboardSequentialPasteSession.maximumPayloadByteCount,
@@ -1988,7 +1995,8 @@ final class ClipboardHistoryPlugin:
             case let .saved(metadata):
                 automaticallySavedMetadata = metadata
             }
-            guard itemShortcutLifecycleGeneration == lifecycleGeneration,
+            guard !isBackingUpClipboard,
+                  itemShortcutLifecycleGeneration == lifecycleGeneration,
                   itemShortcutRequestGeneration[requestKey] == generation,
                   !Task.isCancelled,
                   controller.items.contains(where: { $0.id == itemID && $0.isSaved }) else {
@@ -2000,6 +2008,10 @@ final class ClipboardHistoryPlugin:
                 ))
             }
             source = .saved
+        }
+        guard !isBackingUpClipboard,
+              itemShortcutLifecycleGeneration == lifecycleGeneration else {
+            return .rejected(localization.string("itemShortcut.unavailable", defaultValue: "This item is unavailable"))
         }
         let assignment = itemShortcutStore.assign(
             itemID: itemID, source: source, pasteFormat: pasteFormat, lifetime: lifetime
@@ -2068,12 +2080,13 @@ final class ClipboardHistoryPlugin:
         pasteFormat: ClipboardItemShortcutStore.PasteFormat,
         targetProcessIdentifier: pid_t?
     ) {
+        guard !isBackingUpClipboard else { return }
         guard let assignment = itemShortcutStore.assignment(for: itemID, pasteFormat: pasteFormat) else { return }
         let lifecycleGeneration = itemShortcutLifecycleGeneration
         let previous = itemShortcutTailTask
         itemShortcutTailTask = Task { @MainActor [weak self] in
             await previous?.value
-            guard let self, !Task.isCancelled,
+            guard let self, !Task.isCancelled, !self.isBackingUpClipboard,
                   self.itemShortcutLifecycleGeneration == lifecycleGeneration,
                   self.itemShortcutStore.isCurrent(assignment.id, itemID: itemID) else { return }
             await self.performItemShortcutPaste(
@@ -2198,7 +2211,7 @@ final class ClipboardHistoryPlugin:
             cursorContext = ClipboardSnippetPasteCursorContext(selection: selection, expansion: prepared.expansion)
         }
         let didPaste = await pasteCommandSender.sendPasteCommand(to: targetProcessIdentifier) { [weak self] in
-            guard let self, !Task.isCancelled,
+            guard let self, !Task.isCancelled, !self.isBackingUpClipboard,
                   self.itemShortcutLifecycleGeneration == lifecycleGeneration,
                   self.itemShortcutStore.isCurrent(assignment.id, itemID: assignment.itemID),
                   self.frontmostProcessIdentifier() == targetProcessIdentifier else { return false }

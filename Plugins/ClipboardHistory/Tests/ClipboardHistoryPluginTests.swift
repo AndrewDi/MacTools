@@ -434,6 +434,82 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         XCTAssertEqual(sender.sentCount, 0)
     }
 
+    func testBackupSuspensionStopsInFlightItemPasteAfterResume() async {
+        let item = historyItem()
+        let persistence = BlockingClipboardHistoryPersistence(items: [item])
+        persistence.allowSaveToFinish()
+        let sender = PreDispatchClipboardPasteCommandSender()
+        let plugin = makePlugin(
+            persistence: persistence, pasteCommandSender: sender,
+            frontmostProcessIdentifier: { 42 }
+        )
+        defer {
+            sender.resume()
+            plugin.deactivate(reason: .hostShutdown)
+        }
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        let loaded = await waitUntil { plugin.controller.isLoaded && plugin.savedLibraryController.isLoaded }
+        XCTAssertTrue(loaded)
+        let assigned = await plugin.assignItemShortcut(
+            itemID: item.id, lifetime: .oneHour,
+            binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+        )
+        XCTAssertEqual(assigned, .accepted)
+
+        plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: item.id))
+        let waiting = await waitUntil { sender.isWaiting }
+        XCTAssertTrue(waiting)
+        plugin.suspendForClipboardBackup()
+        plugin.resumeAfterClipboardBackup(restored: true)
+        sender.resume()
+        let finished = await waitUntil { sender.finishedCount == 1 }
+        XCTAssertTrue(finished)
+        XCTAssertEqual(sender.sentCount, 0)
+    }
+
+    func testBackupSuspensionRejectsPendingItemShortcutAssignmentAfterResume() async {
+        let item = historyItem()
+        let persistence = BlockingClipboardHistoryPersistence(items: [item])
+        persistence.allowSaveToFinish()
+        let plugin = makePlugin(persistence: persistence)
+        let gate = PluginTestPayloadGate()
+        defer {
+            gate.release.signal()
+            plugin.deactivate(reason: .hostShutdown)
+        }
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        let loaded = await waitUntil { plugin.controller.isLoaded && plugin.savedLibraryController.isLoaded }
+        XCTAssertTrue(loaded)
+        item.configurePayloadLoader({ gate.load() }, discardCachedPayload: true)
+
+        let assignment = Task { @MainActor in
+            await plugin.assignItemShortcut(
+                itemID: item.id, lifetime: .oneHour,
+                binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+            )
+        }
+        let started = await waitUntil { gate.started }
+        XCTAssertTrue(started)
+        plugin.suspendForClipboardBackup()
+        plugin.resumeAfterClipboardBackup(restored: true)
+        gate.release.signal()
+
+        let result = await assignment.value
+        guard case .rejected = result else {
+            XCTFail("Assignment started before backup suspension should be rejected")
+            return
+        }
+        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
+    }
+
     func testMissingFileCanStillPasteItsPathAsPlainText() async throws {
         let missingURL = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("missing-clipboard-file-\(UUID().uuidString)")
