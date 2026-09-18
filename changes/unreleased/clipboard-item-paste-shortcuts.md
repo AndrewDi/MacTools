@@ -4,4 +4,4 @@ type: added
 area: Clipboard
 ---
 
-Assign separate paste shortcuts to Clipboard items for 5 minutes, 1 hour, or 1 day, or keep Saved clips and Snippets until removed. Shortcut conflicts identify their owner and offer a path to manage them.
+Assign each Clipboard item a paste shortcut for 5 minutes, 1 hour, 1 day, or Until removed, with conflicts identifying the owner. Timed shortcuts retain History items; Until removed saves them.

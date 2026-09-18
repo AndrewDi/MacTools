@@ -481,7 +481,8 @@ final class ClipboardHistoryPlugin:
         self.localization = localization
         self.settingsStore = settingsStore
         self.privateCopyLeaseStore = privateCopyLeaseStore
-        self.itemShortcutStore = ClipboardItemShortcutStore(storage: context.storage)
+        let itemShortcutStore = ClipboardItemShortcutStore(storage: context.storage)
+        self.itemShortcutStore = itemShortcutStore
         self.pasteboard = resolvedPasteboard
         self.copyCommandSender = copyCommandSender ?? SystemClipboardCopyCommandSender()
         self.pasteCommandSender = pasteCommandSender ?? SystemClipboardPasteCommandSender()
@@ -501,6 +502,7 @@ final class ClipboardHistoryPlugin:
             persistence: resolvedPersistence,
             imageTextRecognizer: imageTextRecognizer ?? VisionClipboardImageTextRecognizer(),
             copyEventMonitor: SystemClipboardCopyEventMonitor(),
+            shortcutRetainedItemIDs: itemShortcutStore.activeHistoryItemIDs,
             errorMessageProvider: { error in
                 Self.localizedErrorMessage(error, localization: localization)
             }
@@ -542,6 +544,10 @@ final class ClipboardHistoryPlugin:
             }
             self.itemShortcutTailTask?.cancel()
             self.onStateChange?()
+        }
+        itemShortcutStore.onAssignmentsChanged = { [weak self] in
+            guard let self else { return }
+            self.controller.updateShortcutRetainedItemIDs(self.itemShortcutStore.activeHistoryItemIDs)
         }
 
         settingsStore.onChange = { [weak self] in
@@ -1859,7 +1865,7 @@ final class ClipboardHistoryPlugin:
         let generation = (itemShortcutRequestGeneration[itemID] ?? 0) &+ 1
         itemShortcutRequestGeneration[itemID] = generation
         let lifecycleGeneration = itemShortcutLifecycleGeneration
-        let source: ClipboardItemShortcutStore.Source
+        var source: ClipboardItemShortcutStore.Source
         let snapshot: ClipboardSequentialPasteSnapshot
         do {
             if let saved = savedLibraryController.items.first(where: { $0.id == itemID }) {
@@ -1897,16 +1903,36 @@ final class ClipboardHistoryPlugin:
             return .rejected(localization.string("itemShortcut.unavailable", defaultValue: "This item is unavailable"))
         }
         let previous = itemShortcutStore.assignment(for: itemID)
-        guard source != .history || (lifetime != .untilRemoved
-            && !(lifetime == nil && previous?.expiresAt == nil)) else {
-            return .rejected(localization.string(
-                "itemShortcut.saveFirst", defaultValue: "Save this item before assigning a lasting shortcut."
-            ))
-        }
         guard (binding != nil || previous != nil), (lifetime != nil || previous != nil) else {
             return .rejected(localization.string(
                 "itemShortcut.recordFirst", defaultValue: "Record a shortcut first."
             ))
+        }
+        var automaticallySavedMetadata: ClipboardHistorySavedMetadata?
+        if source == .history,
+           lifetime == .untilRemoved || (lifetime == nil && previous?.expiresAt == nil) {
+            switch await controller.saveForShortcutIfNeeded(id: itemID) {
+            case .unavailable:
+                return .rejected(localization.string(
+                    "itemShortcut.unavailable", defaultValue: "This item is unavailable"
+                ))
+            case .alreadySaved:
+                break
+            case let .saved(metadata):
+                automaticallySavedMetadata = metadata
+            }
+            guard itemShortcutLifecycleGeneration == lifecycleGeneration,
+                  itemShortcutRequestGeneration[itemID] == generation,
+                  !Task.isCancelled,
+                  controller.items.contains(where: { $0.id == itemID && $0.isSaved }) else {
+                if let automaticallySavedMetadata {
+                    await controller.undoShortcutSave(id: itemID, metadata: automaticallySavedMetadata)
+                }
+                return .rejected(localization.string(
+                    "itemShortcut.unavailable", defaultValue: "This item is unavailable"
+                ))
+            }
+            source = .saved
         }
         let assignment = itemShortcutStore.assign(itemID: itemID, source: source, lifetime: lifetime)
         if let binding {
@@ -1914,12 +1940,18 @@ final class ClipboardHistoryPlugin:
             guard let context = inlineShortcutSettingsContextProvider?() else {
                 if let previous { itemShortcutStore.restore(previous) }
                 else { _ = itemShortcutStore.remove(itemID: itemID) }
+                if let automaticallySavedMetadata {
+                    await controller.undoShortcutSave(id: itemID, metadata: automaticallySavedMetadata)
+                }
                 return .rejected(localization.string("itemShortcut.recordUnavailable", defaultValue: "Shortcut settings are unavailable."))
             }
             let result = context.recordShortcut(binding, for: shortcutID)
             if case .rejected = result {
                 if let previous { itemShortcutStore.restore(previous) }
                 else { _ = itemShortcutStore.remove(itemID: itemID) }
+                if let automaticallySavedMetadata {
+                    await controller.undoShortcutSave(id: itemID, metadata: automaticallySavedMetadata)
+                }
                 return result
             }
         }

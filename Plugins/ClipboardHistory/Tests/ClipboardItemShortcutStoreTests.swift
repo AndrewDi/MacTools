@@ -15,6 +15,7 @@ final class ClipboardItemShortcutStoreTests: XCTestCase {
         let first = store.assign(itemID: firstID, source: .history, lifetime: .fiveMinutes)
         let second = store.assign(itemID: secondID, source: .snippet, lifetime: .oneDay)
         XCTAssertEqual(store.assignments.count, 2)
+        XCTAssertEqual(store.activeHistoryItemIDs, [firstID])
         XCTAssertTrue(store.isCurrent(first.id, itemID: firstID))
         XCTAssertTrue(store.isCurrent(second.id, itemID: secondID))
 
@@ -23,6 +24,7 @@ final class ClipboardItemShortcutStoreTests: XCTestCase {
         now.addTimeInterval(301)
         reloaded.expireIfNeeded()
         XCTAssertNil(reloaded.assignment(for: firstID))
+        XCTAssertTrue(reloaded.activeHistoryItemIDs.isEmpty)
         XCTAssertTrue(reloaded.isCurrent(second.id, itemID: secondID))
     }
 

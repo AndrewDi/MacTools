@@ -21,7 +21,7 @@ private struct ClipboardItemShortcutSheet: View {
     @Environment(\.dismiss) private var dismiss
     let localization: PluginLocalization
     let existingBindingText: String?
-    let allowsUntilRemoved: Bool
+    let isUnsavedHistoryItem: Bool
     let assignment: ClipboardItemShortcutStore.Assignment?
     let onAssign: (ClipboardItemShortcutStore.Lifetime?, ShortcutBinding?) async -> PluginShortcutRecordingResult
     let onRemove: () -> Void
@@ -35,7 +35,7 @@ private struct ClipboardItemShortcutSheet: View {
     init(
         localization: PluginLocalization,
         existingBindingText: String?,
-        allowsUntilRemoved: Bool,
+        isUnsavedHistoryItem: Bool,
         assignment: ClipboardItemShortcutStore.Assignment?,
         onAssign: @escaping (ClipboardItemShortcutStore.Lifetime?, ShortcutBinding?) async -> PluginShortcutRecordingResult,
         onRemove: @escaping () -> Void,
@@ -43,7 +43,7 @@ private struct ClipboardItemShortcutSheet: View {
     ) {
         self.localization = localization
         self.existingBindingText = existingBindingText
-        self.allowsUntilRemoved = allowsUntilRemoved
+        self.isUnsavedHistoryItem = isUnsavedHistoryItem
         self.assignment = assignment
         self.onAssign = onAssign
         self.onRemove = onRemove
@@ -80,15 +80,14 @@ private struct ClipboardItemShortcutSheet: View {
                         .tag(nil as ClipboardItemShortcutStore.Lifetime?)
                 }
                 ForEach(ClipboardItemShortcutStore.Lifetime.allCases) { option in
-                    if option != .untilRemoved || allowsUntilRemoved {
-                        Text(lifetimeTitle(option)).tag(Optional(option))
-                    }
+                    Text(lifetimeTitle(option)).tag(Optional(option))
                 }
             }
             .pickerStyle(.menu)
-            if !allowsUntilRemoved {
+            if isUnsavedHistoryItem && lifetime == .untilRemoved {
                 Text(localization.string(
-                    "quickPaste.sheet.saveFirst", defaultValue: "Save this item to keep its shortcut until removed."
+                    "quickPaste.sheet.savesHistoryItem",
+                    defaultValue: "Choosing Until removed saves this History item."
                 ))
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
@@ -4039,8 +4038,9 @@ struct ClipboardHistoryPanelView: View {
                 existingBindingText: shortcutSettingsContextProvider()?
                     .shortcutItem(definitionID: ClipboardItemShortcutStore.definitionID(for: request.itemID))?
                     .bindingText,
-                allowsUntilRemoved: savedLibraryController.items.contains { $0.id == request.itemID }
-                    || controller.items.contains { $0.id == request.itemID && $0.isSaved },
+                isUnsavedHistoryItem: controller.items.contains {
+                    $0.id == request.itemID && !$0.isSaved
+                },
                 assignment: itemShortcutAssignment(request.itemID),
                 onAssign: { lifetime, binding in
                     await onAssignItemShortcut(request.itemID, lifetime, binding)

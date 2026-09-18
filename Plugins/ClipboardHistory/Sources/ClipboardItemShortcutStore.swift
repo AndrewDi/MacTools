@@ -34,6 +34,7 @@ final class ClipboardItemShortcutStore: ObservableObject {
     private var expirationTask: Task<Void, Never>?
     @Published private(set) var assignments: [Assignment]
     var onRemoved: (([Assignment]) -> Void)?
+    var onAssignmentsChanged: (() -> Void)?
 
     init(storage: any PluginStorage, now: @escaping () -> Date = Date.init) {
         self.storage = storage
@@ -61,6 +62,13 @@ final class ClipboardItemShortcutStore: ObservableObject {
         assignments.first {
             $0.itemID == itemID && ($0.expiresAt.map { $0 > now() } ?? true)
         }
+    }
+
+    var activeHistoryItemIDs: Set<UUID> {
+        let currentDate = now()
+        return Set(assignments.lazy.filter {
+            $0.source == .history && ($0.expiresAt.map { $0 > currentDate } ?? true)
+        }.map(\.itemID))
     }
 
     func isCurrent(_ id: UUID, itemID: UUID) -> Bool {
@@ -131,6 +139,7 @@ final class ClipboardItemShortcutStore: ObservableObject {
 
     private func persist() {
         storage.set(try? JSONEncoder().encode(assignments), forKey: Self.storageKey)
+        onAssignmentsChanged?()
     }
 
     private func scheduleExpiration() {

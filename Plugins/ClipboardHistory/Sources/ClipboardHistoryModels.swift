@@ -1243,13 +1243,15 @@ enum ClipboardRetentionPolicy {
         _ items: [ClipboardHistoryItem],
         settings: ClipboardHistorySettings,
         now: Date = Date(),
-        protectedItemIDs: Set<UUID> = []
+        protectedItemIDs: Set<UUID> = [],
+        shortcutRetainedItemIDs: Set<UUID> = []
     ) -> [ClipboardHistoryItem] {
         evaluate(
             items,
             settings: settings,
             now: now,
-            protectedItemIDs: protectedItemIDs
+            protectedItemIDs: protectedItemIDs,
+            shortcutRetainedItemIDs: shortcutRetainedItemIDs
         ).items
     }
 
@@ -1257,7 +1259,8 @@ enum ClipboardRetentionPolicy {
         _ items: [ClipboardHistoryItem],
         settings: ClipboardHistorySettings,
         now: Date = Date(),
-        protectedItemIDs: Set<UUID> = []
+        protectedItemIDs: Set<UUID> = [],
+        shortcutRetainedItemIDs: Set<UUID> = []
     ) -> ClipboardRetentionResult {
         let historyItems = items.filter(\.isInHistory)
         let newestFirstItems: [ClipboardHistoryItem]
@@ -1272,7 +1275,9 @@ enum ClipboardRetentionPolicy {
         if let interval = settings.expiration.interval {
             let cutoff = now.addingTimeInterval(-interval)
             unexpired = newestFirstItems.filter {
-                protectedItemIDs.contains($0.id) || $0.capturedAt >= cutoff
+                protectedItemIDs.contains($0.id)
+                    || shortcutRetainedItemIDs.contains($0.id)
+                    || $0.capturedAt >= cutoff
             }
         } else {
             unexpired = newestFirstItems
@@ -1280,18 +1285,23 @@ enum ClipboardRetentionPolicy {
         let queueProtected = unexpired.filter {
             protectedItemIDs.contains($0.id)
         }
+        // Shortcut-retained History remains available until its timer ends, but it does not
+        // consume the ordinary History count or payload budget used for new captures.
+        let shortcutRetained = unexpired.filter {
+            !protectedItemIDs.contains($0.id) && shortcutRetainedItemIDs.contains($0.id)
+        }
         let recent = unexpired.filter {
-            !protectedItemIDs.contains($0.id)
+            !protectedItemIDs.contains($0.id) && !shortcutRetainedItemIDs.contains($0.id)
         }
         let maximumItemCount = max(0, settings.maximumItemCount)
 
         // Active sequential queues protect their immutable snapshot until completion or
-        // cancellation. Every other History item remains subject to ordinary retention.
-        var retained = queueProtected
-        let protectedItemCount = retained.count
-        let protectedPayloadBytes = retained.reduce(0) { $0 + $1.payloadByteCount }
+        // cancellation. Shortcut-retained items are exempt from ordinary History retention.
+        var retained = queueProtected + shortcutRetained
+        let protectedItemCount = queueProtected.count
+        let protectedPayloadBytes = queueProtected.reduce(0) { $0 + $1.payloadByteCount }
         var retainedPayloadBytes = protectedPayloadBytes
-        let availableRecentCount = max(0, maximumItemCount - retained.count)
+        let availableRecentCount = max(0, maximumItemCount - queueProtected.count)
         var retainedRecentCount = 0
         for item in recent {
             if retainedRecentCount >= availableRecentCount {

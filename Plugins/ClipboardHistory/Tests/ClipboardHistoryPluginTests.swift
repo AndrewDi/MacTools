@@ -304,8 +304,10 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         let lastingHistory = await plugin.assignItemShortcut(
             itemID: item.id, lifetime: .untilRemoved, binding: binding
         )
-        guard case .rejected = lastingHistory else { return XCTFail("History must be saved for lasting use") }
-        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
+        XCTAssertEqual(lastingHistory, .accepted)
+        XCTAssertEqual(plugin.itemShortcutStore.assignment(for: item.id)?.source, .saved)
+        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id)?.expiresAt)
+        XCTAssertTrue(plugin.controller.items.first { $0.id == item.id }?.isSaved == true)
 
         let result = await plugin.assignItemShortcut(
             itemID: item.id, lifetime: .oneHour, binding: binding
@@ -327,6 +329,58 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         XCTAssertFalse(host.shortcutItems.contains { $0.id == shortcutID })
         XCTAssertGreaterThan(registrar.unregisteredCount, 0)
         XCTAssertNil(defaults.data(forKey: "shortcut.customization.\(shortcutID)"))
+        XCTAssertTrue(plugin.controller.items.first { $0.id == item.id }?.isSaved == true)
+    }
+
+    func testTimedHistoryShortcutSurvivesRetentionAndRestartUntilRemoved() async throws {
+        let suite = "ClipboardItemShortcutRetentionTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        addTeardownBlock { defaults.removePersistentDomain(forName: suite) }
+        let storage = UserDefaultsPluginStorage(
+            pluginID: ClipboardHistoryPlugin.pluginID, userDefaults: defaults
+        )
+        let now = Date()
+        let shortcutItem = ClipboardHistoryItem(
+            id: UUID(), text: "older shortcut", capturedAt: now.addingTimeInterval(-2 * 24 * 60 * 60),
+            sourceApplication: nil, isPinned: false, lastUsedAt: nil
+        )
+        let recent = ClipboardHistoryItem(
+            id: UUID(), text: "recent", capturedAt: now,
+            sourceApplication: nil, isPinned: false, lastUsedAt: nil
+        )
+        let persistence = BlockingClipboardHistoryPersistence(items: [recent, shortcutItem])
+        persistence.allowSaveToFinish()
+        let plugin = makePlugin(persistence: persistence, storage: storage)
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        await waitUntilLoaded(plugin.controller)
+        _ = await waitUntil { plugin.savedLibraryController.isLoaded }
+
+        let assignmentResult = await plugin.assignItemShortcut(
+            itemID: shortcutItem.id, lifetime: .oneHour,
+            binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+        )
+        XCTAssertEqual(assignmentResult, .accepted)
+        plugin.controller.settings.maximumItemCount = 1
+        plugin.controller.settings.expiration = .oneDay
+        XCTAssertEqual(Set(plugin.controller.items.map(\.id)), [recent.id, shortcutItem.id])
+        XCTAssertFalse(plugin.controller.items.first { $0.id == shortcutItem.id }?.isSaved ?? true)
+        plugin.deactivate(reason: .hostShutdown)
+
+        let reloaded = makePlugin(persistence: persistence, storage: storage)
+        defer { reloaded.deactivate(reason: .hostShutdown) }
+        reloaded.controller.start()
+        reloaded.savedLibraryController.start()
+        await waitUntilLoaded(reloaded.controller)
+        XCTAssertEqual(Set(reloaded.controller.items.map(\.id)), [recent.id, shortcutItem.id])
+        XCTAssertNotNil(reloaded.itemShortcutStore.assignment(for: shortcutItem.id))
+
+        reloaded.removeItemShortcut(itemID: shortcutItem.id)
+        XCTAssertEqual(reloaded.controller.items.map(\.id), [recent.id])
     }
 
     func testSavedClipSupportsLastingShortcutAndRemovesItWhenUnSaved() async throws {
@@ -453,9 +507,39 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         guard case let .rejected(message) = result else { return XCTFail("Expected duplicate binding rejection") }
         XCTAssertTrue(message.contains("Other Plugin"))
         XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
+        let lastingResult = await plugin.assignItemShortcut(
+            itemID: item.id, lifetime: .untilRemoved, binding: binding
+        )
+        guard case .rejected = lastingResult else { return XCTFail("Expected lasting shortcut conflict") }
+        XCTAssertFalse(plugin.controller.items.first { $0.id == item.id }?.isSaved ?? true)
+        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
         XCTAssertTrue(manager.debugRegistrationsForTests.contains {
             $0.binding == binding && $0.shortcutID.hasPrefix("action-shortcut.")
         })
+    }
+
+    func testLastingHistoryShortcutRequiresDurableSave() async throws {
+        let item = ClipboardHistoryItem(
+            id: UUID(), text: "Keep me", capturedAt: Date(),
+            sourceApplication: nil, isPinned: false, lastUsedAt: nil
+        )
+        let plugin = makePlugin(persistence: FailingClipboardHistoryPersistence(items: [item]))
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        await waitUntilLoaded(plugin.controller)
+        _ = await waitUntil { plugin.savedLibraryController.isLoaded }
+
+        let result = await plugin.assignItemShortcut(
+            itemID: item.id, lifetime: .untilRemoved,
+            binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+        )
+        guard case .rejected = result else { return XCTFail("The item must be saved durably") }
+        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
+        XCTAssertFalse(plugin.controller.items.first { $0.id == item.id }?.isSaved ?? true)
     }
 
     func testSnippetClipboardWriteResetsImplicitQueueBeforeBlockedUsageSaveAndPreservesExplicitQueue() async throws {
