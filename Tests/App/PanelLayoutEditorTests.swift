@@ -29,7 +29,9 @@ final class PanelLayoutEditorTests: XCTestCase {
                 XCTAssertEqual(destinationItems.count, destinationCount)
                 if #available(macOS 27.0, *) {
                     for item in destinationItems {
-                        XCTAssertEqual(item.preferredImageVisibility, .visible)
+                        // Keep this test buildable with the macOS 26 SDK used by CI.
+                        let visibility = item.value(forKey: "preferredImageVisibility") as? NSNumber
+                        XCTAssertEqual(visibility?.intValue, 1)
                     }
                 }
                 menuOpened.fulfill()
