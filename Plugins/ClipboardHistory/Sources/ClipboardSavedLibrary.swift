@@ -1350,6 +1350,7 @@ final class ClipboardSavedLibraryController: ObservableObject {
 
     func copyQueuedSnapshotForPaste(
         _ snapshot: ClipboardSequentialPasteSnapshot,
+        plainText: String? = nil,
         canWrite: @MainActor () -> Bool = { true }
     ) async -> PreparedCopy? {
         await withLibraryMutation(cancelledResult: nil) { generation in
@@ -1376,6 +1377,8 @@ final class ClipboardSavedLibraryController: ObservableObject {
             guard self.isCurrentMutation(generation), canWrite() else { return nil }
             let wrote = if let expansion {
                 self.pasteboard.writePlainText(expansion.text)
+            } else if let plainText {
+                self.pasteboard.writePlainText(plainText)
             } else {
                 self.pasteboard.writePayload(snapshot.payload)
             }

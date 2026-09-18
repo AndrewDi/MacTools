@@ -113,7 +113,7 @@ struct ClipboardHistorySettingsView: View {
     private let settingsContext: PluginSettingsContext?
     private let contentSections: Set<ClipboardHistorySettingsContentSection>
     private let onManageSnippets: (() -> Void)?
-    private let onRemoveItemShortcut: (UUID) -> Void
+    private let onRemoveItemShortcut: (UUID, ClipboardItemShortcutStore.PasteFormat) -> Void
     private let backupService: (() -> ClipboardBackupService?)?
     private let onBackupSuspend: () -> Void
     private let onBackupResume: (Bool) -> Void
@@ -140,7 +140,7 @@ struct ClipboardHistorySettingsView: View {
         ],
         onManageSnippets: (() -> Void)? = nil,
         itemShortcutStore: ClipboardItemShortcutStore,
-        onRemoveItemShortcut: @escaping (UUID) -> Void = { _ in },
+        onRemoveItemShortcut: @escaping (UUID, ClipboardItemShortcutStore.PasteFormat) -> Void = { _, _ in },
         backupService: (() -> ClipboardBackupService?)? = nil,
         onBackupSuspend: @escaping () -> Void = {},
         onBackupResume: @escaping (Bool) -> Void = { _ in }
@@ -363,7 +363,7 @@ struct ClipboardHistorySettingsView: View {
                     .foregroundStyle(.secondary)
                     Spacer()
                     Button(localization.string("settings.quickPaste.remove", defaultValue: "Remove Shortcut")) {
-                        onRemoveItemShortcut(assignment.itemID)
+                        onRemoveItemShortcut(assignment.itemID, assignment.pasteFormat)
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)

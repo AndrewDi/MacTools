@@ -232,6 +232,13 @@ final class ClipboardHistoryPluginTests: XCTestCase {
             binding: ShortcutBinding(keyCode: 2, modifiers: [.command, .option])
         )
         XCTAssertEqual(assignedSnippet, .accepted)
+        let duplicateSnippetFormat = await plugin.assignItemShortcut(
+            itemID: snippet.id, pasteFormat: .plainText, lifetime: .oneHour,
+            binding: ShortcutBinding(keyCode: 3, modifiers: [.command, .option])
+        )
+        guard case .rejected = duplicateSnippetFormat else {
+            return XCTFail("Snippets already paste text and need one shortcut action")
+        }
         XCTAssertEqual(plugin.itemShortcutStore.assignments.count, 2)
         board.simulateCopy("Ada")
         plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: snippet.id))
@@ -265,6 +272,72 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         XCTAssertNil(plugin.itemShortcutStore.assignment(for: snippet.id))
         XCTAssertNotNil(plugin.itemShortcutStore.assignment(for: historyItem.id))
         XCTAssertEqual(sender.sendCount, 6)
+    }
+
+    func testOneRichItemCanPasteOriginalAndPlainTextWithSeparateShortcuts() async throws {
+        let payload = ClipboardHistoryPayload(pasteboardItems: [
+            ClipboardStoredPasteboardItem(representations: [
+                ClipboardStoredRepresentation(
+                    typeIdentifier: ClipboardRepresentationType.plainText,
+                    data: Data("Fallback text".utf8)
+                ),
+                ClipboardStoredRepresentation(
+                    typeIdentifier: ClipboardRepresentationType.rtf,
+                    data: Data("{\\rtf1 Formatted note}".utf8)
+                ),
+            ]),
+        ])
+        let item = ClipboardHistoryItem(
+            id: UUID(), payload: payload, capturedAt: Date(),
+            sourceApplication: nil, isPinned: false, lastUsedAt: nil
+        )
+        let persistence = BlockingClipboardHistoryPersistence(items: [item])
+        persistence.allowSaveToFinish()
+        let board = PluginTestClipboardPasteboard()
+        let sender = FakeClipboardPasteCommandSender()
+        let plugin = makePlugin(
+            pasteboard: board, persistence: persistence,
+            pasteCommandSender: sender, frontmostProcessIdentifier: { 42 }
+        )
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        await waitUntilLoaded(plugin.controller)
+        let savedLoaded = await waitUntil { plugin.savedLibraryController.isLoaded }
+        XCTAssertTrue(savedLoaded)
+
+        let assignedOriginal = await plugin.assignItemShortcut(
+            itemID: item.id, lifetime: .oneHour,
+            binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option])
+        )
+        XCTAssertEqual(assignedOriginal, .accepted)
+        let assignedPlain = await plugin.assignItemShortcut(
+            itemID: item.id, pasteFormat: .plainText, lifetime: .oneDay,
+            binding: ShortcutBinding(keyCode: 2, modifiers: [.command, .option])
+        )
+        XCTAssertEqual(assignedPlain, .accepted)
+        XCTAssertEqual(plugin.itemShortcutStore.assignments.count, 2)
+
+        plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: item.id))
+        let pastedOriginal = await waitUntil { sender.sendCount == 1 }
+        XCTAssertTrue(pastedOriginal)
+        XCTAssertEqual(board.payload, payload)
+
+        plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(
+            for: item.id, pasteFormat: .plainText
+        ))
+        let pastedPlain = await waitUntil { sender.sendCount == 2 }
+        XCTAssertTrue(pastedPlain)
+        XCTAssertEqual(board.payload, .plainText("Formatted note"))
+
+        plugin.removeItemShortcut(itemID: item.id, pasteFormat: .original)
+        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
+        XCTAssertNotNil(plugin.itemShortcutStore.assignment(for: item.id, pasteFormat: .plainText))
+        plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: item.id))
+        XCTAssertEqual(sender.sendCount, 2)
     }
 
     func testItemShortcutRegistersWithHostAndUnregistersWhenRemoved() async throws {
@@ -318,17 +391,41 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         XCTAssertTrue(host.shortcutItems.contains { $0.id == shortcutID })
         XCTAssertTrue(registrar.registeredBindings.contains(binding))
 
+        let duplicateFormat = await plugin.assignItemShortcut(
+            itemID: item.id, pasteFormat: .plainText, lifetime: .oneDay, binding: binding
+        )
+        guard case .rejected = duplicateFormat else {
+            return XCTFail("One key must not invoke both paste formats")
+        }
+        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id, pasteFormat: .plainText))
+        XCTAssertNotNil(plugin.itemShortcutStore.assignment(for: item.id))
+
+        let plainBinding = ShortcutBinding(keyCode: 2, modifiers: [.command, .option, .control])
+        let plainResult = await plugin.assignItemShortcut(
+            itemID: item.id, pasteFormat: .plainText, lifetime: .oneDay, binding: plainBinding
+        )
+        XCTAssertEqual(plainResult, .accepted)
+        await host.waitForScheduledPluginStateRebuildForTests()
+        let plainDefinitionID = ClipboardItemShortcutStore.definitionID(for: item.id, pasteFormat: .plainText)
+        let plainShortcutID = "clipboard.shortcut.\(plainDefinitionID)"
+        XCTAssertTrue(host.shortcutItems.contains { $0.id == plainShortcutID })
+        XCTAssertTrue(registrar.registeredBindings.contains(plainBinding))
+
         let conflict = await plugin.assignItemShortcut(
             itemID: secondItem.id, lifetime: .oneDay, binding: binding
         )
         guard case .rejected = conflict else { return XCTFail("Duplicate binding must be rejected") }
         XCTAssertNil(plugin.itemShortcutStore.assignment(for: secondItem.id))
 
-        plugin.removeItemShortcut(itemID: item.id)
+        plugin.removeItemShortcut(itemID: item.id, pasteFormat: .original)
         await host.waitForScheduledPluginStateRebuildForTests()
         XCTAssertFalse(host.shortcutItems.contains { $0.id == shortcutID })
+        XCTAssertTrue(host.shortcutItems.contains { $0.id == plainShortcutID })
         XCTAssertGreaterThan(registrar.unregisteredCount, 0)
         XCTAssertNil(defaults.data(forKey: "shortcut.customization.\(shortcutID)"))
+        plugin.removeItemShortcut(itemID: item.id, pasteFormat: .plainText)
+        await host.waitForScheduledPluginStateRebuildForTests()
+        XCTAssertFalse(host.shortcutItems.contains { $0.id == plainShortcutID })
         XCTAssertTrue(plugin.controller.items.first { $0.id == item.id }?.isSaved == true)
     }
 
@@ -417,7 +514,7 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         XCTAssertEqual(plugin.itemShortcutStore.assignment(for: item.id)?.source.rawValue, "saved")
         XCTAssertEqual(plugin.shortcutDefinitions.first {
             $0.id == ClipboardItemShortcutStore.definitionID(for: item.id)
-        }?.title, "Template A")
+        }?.title, "Template A — Paste Original")
 
         plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: item.id))
         let pasted = await waitUntil { sender.sendCount == 1 }

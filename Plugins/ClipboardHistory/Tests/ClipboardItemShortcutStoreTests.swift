@@ -57,6 +57,50 @@ final class ClipboardItemShortcutStoreTests: XCTestCase {
         XCTAssertEqual(ClipboardItemShortcutStore.itemID(for: second.definitionID), itemID)
     }
 
+    func testTwoPasteFormatsForOneItemHaveIndependentTimersAndRemoval() {
+        let (storage, cleanup) = makeStorage()
+        defer { cleanup() }
+        var now = Date(timeIntervalSince1970: 1_000)
+        let itemID = UUID()
+        let store = ClipboardItemShortcutStore(storage: storage, now: { now })
+        let original = store.assign(itemID: itemID, source: .history, lifetime: .fiveMinutes)
+        let plain = store.assign(
+            itemID: itemID, source: .history, pasteFormat: .plainText, lifetime: .oneHour
+        )
+        XCTAssertNotEqual(original.definitionID, plain.definitionID)
+        XCTAssertEqual(store.assignments.count, 2)
+        XCTAssertEqual(store.activeHistoryItemIDs, [itemID])
+        XCTAssertEqual(ClipboardItemShortcutStore.target(for: plain.definitionID)?.pasteFormat, .plainText)
+
+        let reloaded = ClipboardItemShortcutStore(storage: storage, now: { now })
+        XCTAssertEqual(reloaded.assignment(for: itemID)?.id, original.id)
+        XCTAssertEqual(reloaded.assignment(for: itemID, pasteFormat: .plainText)?.id, plain.id)
+        now.addTimeInterval(301)
+        reloaded.expireIfNeeded()
+        XCTAssertNil(reloaded.assignment(for: itemID))
+        XCTAssertEqual(reloaded.assignment(for: itemID, pasteFormat: .plainText)?.id, plain.id)
+        XCTAssertEqual(reloaded.activeHistoryItemIDs, [itemID])
+        XCTAssertTrue(reloaded.remove(itemID: itemID, pasteFormat: .plainText))
+        XCTAssertTrue(reloaded.activeHistoryItemIDs.isEmpty)
+    }
+
+    func testStoredSingleShortcutWithoutFormatLoadsAsOriginal() throws {
+        let (storage, cleanup) = makeStorage()
+        defer { cleanup() }
+        let itemID = UUID()
+        let id = UUID()
+        let data = try JSONSerialization.data(withJSONObject: [[
+            "id": id.uuidString,
+            "itemID": itemID.uuidString,
+            "source": "saved",
+        ]])
+        storage.set(data, forKey: "itemShortcutAssignments.v1")
+        let store = ClipboardItemShortcutStore(storage: storage)
+        XCTAssertEqual(store.assignment(for: itemID)?.id, id)
+        XCTAssertEqual(store.assignment(for: itemID)?.pasteFormat, .original)
+        XCTAssertNil(store.assignment(for: itemID, pasteFormat: .plainText))
+    }
+
     private func makeStorage() -> (any PluginStorage, () -> Void) {
         let name = "ClipboardItemShortcutStoreTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!

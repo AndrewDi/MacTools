@@ -19,13 +19,40 @@ final class ClipboardItemShortcutStore: ObservableObject {
         case snippet
     }
 
+    enum PasteFormat: String, Codable, CaseIterable, Identifiable {
+        case original
+        case plainText
+
+        var id: String { rawValue }
+    }
+
     struct Assignment: Codable, Equatable, Identifiable {
         let id: UUID
         let itemID: UUID
         let source: Source
+        let pasteFormat: PasteFormat
         let expiresAt: Date?
 
-        var definitionID: String { ClipboardItemShortcutStore.definitionID(for: itemID) }
+        var definitionID: String { ClipboardItemShortcutStore.definitionID(for: itemID, pasteFormat: pasteFormat) }
+
+        init(id: UUID, itemID: UUID, source: Source, pasteFormat: PasteFormat, expiresAt: Date?) {
+            self.id = id
+            self.itemID = itemID
+            self.source = source
+            self.pasteFormat = pasteFormat
+            self.expiresAt = expiresAt
+        }
+
+        private enum CodingKeys: String, CodingKey { case id, itemID, source, pasteFormat, expiresAt }
+
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            id = try values.decode(UUID.self, forKey: .id)
+            itemID = try values.decode(UUID.self, forKey: .itemID)
+            source = try values.decode(Source.self, forKey: .source)
+            pasteFormat = try values.decodeIfPresent(PasteFormat.self, forKey: .pasteFormat) ?? .original
+            expiresAt = try values.decodeIfPresent(Date.self, forKey: .expiresAt)
+        }
     }
 
     private static let storageKey = "itemShortcutAssignments.v1"
@@ -48,19 +75,26 @@ final class ClipboardItemShortcutStore: ObservableObject {
         scheduleExpiration()
     }
 
-    nonisolated static func definitionID(for itemID: UUID) -> String {
-        "item-paste-\(itemID.uuidString.lowercased())"
+    nonisolated static func definitionID(for itemID: UUID, pasteFormat: PasteFormat = .original) -> String {
+        let prefix = pasteFormat == .plainText ? "item-paste-plain-" : "item-paste-"
+        return "\(prefix)\(itemID.uuidString.lowercased())"
     }
 
     nonisolated static func itemID(for definitionID: String) -> UUID? {
-        let prefix = "item-paste-"
-        guard definitionID.hasPrefix(prefix) else { return nil }
-        return UUID(uuidString: String(definitionID.dropFirst(prefix.count)))
+        target(for: definitionID)?.itemID
     }
 
-    func assignment(for itemID: UUID) -> Assignment? {
+    nonisolated static func target(for definitionID: String) -> (itemID: UUID, pasteFormat: PasteFormat)? {
+        let pasteFormat: PasteFormat = definitionID.hasPrefix("item-paste-plain-") ? .plainText : .original
+        let prefix = pasteFormat == .plainText ? "item-paste-plain-" : "item-paste-"
+        guard definitionID.hasPrefix(prefix) else { return nil }
+        guard let itemID = UUID(uuidString: String(definitionID.dropFirst(prefix.count))) else { return nil }
+        return (itemID, pasteFormat)
+    }
+
+    func assignment(for itemID: UUID, pasteFormat: PasteFormat = .original) -> Assignment? {
         assignments.first {
-            $0.itemID == itemID && ($0.expiresAt.map { $0 > now() } ?? true)
+            $0.itemID == itemID && $0.pasteFormat == pasteFormat && ($0.expiresAt.map { $0 > now() } ?? true)
         }
     }
 
@@ -72,20 +106,20 @@ final class ClipboardItemShortcutStore: ObservableObject {
     }
 
     func isCurrent(_ id: UUID, itemID: UUID) -> Bool {
-        assignment(for: itemID)?.id == id
+        assignments.contains { $0.id == id && $0.itemID == itemID && ($0.expiresAt.map { $0 > now() } ?? true) }
     }
 
     @discardableResult
-    func assign(itemID: UUID, source: Source, lifetime: Lifetime?) -> Assignment {
-        let previous = assignments.first { $0.itemID == itemID }
+    func assign(itemID: UUID, source: Source, pasteFormat: PasteFormat = .original, lifetime: Lifetime?) -> Assignment {
+        let previous = assignment(for: itemID, pasteFormat: pasteFormat)
         precondition(lifetime != nil || previous != nil)
         let assignment = Assignment(
-            id: UUID(), itemID: itemID, source: source,
+            id: UUID(), itemID: itemID, source: source, pasteFormat: pasteFormat,
             expiresAt: lifetime.map { selected in
                 selected == .untilRemoved ? nil : now().addingTimeInterval(TimeInterval(selected.rawValue))
             } ?? previous?.expiresAt
         )
-        assignments.removeAll { $0.itemID == itemID }
+        assignments.removeAll { $0.itemID == itemID && $0.pasteFormat == pasteFormat }
         assignments.append(assignment)
         persist()
         scheduleExpiration()
@@ -94,18 +128,18 @@ final class ClipboardItemShortcutStore: ObservableObject {
 
     func restore(_ assignment: Assignment?) {
         guard let assignment else { return }
-        assignments.removeAll { $0.itemID == assignment.itemID }
+        assignments.removeAll { $0.itemID == assignment.itemID && $0.pasteFormat == assignment.pasteFormat }
         assignments.append(assignment)
         persist()
         scheduleExpiration()
     }
 
     @discardableResult
-    func remove(itemID: UUID) -> Bool {
-        let removed = assignments.filter { $0.itemID == itemID }
+    func remove(itemID: UUID, pasteFormat: PasteFormat? = nil) -> Bool {
+        let removed = assignments.filter { $0.itemID == itemID && (pasteFormat == nil || $0.pasteFormat == pasteFormat) }
         guard !removed.isEmpty else { return false }
         onRemoved?(removed)
-        assignments.removeAll { $0.itemID == itemID }
+        assignments.removeAll { $0.itemID == itemID && (pasteFormat == nil || $0.pasteFormat == pasteFormat) }
         persist()
         scheduleExpiration()
         return true
