@@ -108,10 +108,12 @@ struct ClipboardHistorySettingsView: View {
     let savedLibraryController: ClipboardSavedLibraryController
     @ObservedObject private var settings: ClipboardHistorySettingsStore
     @StateObject private var presentation: ClipboardHistorySettingsPresentationModel
+    @ObservedObject private var itemShortcutStore: ClipboardItemShortcutStore
     private let localization: PluginLocalization
     private let settingsContext: PluginSettingsContext?
     private let contentSections: Set<ClipboardHistorySettingsContentSection>
     private let onManageSnippets: (() -> Void)?
+    private let onRemoveItemShortcut: (UUID) -> Void
     private let backupService: (() -> ClipboardBackupService?)?
     private let onBackupSuspend: () -> Void
     private let onBackupResume: (Bool) -> Void
@@ -137,6 +139,8 @@ struct ClipboardHistorySettingsView: View {
             .data,
         ],
         onManageSnippets: (() -> Void)? = nil,
+        itemShortcutStore: ClipboardItemShortcutStore,
+        onRemoveItemShortcut: @escaping (UUID) -> Void = { _ in },
         backupService: (() -> ClipboardBackupService?)? = nil,
         onBackupSuspend: @escaping () -> Void = {},
         onBackupResume: @escaping (Bool) -> Void = { _ in }
@@ -147,6 +151,8 @@ struct ClipboardHistorySettingsView: View {
         self.settingsContext = settingsContext
         self.contentSections = contentSections
         self.onManageSnippets = onManageSnippets
+        self.itemShortcutStore = itemShortcutStore
+        self.onRemoveItemShortcut = onRemoveItemShortcut
         self.backupService = backupService
         self.onBackupSuspend = onBackupSuspend
         self.onBackupResume = onBackupResume
@@ -330,6 +336,43 @@ struct ClipboardHistorySettingsView: View {
         }
     }
 
+    @ViewBuilder
+    private var itemShortcutRows: some View {
+        if itemShortcutStore.assignments.isEmpty {
+            PluginSettingsListDivider()
+            PluginSettingsItem(
+                title: localization.string("itemShortcut.settings.title", defaultValue: "Item Shortcuts"),
+                description: localization.string(
+                    "itemShortcut.settings.empty",
+                    defaultValue: "Choose Assign Shortcut from an item's Actions menu."
+                ),
+                systemImage: "keyboard"
+            ) { EmptyView() }
+            .pluginSettingsListRowPadding(interactive: false)
+        }
+        ForEach(itemShortcutStore.assignments) { assignment in
+            PluginSettingsListDivider()
+            VStack(alignment: .leading, spacing: 4) {
+                pluginShortcutRow(assignment.definitionID)
+                HStack {
+                    Text(assignment.expiresAt.map {
+                        localization.format("settings.quickPaste.until", defaultValue: "Until %@",
+                                            $0.formatted(date: .abbreviated, time: .shortened))
+                    } ?? localization.string("settings.quickPaste.noExpiry", defaultValue: "Until removed"))
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    Spacer()
+                    Button(localization.string("settings.quickPaste.remove", defaultValue: "Remove Shortcut")) {
+                        onRemoveItemShortcut(assignment.itemID)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+                .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+            }
+        }
+    }
+
     private var historySection: some View {
         VStack(spacing: 0) {
             privacyAndStorageOverview
@@ -340,6 +383,7 @@ struct ClipboardHistorySettingsView: View {
                 actionShortcutRow(ClipboardHistoryPlugin.ActionID.openHistory, systemImage: "clipboard")
                 PluginSettingsListDivider()
                 pluginShortcutRow(ClipboardHistoryPlugin.ShortcutID.pastePlainText)
+                itemShortcutRows
             }
             .pluginSettingsSearchAnchor(
                 pluginID: ClipboardHistoryPlugin.pluginID,

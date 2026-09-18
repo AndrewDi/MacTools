@@ -133,7 +133,8 @@ final class ClipboardHistoryPlugin:
             )
         }
 
-        guard Self.panelShortcutDefinitionIDs.contains(definitionID),
+        guard (Self.panelShortcutDefinitionIDs.contains(definitionID)
+                || ClipboardItemShortcutStore.itemID(for: definitionID) != nil),
               let owner = fixedClipboardCommandOwner(for: binding)
         else { return nil }
         return localization.format(
@@ -228,6 +229,10 @@ final class ClipboardHistoryPlugin:
     private let localization: PluginLocalization
     private let copyCommandSender: any ClipboardCopyCommandSending
     private let pasteCommandSender: any ClipboardPasteCommandSending
+    let itemShortcutStore: ClipboardItemShortcutStore
+    private var itemShortcutTailTask: Task<Void, Never>?
+    private var itemShortcutRequestGeneration: [UUID: UInt64] = [:]
+    private var itemShortcutLifecycleGeneration: UInt64 = 0
     private let accessibilityTrusted: () -> Bool
     private let accessibilityRequester: (Bool) -> Bool
     private let frontmostProcessIdentifier: () -> pid_t?
@@ -347,6 +352,16 @@ final class ClipboardHistoryPlugin:
             guard let self else { return false }
             return await self.requestSequentialQueueCreation(itemIDs: itemIDs)
         },
+        onAssignItemShortcut: { [weak self] itemID, lifetime, binding in
+            await self?.assignItemShortcut(itemID: itemID, lifetime: lifetime, binding: binding)
+                ?? .rejected("Unavailable")
+        },
+        itemShortcutAssignment: { [weak self] itemID in
+            self?.itemShortcutStore.assignment(for: itemID)
+        },
+        onRemoveItemShortcut: { [weak self] itemID in
+            self?.removeItemShortcut(itemID: itemID)
+        },
         onPrepareForPermanentDeletion: { [weak self] itemIDs in
             guard let self else { return false }
             return await self.prepareForPermanentDeletion(itemIDs: Set(itemIDs))
@@ -458,6 +473,7 @@ final class ClipboardHistoryPlugin:
         self.localization = localization
         self.settingsStore = settingsStore
         self.privateCopyLeaseStore = privateCopyLeaseStore
+        self.itemShortcutStore = ClipboardItemShortcutStore(storage: context.storage)
         self.pasteboard = resolvedPasteboard
         self.copyCommandSender = copyCommandSender ?? SystemClipboardCopyCommandSender()
         self.pasteCommandSender = pasteCommandSender ?? SystemClipboardPasteCommandSender()
@@ -510,16 +526,31 @@ final class ClipboardHistoryPlugin:
             }
         )
 
+        itemShortcutStore.onRemoved = { [weak self] removed in
+            guard let self else { return }
+            for assignment in removed {
+                let definitionID = assignment.definitionID
+                if let item = self.inlineShortcutSettingsContextProvider?()
+                    .shortcutItem(definitionID: definitionID) {
+                    self.inlineShortcutSettingsContextProvider?().clearShortcut(for: item.id)
+                }
+            }
+            self.itemShortcutTailTask?.cancel()
+            self.onStateChange?()
+        }
+
         settingsStore.onChange = { [weak self] in
             self?.controller.settingsDidChange()
             self?.synchronizeKeywordExpansion()
         }
         controller.onChange = { [weak self] in
             self?.preparePanelWhenReady()
+            self?.pruneItemShortcutsWhenReady()
             self?.onStateChange?()
         }
         savedLibraryController.onChange = { [weak self] in
             self?.preparePanelWhenReady()
+            self?.pruneItemShortcutsWhenReady()
             self?.synchronizeKeywordExpansion()
             self?.onStateChange?()
         }
@@ -649,6 +680,10 @@ final class ClipboardHistoryPlugin:
                         guard let self, !self.isBackingUpClipboard else { return }
                         self.panelController.showSnippets()
                     },
+                    itemShortcutStore: self.itemShortcutStore,
+                    onRemoveItemShortcut: { [weak self] itemID in
+                        self?.removeItemShortcut(itemID: itemID)
+                    },
                     backupService: { [weak self] in
                         guard let self else { return nil }
                         return self.backupPersistence?.backupService(
@@ -708,7 +743,7 @@ final class ClipboardHistoryPlugin:
     }
 
     var shortcutDefinitions: [PluginShortcutDefinition] {
-        [
+        let fixed: [PluginShortcutDefinition] = [
             PluginShortcutDefinition(
                 id: ShortcutID.privateCopy,
                 title: localization.string("shortcut.privateCopy.title", defaultValue: "私密复制"),
@@ -928,6 +963,26 @@ final class ClipboardHistoryPlugin:
                 systemImage: "arrow.right.doc.on.clipboard"
             ),
         ]
+        return fixed + itemShortcutStore.assignments.map { assignment in
+            let name = savedLibraryController.items.first { $0.id == assignment.itemID }?.title
+                ?? localization.string("quickPaste.historyItem", defaultValue: "History item")
+            return PluginShortcutDefinition(
+                id: assignment.definitionID,
+                title: name,
+                description: localization.string(
+                    "itemShortcut.description",
+                    defaultValue: "Paste this item until its shortcut expires or is removed."
+                ),
+                actionID: assignment.definitionID,
+                scope: .global,
+                defaultBinding: nil,
+                isRequired: false,
+                settingsGroupID: ShortcutID.primaryGroup,
+                settingsGroupTitle: localization.string("settings.shortcuts.primary.title", defaultValue: "Main Shortcuts"),
+                settingsControlTitle: name,
+                settingsControlSystemImage: "pin"
+            )
+        }
     }
 
     private func panelShortcut(
@@ -1366,7 +1421,8 @@ final class ClipboardHistoryPlugin:
                 targetProcessIdentifier: frontmostProcessIdentifier()
             )
         default:
-            return
+            guard let itemID = ClipboardItemShortcutStore.itemID(for: id) else { return }
+            enqueueItemShortcutPaste(itemID: itemID, targetProcessIdentifier: frontmostProcessIdentifier())
         }
     }
 
@@ -1464,6 +1520,13 @@ final class ClipboardHistoryPlugin:
     }
 
     func deactivate(reason: PluginDeactivationReason) {
+        itemShortcutLifecycleGeneration &+= 1
+        itemShortcutRequestGeneration.removeAll()
+        itemShortcutTailTask?.cancel()
+        itemShortcutTailTask = nil
+        if reason == .uninstalling {
+            itemShortcutStore.removeAll()
+        }
         isPanelPreparationPending = false
         isBackingUpClipboard = false
         controller.cancelBackupSuspension()
@@ -1769,6 +1832,209 @@ final class ClipboardHistoryPlugin:
         sequentialPasteCoordinator.resetImplicitQueueForExternalCopy()
         synchronizeSequentialPasteProtection()
         sequentialPasteHUD.dismiss()
+    }
+
+    private func pruneItemShortcutsWhenReady() {
+        guard controller.isLoaded, savedLibraryController.isLoaded else { return }
+        itemShortcutStore.expireIfNeeded()
+        itemShortcutStore.removeMissingItems(
+            historyIDs: Set(controller.items.map(\.id)),
+            savedIDs: Set(savedLibraryController.items.map(\.id))
+        )
+    }
+
+    func assignItemShortcut(
+        itemID: UUID,
+        lifetime: ClipboardItemShortcutStore.Lifetime?,
+        binding: ShortcutBinding?
+    ) async -> PluginShortcutRecordingResult {
+        guard !isBackingUpClipboard else {
+            return .rejected(localization.string("itemShortcut.busy", defaultValue: "Clipboard is busy"))
+        }
+        let generation = (itemShortcutRequestGeneration[itemID] ?? 0) &+ 1
+        itemShortcutRequestGeneration[itemID] = generation
+        let lifecycleGeneration = itemShortcutLifecycleGeneration
+        let source: ClipboardItemShortcutStore.Source
+        let snapshot: ClipboardSequentialPasteSnapshot
+        do {
+            if let saved = savedLibraryController.items.first(where: { $0.id == itemID }) {
+                defer { saved.discardCachedPayloadIfReloadable() }
+                source = saved.isSnippet ? .snippet : .saved
+                snapshot = ClipboardSequentialPasteSnapshot(
+                    sourceItemID: itemID, payload: try await saved.loadPayloadAsync(),
+                    expandsSnippetVariables: saved.isSnippet
+                )
+            } else if let history = controller.items.first(where: { $0.id == itemID }) {
+                defer { history.discardCachedPayloadIfReloadable() }
+                source = .history
+                snapshot = ClipboardSequentialPasteSnapshot(
+                    sourceItemID: itemID, payload: try await history.loadPayloadAsync(),
+                    expandsSnippetVariables: false
+                )
+            } else {
+                throw ClipboardHistoryPayloadAccessError.unavailable
+            }
+        } catch {
+            return .rejected(localization.string(
+                "itemShortcut.unavailable", defaultValue: "This item is unavailable"
+            ))
+        }
+        guard itemShortcutLifecycleGeneration == lifecycleGeneration,
+              itemShortcutRequestGeneration[itemID] == generation,
+              !Task.isCancelled,
+              snapshot.payloadByteCount <= ClipboardSequentialPasteSession.maximumPayloadByteCount,
+              (source == .history
+                ? controller.items.contains(where: { $0.id == itemID })
+                : savedLibraryController.items.contains(where: { $0.id == itemID })) else {
+            return .rejected(localization.string("itemShortcut.unavailable", defaultValue: "This item is unavailable"))
+        }
+        let previous = itemShortcutStore.assignment(for: itemID)
+        guard source != .history || (lifetime != .untilRemoved
+            && !(lifetime == nil && previous?.expiresAt == nil)) else {
+            return .rejected(localization.string(
+                "itemShortcut.saveFirst", defaultValue: "Save this item before assigning a lasting shortcut."
+            ))
+        }
+        guard (binding != nil || previous != nil), (lifetime != nil || previous != nil) else {
+            return .rejected(localization.string(
+                "itemShortcut.recordFirst", defaultValue: "Record a shortcut first."
+            ))
+        }
+        let assignment = itemShortcutStore.assign(itemID: itemID, source: source, lifetime: lifetime)
+        if let binding {
+            let shortcutID = "\(Self.pluginID).shortcut.\(assignment.definitionID)"
+            guard let context = inlineShortcutSettingsContextProvider?() else {
+                if let previous { itemShortcutStore.restore(previous) }
+                else { _ = itemShortcutStore.remove(itemID: itemID) }
+                return .rejected(localization.string("itemShortcut.recordUnavailable", defaultValue: "Shortcut settings are unavailable."))
+            }
+            let result = context.recordShortcut(binding, for: shortcutID)
+            if case .rejected = result {
+                if let previous { itemShortcutStore.restore(previous) }
+                else { _ = itemShortcutStore.remove(itemID: itemID) }
+                return result
+            }
+        }
+        itemShortcutTailTask?.cancel()
+        onStateChange?()
+        privacyHUDPresenter.showSuccess(localization.string(
+            "itemShortcut.assigned", defaultValue: "Item shortcut assigned"
+        ))
+        return .accepted
+    }
+
+    func removeItemShortcut(itemID: UUID) {
+        itemShortcutRequestGeneration[itemID, default: 0] &+= 1
+        guard itemShortcutStore.remove(itemID: itemID) else { return }
+        privacyHUDPresenter.showSuccess(localization.string(
+            "itemShortcut.removed", defaultValue: "Item shortcut removed"
+        ))
+    }
+
+    private func enqueueItemShortcutPaste(itemID: UUID, targetProcessIdentifier: pid_t?) {
+        guard let assignment = itemShortcutStore.assignment(for: itemID) else { return }
+        let previous = itemShortcutTailTask
+        itemShortcutTailTask = Task { @MainActor [weak self] in
+            await previous?.value
+            guard let self, !Task.isCancelled,
+                  self.itemShortcutStore.isCurrent(assignment.id, itemID: itemID) else { return }
+            await self.performItemShortcutPaste(assignment, targetProcessIdentifier: targetProcessIdentifier)
+        }
+    }
+
+    private func performItemShortcutPaste(
+        _ assignment: ClipboardItemShortcutStore.Assignment,
+        targetProcessIdentifier: pid_t?
+    ) async {
+        guard accessibilityTrusted() else {
+            privacyHUDPresenter.showFailure(localization.string(
+                "hud.quickPaste.accessibilityRequired", defaultValue: "Quick Paste requires Accessibility permission"
+            ))
+            if !accessibilityRequester(true) {
+                requestPermissionGuidance?(PermissionID.accessibility)
+            }
+            onStateChange?()
+            return
+        }
+        guard let targetProcessIdentifier,
+              frontmostProcessIdentifier() == targetProcessIdentifier,
+              itemShortcutStore.isCurrent(assignment.id, itemID: assignment.itemID) else { return }
+        let snapshot: ClipboardSequentialPasteSnapshot
+        do {
+            if assignment.source == .history,
+               let item = controller.items.first(where: { $0.id == assignment.itemID }) {
+                defer { item.discardCachedPayloadIfReloadable() }
+                snapshot = ClipboardSequentialPasteSnapshot(
+                    sourceItemID: item.id, payload: try await item.loadPayloadAsync(),
+                    expandsSnippetVariables: false
+                )
+            } else if assignment.source != .history,
+                      let item = savedLibraryController.items.first(where: { $0.id == assignment.itemID }) {
+                defer { item.discardCachedPayloadIfReloadable() }
+                snapshot = ClipboardSequentialPasteSnapshot(
+                    sourceItemID: item.id, payload: try await item.loadPayloadAsync(),
+                    expandsSnippetVariables: item.isSnippet
+                )
+            } else {
+                throw ClipboardHistoryPayloadAccessError.unavailable
+            }
+        } catch {
+            removeItemShortcut(itemID: assignment.itemID)
+            return
+        }
+        guard snapshot.payloadByteCount <= ClipboardSequentialPasteSession.maximumPayloadByteCount else { return }
+        let fileURLs = snapshot.payload.fileURLs
+        let filesAvailable = await Task.detached(priority: .userInitiated) {
+            fileURLs.allSatisfy { FileManager.default.fileExists(atPath: $0.path) }
+        }.value
+        guard filesAvailable, itemShortcutStore.isCurrent(assignment.id, itemID: assignment.itemID), !Task.isCancelled else {
+            privacyHUDPresenter.showFailure(localization.string(
+                "hud.quickPaste.unavailable", defaultValue: "Quick Paste item is unavailable"
+            ))
+            return
+        }
+        guard let prepared = await savedLibraryController.copyQueuedSnapshotForPaste(
+            snapshot,
+            canWrite: { [weak self] in
+                guard let self else { return false }
+                return !Task.isCancelled && !self.isBackingUpClipboard
+                    && self.itemShortcutStore.isCurrent(assignment.id, itemID: assignment.itemID)
+                    && self.frontmostProcessIdentifier() == targetProcessIdentifier
+            }
+        ) else {
+            if itemShortcutStore.isCurrent(assignment.id, itemID: assignment.itemID), !Task.isCancelled {
+                privacyHUDPresenter.showFailure(localization.string(
+                    "hud.quickPaste.failed", defaultValue: "Couldn’t paste Quick Paste item"
+                ))
+            }
+            return
+        }
+        guard itemShortcutStore.isCurrent(assignment.id, itemID: assignment.itemID), !Task.isCancelled else { return }
+        var cursorAccess: SystemClipboardSnippetPasteCursorAccess?
+        var cursorContext: ClipboardSnippetPasteCursorContext?
+        defer { cursorAccess?.stop() }
+        if snapshot.expandsSnippetVariables,
+           prepared.expansion.cursorUTF16OffsetFromEnd != nil,
+           let access = SystemClipboardSnippetPasteCursorAccess(processIdentifier: targetProcessIdentifier),
+           let selection = access.selection {
+            cursorAccess = access
+            cursorContext = ClipboardSnippetPasteCursorContext(selection: selection, expansion: prepared.expansion)
+        }
+        let didPaste = await pasteCommandSender.sendPasteCommand(to: targetProcessIdentifier) { [weak self] in
+            guard let self, !Task.isCancelled,
+                  self.itemShortcutStore.isCurrent(assignment.id, itemID: assignment.itemID),
+                  self.frontmostProcessIdentifier() == targetProcessIdentifier else { return false }
+            return self.pasteboard.changeCount == prepared.pasteboardVersion
+        }
+        guard didPaste else {
+            privacyHUDPresenter.showFailure(localization.string(
+                "hud.quickPaste.failed", defaultValue: "Couldn’t paste Quick Paste item"
+            ))
+            return
+        }
+        if let cursorAccess, let cursorContext {
+            await cursorContext.apply(access: cursorAccess)
+        }
     }
 
     private func performSequentialPaste(
