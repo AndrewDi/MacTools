@@ -1902,6 +1902,7 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
             return updated
         }
         if saved { return .saved(metadata) }
+        if items.first(where: { $0.id == id })?.isSaved == true { return .alreadySaved }
         return .unavailable
     }
 

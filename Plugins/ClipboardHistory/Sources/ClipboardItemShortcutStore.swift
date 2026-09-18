@@ -19,7 +19,7 @@ final class ClipboardItemShortcutStore: ObservableObject {
         case snippet
     }
 
-    enum PasteFormat: String, Codable, CaseIterable, Identifiable {
+    enum PasteFormat: String, Codable, CaseIterable, Hashable, Identifiable {
         case original
         case plainText
 
