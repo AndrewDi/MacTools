@@ -1,6 +1,34 @@
 import Foundation
 import MacToolsPluginKit
 
+enum PreferencesImportProgress: Equatable, Sendable {
+    case preparing(pluginCount: Int)
+    case installingPlugin(id: String, number: Int, total: Int)
+    case restoringPreferences(completedPluginCount: Int, totalPluginCount: Int)
+
+    var completedUnitCount: Int {
+        switch self {
+        case .preparing:
+            return 0
+        case let .installingPlugin(_, number, _):
+            return max(0, number - 1)
+        case let .restoringPreferences(completedPluginCount, _):
+            return completedPluginCount
+        }
+    }
+
+    var totalUnitCount: Int {
+        switch self {
+        case let .preparing(pluginCount):
+            return pluginCount + 1
+        case let .installingPlugin(_, _, total):
+            return total + 1
+        case let .restoringPreferences(_, totalPluginCount):
+            return totalPluginCount + 1
+        }
+    }
+}
+
 struct PreferencesBackup: Codable, Equatable, Sendable {
     static let currentFormatVersion = 6
     static let maximumFileSize = 16 * 1024 * 1024
@@ -8,14 +36,15 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
     struct ApplicationPreferences: Codable, Equatable, Sendable {
         let appearancePreference: String
         let languagePreference: String
-        let menuBarClickBehavior: String
+        // Decode older backups only; current exports store the panel order instead.
+        let menuBarClickBehavior: String?
         let settingsSidebarPluginSortMode: String?
         let settingsSidebarCustomPluginOrder: [String]?
 
         init(
             appearancePreference: String,
             languagePreference: String,
-            menuBarClickBehavior: String,
+            menuBarClickBehavior: String? = nil,
             settingsSidebarPluginSortMode: String? = nil,
             settingsSidebarCustomPluginOrder: [String]? = nil
         ) {
@@ -241,6 +270,16 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
     }
 
     static func decodeJSON(_ data: Data) throws -> PreferencesBackup {
+        do {
+            return try PreferencesArchiveDocument.decodeJSON(data).backup
+        } catch let validationError as PreferencesBackupError {
+            throw validationError
+        } catch {
+            return try decodePayloadJSON(data)
+        }
+    }
+
+    static func decodePayloadJSON(_ data: Data) throws -> PreferencesBackup {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let backup = try decoder.decode(PreferencesBackup.self, from: data)
@@ -258,7 +297,7 @@ struct PreferencesBackup: Codable, Equatable, Sendable {
         }.value
     }
 
-    private static func readFile(at url: URL, maximumSize: Int) throws -> Data {
+    static func readFile(at url: URL, maximumSize: Int = maximumFileSize) throws -> Data {
         precondition(maximumSize > 0)
 
         let file = try FileHandle(forReadingFrom: url)
@@ -336,6 +375,7 @@ struct PluginDisplayPreferencesBackup: Codable, Equatable, Sendable {
     let featurePanelOrderedPluginIDs: [String]?
     let dashboardHiddenPluginIDs: [String]?
     let featurePanelHiddenPluginIDs: [String]?
+    let panelConfiguration: MenuBarPanelConfiguration?
 
     init(
         orderedPluginIDs: [String],
@@ -343,7 +383,8 @@ struct PluginDisplayPreferencesBackup: Codable, Equatable, Sendable {
         dashboardOrderedPluginIDs: [String]? = nil,
         featurePanelOrderedPluginIDs: [String]? = nil,
         dashboardHiddenPluginIDs: [String]? = nil,
-        featurePanelHiddenPluginIDs: [String]? = nil
+        featurePanelHiddenPluginIDs: [String]? = nil,
+        panelConfiguration: MenuBarPanelConfiguration? = nil
     ) {
         self.orderedPluginIDs = orderedPluginIDs
         self.hiddenPluginIDs = hiddenPluginIDs
@@ -351,6 +392,7 @@ struct PluginDisplayPreferencesBackup: Codable, Equatable, Sendable {
         self.featurePanelOrderedPluginIDs = featurePanelOrderedPluginIDs
         self.dashboardHiddenPluginIDs = dashboardHiddenPluginIDs
         self.featurePanelHiddenPluginIDs = featurePanelHiddenPluginIDs
+        self.panelConfiguration = panelConfiguration
     }
 }
 
@@ -363,6 +405,10 @@ struct PreferencesImportPreview: Equatable {
     let retainedUnavailableActionReferences: [ActionReference]
     let installablePlugins: [PreferencesImportInstallablePlugin]
     let selection: PreferencesBackupSelection
+
+    var installableMissingPluginIDs: [String] {
+        installablePlugins.map(\.id)
+    }
 
     static func make(
         backup: PreferencesBackup,
@@ -485,8 +531,21 @@ struct PreferencesImportInstallablePlugin: Identifiable, Equatable {
 
 struct PreferencesImportResult: Equatable {
     let installedPluginIDs: [String]
+    let deferredPluginPreferenceIDs: [String]
     let pluginInstallationFailures: [String: String]
     let shortcutErrors: [String: String]
+
+    init(
+        installedPluginIDs: [String],
+        deferredPluginPreferenceIDs: [String] = [],
+        pluginInstallationFailures: [String: String],
+        shortcutErrors: [String: String]
+    ) {
+        self.installedPluginIDs = installedPluginIDs
+        self.deferredPluginPreferenceIDs = deferredPluginPreferenceIDs
+        self.pluginInstallationFailures = pluginInstallationFailures
+        self.shortcutErrors = shortcutErrors
+    }
 }
 
 enum PreferencesBackupError: Error, Equatable {
@@ -504,5 +563,4 @@ protocol PreferencesBackupApplicationStoring: AnyObject {
     func apply(_ preferences: PreferencesBackup.ApplicationPreferences)
     func setAppearancePreference(rawValue: String) -> Bool
     func setLanguagePreference(rawValue: String) -> Bool
-    func setMenuBarClickBehavior(rawValue: String) -> Bool
 }

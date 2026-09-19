@@ -29,7 +29,9 @@ final class ClipboardHistoryPlugin:
     PluginShortcutBindingValidating,
     PluginInlineShortcutSettingsContextConsuming,
     PluginWindowLayoutTargetProviding,
-    AccessibilityPermissionRefreshing
+    PluginSettingsPresenting,
+    AccessibilityPermissionRefreshing,
+    DisplayTopologyRefreshing
 {
     static let pluginID = "clipboard"
     static let pluginOrder = 125
@@ -74,7 +76,6 @@ final class ClipboardHistoryPlugin:
         static let panelSelectAll = "panel-select-all"
         static let panelCopyCombined = "panel-copy-combined"
         static let panelPasteCombined = "panel-paste-combined"
-        // Keep the stored binding ID stable while cycling filter families instead of scope values.
         static let panelCycleScope = "panel-cycle-scope"
         static let primaryGroup = "primary-shortcuts"
         static let panelGroup = "clipboard-window-shortcuts"
@@ -88,12 +89,10 @@ final class ClipboardHistoryPlugin:
     }
 
     private enum SettingsSectionID {
-        static let essentials = "clipboard-essential-settings"
+        static let history = "clipboard-essential-settings"
         static let queue = "clipboard-queue-settings"
         static let snippets = "clipboard-snippet-settings"
-        static let additionalShortcuts = "clipboard-additional-shortcuts"
-        static let retention = "clipboard-retention-settings"
-        static let exclusions = "clipboard-exclusion-settings"
+        static let advanced = "clipboard-additional-shortcuts"
         static let data = "clipboard-data-settings"
     }
 
@@ -103,6 +102,7 @@ final class ClipboardHistoryPlugin:
     let savedLibraryController: ClipboardSavedLibraryController
 
     var onStateChange: (() -> Void)?
+    var requestSettingsPresentation: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var inlineShortcutSettingsContextProvider: (() -> PluginSettingsContext)?
@@ -240,6 +240,8 @@ final class ClipboardHistoryPlugin:
         onPasteboardWrite: { [weak self] in self?.controller.markCurrentPasteboardChangeAsInternal() }
     )
     private let privacyHUDPresenter: any ClipboardPrivacyHUDPresenting
+    private let backupPersistence: IncrementalEncryptedClipboardHistoryStore?
+    private var isBackingUpClipboard = false
     private let databaseAccess: ClipboardDatabaseAccessCoordinator
     private let sequentialPasteCoordinator: ClipboardSequentialPasteCoordinator
     private var pendingSequentialPasteTargets: [pid_t?] = []
@@ -260,6 +262,7 @@ final class ClipboardHistoryPlugin:
             || !pendingSequentialPasteTargets.isEmpty
     }
     var hasPrivateCopyOperationForTesting: Bool { privateCopyTask != nil }
+    var sequentialPasteHUDForTesting: ClipboardSequentialPasteHUDController { sequentialPasteHUD }
     var isKeywordExpansionRunningForTesting: Bool { keywordExpander.isRunning }
     var hasConfiguredKeywordExpansionForTesting: Bool { keywordExpander.hasConfiguredKeywords }
     var snippetPasteboardReaderForTesting: ClipboardPasteboardReaderProcess { snippetPasteboardReader }
@@ -277,6 +280,7 @@ final class ClipboardHistoryPlugin:
         hud.onPrevious = { [weak self] in
             guard let self, !self.isSequentialQueueMutationLocked else { return }
             Task { @MainActor in
+                guard !self.isSequentialQueueMutationLocked else { return }
                 if await self.sequentialPasteCoordinator.moveToPrevious() {
                     self.sequentialQueueDidChange()
                 } else {
@@ -287,6 +291,7 @@ final class ClipboardHistoryPlugin:
         hud.onSkip = { [weak self] in
             guard let self, !self.isSequentialQueueMutationLocked else { return }
             Task { @MainActor in
+                guard !self.isSequentialQueueMutationLocked else { return }
                 if await self.sequentialPasteCoordinator.skip() {
                     self.sequentialQueueDidChange()
                 } else {
@@ -297,6 +302,7 @@ final class ClipboardHistoryPlugin:
         hud.onRestart = { [weak self] in
             guard let self, !self.isSequentialQueueMutationLocked else { return }
             Task { @MainActor in
+                guard !self.isSequentialQueueMutationLocked else { return }
                 if await self.sequentialPasteCoordinator.restart() {
                     self.sequentialQueueDidChange()
                 } else {
@@ -305,11 +311,12 @@ final class ClipboardHistoryPlugin:
             }
         }
         hud.onCancel = { [weak self] in
-            self?.cancelPendingSequentialPastes()
-            self?.sequentialHUDPreviewTask?.cancel()
-            self?.sequentialHUDPreviewTask = nil
+            guard let self, !self.isBackingUpClipboard else { return }
+            self.cancelPendingSequentialPastes()
+            self.sequentialHUDPreviewTask?.cancel()
+            self.sequentialHUDPreviewTask = nil
             Task { @MainActor [weak self] in
-                guard let self else { return }
+                guard let self, !self.isBackingUpClipboard else { return }
                 if await self.sequentialPasteCoordinator.cancel() {
                     self.synchronizeSequentialPasteProtection()
                     self.sequentialPasteHUD.dismiss()
@@ -324,6 +331,7 @@ final class ClipboardHistoryPlugin:
         }
         return hud
     }()
+    private var isPanelPreparationPending = false
     private lazy var panelController = ClipboardHistoryPanelController(
         historyController: controller,
         savedLibraryController: savedLibraryController,
@@ -354,6 +362,9 @@ final class ClipboardHistoryPlugin:
         },
         shortcutSettingsContextProvider: { [weak self] in
             self?.inlineShortcutSettingsContextProvider?()
+        },
+        onOpenSettings: { [weak self] in
+            self?.requestSettingsPresentation?()
         }
     )
 
@@ -451,6 +462,7 @@ final class ClipboardHistoryPlugin:
         self.copyCommandSender = copyCommandSender ?? SystemClipboardCopyCommandSender()
         self.pasteCommandSender = pasteCommandSender ?? SystemClipboardPasteCommandSender()
         self.privacyHUDPresenter = privacyHUDPresenter ?? ClipboardPrivacyHUDController(localization: localization)
+        self.backupPersistence = resolvedPersistence as? IncrementalEncryptedClipboardHistoryStore
         self.databaseAccess = databaseAccess
         self.sequentialPasteCoordinator = sequentialPasteCoordinator
         self.accessibilityTrusted = accessibilityTrusted
@@ -503,9 +515,11 @@ final class ClipboardHistoryPlugin:
             self?.synchronizeKeywordExpansion()
         }
         controller.onChange = { [weak self] in
+            self?.preparePanelWhenReady()
             self?.onStateChange?()
         }
         savedLibraryController.onChange = { [weak self] in
+            self?.preparePanelWhenReady()
             self?.synchronizeKeywordExpansion()
             self?.onStateChange?()
         }
@@ -580,125 +594,74 @@ final class ClipboardHistoryPlugin:
                 defaultValue: "Search encrypted local History and manage reusable Saved items"
             ),
             sections: [
-                PluginSettingsSection(
-                    id: SettingsSectionID.essentials,
-                    presentation: .edgeToEdge
-                ) { [weak self] context in
-                    if let self {
-                        ClipboardHistorySettingsView(
-                            controller: self.controller,
-                            savedLibraryController: self.savedLibraryController,
-                            localization: self.localization,
-                            settingsContext: context,
-                            contentSections: [.essentials]
-                        )
-                    } else {
-                        EmptyView()
-                    }
-                },
-                PluginSettingsSection(
-                    id: SettingsSectionID.queue,
-                    presentation: .edgeToEdge,
-                    embeddedShortcutGroupIDs: [ShortcutID.queueGroup]
-                ) { [weak self] context in
-                    if let self {
-                        ClipboardHistorySettingsView(
-                            controller: self.controller,
-                            savedLibraryController: self.savedLibraryController,
-                            localization: self.localization,
-                            settingsContext: context,
-                            contentSections: [.queue]
-                        )
-                    } else {
-                        EmptyView()
-                    }
-                },
-                PluginSettingsSection(
+                settingsSection(
+                    id: SettingsSectionID.history,
+                    title: localization.string("settings.history.section", defaultValue: "Clipboard History"),
+                    contentSection: .history,
+                    embeddedShortcutGroupIDs: [ShortcutID.primaryGroup, ShortcutID.collectionGroup]
+                ),
+                settingsSection(
                     id: SettingsSectionID.snippets,
-                    presentation: .edgeToEdge
-                ) { [weak self] _ in
-                    if let self {
-                        ClipboardHistorySettingsView(
-                            controller: self.controller,
-                            savedLibraryController: self.savedLibraryController,
-                            localization: self.localization,
-                            contentSections: [.snippets],
-                            onManageSnippets: { [weak self] in self?.panelController.showSnippets() }
-                        )
-                    } else {
-                        EmptyView()
-                    }
-                },
-                PluginSettingsSection(
-                    id: SettingsSectionID.additionalShortcuts,
-                    presentation: .edgeToEdge,
-                    embeddedShortcutGroupIDs: [ShortcutID.panelGroup, ShortcutID.collectionGroup]
-                ) { [weak self] context in
-                    if let self {
-                        ClipboardHistorySettingsView(
-                            controller: self.controller,
-                            savedLibraryController: self.savedLibraryController,
-                            localization: self.localization,
-                            settingsContext: context,
-                            contentSections: [.additionalShortcuts]
-                        )
-                    } else {
-                        EmptyView()
-                    }
-                }.headerAccessory { [weak self] _ in
-                    if let self {
-                        ClipboardSettingsAdvancedDivider(
-                            title: self.localization.string("settings.advanced.title", defaultValue: "高级")
-                        )
-                    }
-                },
-                PluginSettingsSection(
-                    id: SettingsSectionID.retention,
-                    presentation: .edgeToEdge
-                ) { [weak self] _ in
-                    if let self {
-                        ClipboardHistorySettingsView(
-                            controller: self.controller,
-                            savedLibraryController: self.savedLibraryController,
-                            localization: self.localization,
-                            contentSections: [.retention]
-                        )
-                    } else {
-                        EmptyView()
-                    }
-                },
-                PluginSettingsSection(
-                    id: SettingsSectionID.exclusions,
-                    presentation: .edgeToEdge
-                ) { [weak self] _ in
-                    if let self {
-                        ClipboardHistorySettingsView(
-                            controller: self.controller,
-                            savedLibraryController: self.savedLibraryController,
-                            localization: self.localization,
-                            contentSections: [.exclusions]
-                        )
-                    } else {
-                        EmptyView()
-                    }
-                },
-                PluginSettingsSection(
+                    title: localization.string("settings.snippets.section", defaultValue: "Snippets"),
+                    contentSection: .snippets
+                ),
+                settingsSection(
+                    id: SettingsSectionID.queue,
+                    title: localization.string("hud.queue.explicit", defaultValue: "Paste Queue"),
+                    contentSection: .queue,
+                    embeddedShortcutGroupIDs: [ShortcutID.queueGroup]
+                ),
+                settingsSection(
+                    id: SettingsSectionID.advanced,
+                    title: localization.string("settings.advanced.title", defaultValue: "Advanced"),
+                    contentSection: .advanced,
+                    embeddedShortcutGroupIDs: [ShortcutID.panelGroup, ShortcutID.privacyGroup]
+                ),
+                settingsSection(
                     id: SettingsSectionID.data,
-                    presentation: .edgeToEdge
-                ) { [weak self] _ in
-                    if let self {
-                        ClipboardHistorySettingsView(
-                            controller: self.controller,
-                            savedLibraryController: self.savedLibraryController,
-                            localization: self.localization,
-                            contentSections: [.data]
-                        )
-                    } else {
-                        EmptyView()
-                    }
-                },
+                    title: localization.string("settings.data.section", defaultValue: "Local Data"),
+                    contentSection: .data
+                ),
             ]
         )
+    }
+
+    private func settingsSection(
+        id: String,
+        title: String,
+        contentSection: ClipboardHistorySettingsContentSection,
+        embeddedShortcutGroupIDs: Set<String> = []
+    ) -> PluginSettingsSection {
+        PluginSettingsSection(
+            id: id,
+            title: title,
+            presentation: .edgeToEdge,
+            embeddedShortcutGroupIDs: embeddedShortcutGroupIDs
+        ) { [weak self] context in
+            if let self {
+                ClipboardHistorySettingsView(
+                    controller: self.controller,
+                    savedLibraryController: self.savedLibraryController,
+                    localization: self.localization,
+                    settingsContext: context,
+                    contentSections: [contentSection],
+                    onManageSnippets: { [weak self] in
+                        guard let self, !self.isBackingUpClipboard else { return }
+                        self.panelController.showSnippets()
+                    },
+                    backupService: { [weak self] in
+                        guard let self else { return nil }
+                        return self.backupPersistence?.backupService(
+                            maximumItemBytes: self.settingsStore.snapshot.maximumItemByteCount
+                        )
+                    },
+                    onBackupSuspend: { [weak self] in self?.suspendForClipboardBackup() },
+                    onBackupResume: { [weak self] restored in self?.resumeAfterClipboardBackup(restored: restored) }
+                )
+            } else {
+                EmptyView()
+            }
+        }
     }
 
     var primaryPanelState: PluginPanelState {
@@ -863,11 +826,11 @@ final class ClipboardHistoryPlugin:
                 id: ShortcutID.panelCycleScope,
                 title: localization.string(
                     "panel.shortcuts.cycleScope",
-                    defaultValue: "Cycle Filter Group"
+                    defaultValue: "Switch Scope"
                 ),
                 description: localization.string(
                     "panel.shortcuts.cycleScope.description",
-                    defaultValue: "Switch between available filter groups; add Shift to go backward. Control-1 through Control-9 chooses an option in the active group."
+                    defaultValue: "Switch between All, History, and Snippets; add Shift to go backward. Control-1 through Control-3 selects a scope directly."
                 ),
                 keyCode: 48,
                 modifiers: [.control],
@@ -1046,7 +1009,7 @@ final class ClipboardHistoryPlugin:
                 systemImage: "keyboard",
                 actionIDs: [ActionID.openHistory],
                 shortcutDefinitionIDs: [ShortcutID.pastePlainText],
-                placementAfterSectionID: SettingsSectionID.essentials
+                placementAfterSectionID: SettingsSectionID.history
             ),
             PluginShortcutSettingsGroupConfiguration(
                 id: ShortcutID.queueGroup,
@@ -1082,7 +1045,7 @@ final class ClipboardHistoryPlugin:
                     ShortcutID.panelCopyCombined,
                     ShortcutID.panelPasteCombined,
                 ],
-                placementAfterSectionID: SettingsSectionID.additionalShortcuts
+                placementAfterSectionID: SettingsSectionID.advanced
             ),
             PluginShortcutSettingsGroupConfiguration(
                 id: ShortcutID.privacyGroup,
@@ -1092,7 +1055,7 @@ final class ClipboardHistoryPlugin:
                 ),
                 systemImage: "eye.slash",
                 shortcutDefinitionIDs: [ShortcutID.privateCopy, ShortcutID.ignoreNextCopy],
-                placementAfterSectionID: SettingsSectionID.snippets
+                placementAfterSectionID: SettingsSectionID.advanced
             ),
             PluginShortcutSettingsGroupConfiguration(
                 id: ShortcutID.collectionGroup,
@@ -1106,7 +1069,7 @@ final class ClipboardHistoryPlugin:
                 ),
                 systemImage: "playpause",
                 actionIDs: Set(Self.collectionControlActionIDs),
-                placementAfterSectionID: SettingsSectionID.additionalShortcuts
+                placementAfterSectionID: SettingsSectionID.history
             ),
         ]
     }
@@ -1123,7 +1086,7 @@ final class ClipboardHistoryPlugin:
     ]
 
     var collapsibleShortcutSettingsGroupIDs: Set<String> {
-        [ShortcutID.panelGroup, ShortcutID.collectionGroup]
+        [ShortcutID.panelGroup, ShortcutID.privacyGroup, ShortcutID.collectionGroup]
     }
 
     var collapsibleActionSettingsGroupIDs: Set<String> {
@@ -1223,6 +1186,7 @@ final class ClipboardHistoryPlugin:
     }
 
     func actionAvailability(for reference: ActionReference) -> ActionAvailability {
+        if isBackingUpClipboard { return .unavailable(localization.string("backup.busy", defaultValue: "请先完成剪贴板备份操作。")) }
         switch reference.key.actionID {
         case ActionID.openHistory:
             return controller.isLoaded
@@ -1276,6 +1240,10 @@ final class ClipboardHistoryPlugin:
     }
 
     func beginAction(_ invocation: ActionInvocation) throws -> ActionExecutionHandle {
+        if isBackingUpClipboard {
+            let message = localization.string("backup.busy", defaultValue: "请先完成剪贴板备份操作。")
+            return ActionExecutionHandle { .failed(message: message) }
+        }
         if [ActionID.pauseCollection, ActionID.resumeCollection, ActionID.toggleCollection]
             .contains(invocation.reference.key.actionID),
            let message = collectionActionBlockingMessage() {
@@ -1365,11 +1333,13 @@ final class ClipboardHistoryPlugin:
     }
 
     func handleAction(_ action: PluginPanelAction) {
+        guard !isBackingUpClipboard else { return }
         guard case let .invokeAction(controlID) = action, controlID == "execute" else { return }
         panelController.show()
     }
 
     func handleShortcutAction(id: String) {
+        guard !isBackingUpClipboard else { return }
         switch id {
         case ShortcutID.privateCopy:
             guard privateCopyTask == nil, !controller.isIgnoringNextCopy else { return }
@@ -1423,12 +1393,46 @@ final class ClipboardHistoryPlugin:
         onStateChange?()
     }
 
+    func refreshDisplayTopology() {
+        panelController.refreshDisplayTopology()
+    }
+
     func refreshAccessibilityPermission() {
         synchronizeKeywordExpansion()
         onStateChange?()
     }
 
+    func suspendForClipboardBackup() {
+        guard !isBackingUpClipboard else { return }
+        isBackingUpClipboard = true
+        cancelPendingSequentialPastes()
+        cancelSequentialQueueCreation()
+        sequentialHUDPreviewTask?.cancel()
+        sequentialHUDPreviewTask = nil
+        sequentialPasteHUD.dismiss()
+        panelController.close(restorePreviousApplication: false, discardsPreviews: true)
+        keywordExpander.stop()
+        controller.suspendForBackup()
+        savedLibraryController.stop()
+    }
+
+    func resumeAfterClipboardBackup(restored: Bool) {
+        guard isBackingUpClipboard else { return }
+        isBackingUpClipboard = false
+        isPanelPreparationPending = true
+        // A dispatched private copy can arrive after the backup sheet closes.
+        if let lease = privateCopyLeaseStore.load() {
+            _ = controller.restorePrivateCopySuppression(lease)
+        }
+        controller.resumeAfterBackup(restored: restored)
+        savedLibraryController.start()
+        synchronizeKeywordExpansion()
+        preparePanelWhenReady()
+        onStateChange?()
+    }
+
     func activate(context: PluginRuntimeContext) {
+        isPanelPreparationPending = true
         if let lease = privateCopyLeaseStore.load() {
             _ = controller.restorePrivateCopySuppression(lease)
         }
@@ -1449,9 +1453,20 @@ final class ClipboardHistoryPlugin:
             synchronizeSequentialPasteProtection()
         }
         synchronizeKeywordExpansion()
+        preparePanelWhenReady()
+    }
+
+    private func preparePanelWhenReady() {
+        guard !isBackingUpClipboard, isPanelPreparationPending,
+              controller.isLoaded, savedLibraryController.isLoaded else { return }
+        isPanelPreparationPending = false
+        panelController.prepareForNextPresentation()
     }
 
     func deactivate(reason: PluginDeactivationReason) {
+        isPanelPreparationPending = false
+        isBackingUpClipboard = false
+        controller.cancelBackupSuspension()
         if reason == .uninstalling {
             // Establish the storage barrier before cancellation. A task already queued behind a
             // database operation will wake to an invalidated coordinator instead of recreating
@@ -1487,6 +1502,7 @@ final class ClipboardHistoryPlugin:
     }
 
     func refresh() {
+        guard !isBackingUpClipboard else { return }
         controller.settingsDidChange()
         controller.start()
         savedLibraryController.start()
@@ -1494,6 +1510,7 @@ final class ClipboardHistoryPlugin:
     }
 
     private func synchronizeKeywordExpansion() {
+        guard !isBackingUpClipboard else { keywordExpander.stop(); return }
         keywordExpander.onDiagnostic = { [weak settingsStore] diagnostic in
             settingsStore?.keywordExpansionDiagnostic = diagnostic
         }
@@ -1648,6 +1665,7 @@ final class ClipboardHistoryPlugin:
     }
 
     private func enqueueSequentialPaste(targetProcessIdentifier: pid_t?) {
+        guard !isBackingUpClipboard else { return }
         guard pendingSequentialPasteTargets.count
                 + (isSequentialPasteInFlight ? 1 : 0)
                 < ClipboardSequentialPasteSession.maximumItemCount else {
@@ -1896,7 +1914,7 @@ final class ClipboardHistoryPlugin:
     }
 
     private var isSequentialQueueMutationLocked: Bool {
-        isSequentialPasteInFlight || !pendingSequentialPasteTargets.isEmpty
+        isBackingUpClipboard || isSequentialPasteInFlight || !pendingSequentialPasteTargets.isEmpty
     }
 
     private func markSequentialItemUnavailable(
@@ -1915,7 +1933,7 @@ final class ClipboardHistoryPlugin:
     }
 
     private func isCurrentSequentialPasteWorker(generation: Int) -> Bool {
-        sequentialPasteWorkerGeneration == generation && !Task.isCancelled
+        !isBackingUpClipboard && sequentialPasteWorkerGeneration == generation && !Task.isCancelled
     }
 
     private func synchronizeSequentialPasteProtection() {
@@ -1944,6 +1962,7 @@ final class ClipboardHistoryPlugin:
 
     @discardableResult
     private func requestSequentialQueueCreation(itemIDs: [UUID]) async -> Bool {
+        guard !isBackingUpClipboard else { return false }
         guard sequentialQueueCreationTask == nil else {
             privacyHUDPresenter.showFailure(localization.string(
                 "hud.queue.active",
@@ -2069,6 +2088,10 @@ final class ClipboardHistoryPlugin:
     private func showSequentialPasteHUD() {
         sequentialHUDPreviewTask?.cancel()
         sequentialHUDPreviewTask = nil
+        guard !isBackingUpClipboard else {
+            sequentialPasteHUD.dismiss()
+            return
+        }
         guard let session = sequentialPasteCoordinator.session else {
             sequentialPasteHUD.dismiss()
             return

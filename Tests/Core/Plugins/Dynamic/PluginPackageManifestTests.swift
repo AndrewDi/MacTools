@@ -103,14 +103,14 @@ final class PluginPackageManifestTests: XCTestCase {
         let expectations = [
             (
                 path: "Plugins/MouseEnhancer/plugin.json",
-                minimum: "1.2.0",
-                compatibleHost: "1.2.0",
-                incompatibleHost: "1.1.6" as String?
+                minimum: "1.3.0",
+                compatibleHost: "1.3.0",
+                incompatibleHost: "1.2.0" as String?
             ),
             (
                 path: "Plugins/TrackpadGestures/plugin.json",
-                minimum: "1.2.1",
-                compatibleHost: "1.2.1",
+                minimum: "1.3.0",
+                compatibleHost: "1.3.0",
                 incompatibleHost: "1.2.0"
             ),
         ]
@@ -148,6 +148,22 @@ final class PluginPackageManifestTests: XCTestCase {
                 }
             }
         }
+    }
+
+    func testSiriManifestRejectsReleasedHostWithoutActionInputAPIs() throws {
+        let manifest = try JSONDecoder().decode(
+            PluginPackageManifest.self,
+            from: PluginSourceManifestTestProjection.data(pluginDirectoryName: "Siri")
+        )
+
+        XCTAssertEqual(manifest.minHostVersion, "1.3.1")
+        XCTAssertThrowsError(try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.3.0")) { error in
+            XCTAssertEqual(
+                error as? PluginPackageManifestError,
+                .incompatibleHostVersion(required: "1.3.1", current: "1.3.0")
+            )
+        }
+        XCTAssertNoThrow(try PluginPackageManifestLoader.validate(manifest, hostVersion: "1.3.1"))
     }
 
     func testCurrentHostVersionCanLoadEveryRepositoryPluginManifest() throws {

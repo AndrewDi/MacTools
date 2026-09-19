@@ -199,6 +199,8 @@ final class DynamicPluginManager: ObservableObject {
 
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
     var onPluginsChanged: (([any MacToolsPlugin]) -> Void)?
+    /// Revoke host-owned capabilities before plugin teardown or package removal.
+    var onPluginWillDeactivate: ((String, PluginDeactivationReason) -> Void)?
 
     var temporaryDirectory: URL {
         packageStore.temporaryDirectory
@@ -206,6 +208,10 @@ final class DynamicPluginManager: ObservableObject {
 
     var hostVersion: String {
         packageStore.hostVersion
+    }
+
+    func requirementFailure(for requirements: PluginProductMetadata.Requirements?) -> PluginRequirementChecker.Failure? {
+        packageStore.requirementChecker.failure(for: requirements)
     }
 
     init(
@@ -875,6 +881,7 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     private func deactivateLoadedPlugins(pluginID: String, reason: PluginDeactivationReason) {
+        onPluginWillDeactivate?(pluginID, reason)
         guard let plugins = loadedPluginsByID.removeValue(forKey: pluginID) else {
             return
         }
@@ -944,7 +951,7 @@ final class DynamicPluginManager: ObservableObject {
                 let compatibleCatalogEntry = PluginVersionComparator.isVersion(
                     packageStore.hostVersion,
                     atLeast: entry.minimumHostVersion
-                ) ? entry : nil
+                ) && requirementFailure(for: entry.requirements) == nil ? entry : nil
                 items.append(
                     managementItem(
                         for: result,
@@ -964,6 +971,8 @@ final class DynamicPluginManager: ObservableObject {
                             current: packageStore.hostVersion
                         ).localizedDescription
                     )
+                } else if let failure = requirementFailure(for: entry.requirements) {
+                    state = .incompatible(failure.localizedDescription)
                 } else {
                     state = catalogSnapshot?.isLocalDevelopment == true
                         ? .localDevelopment

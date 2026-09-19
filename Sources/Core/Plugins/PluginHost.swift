@@ -7,8 +7,6 @@ import MacToolsPluginKit
 enum FeatureSettingsPane: Hashable {
     case actionsAndShortcuts
     case automation
-    case dashboardLayout
-    case featurePanelLayout
     case marketplace
     case configuration(String)
 }
@@ -27,6 +25,7 @@ enum SettingsPresentationRequest: Equatable {
 }
 
 enum AppPresentationRequest: Equatable {
+    case composeActionInput(ActionInputItem)
     case settings(SettingsPresentationRequest)
     case toggleCommandPalette
     case toggleDashboard
@@ -41,6 +40,8 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
     case toggleDashboard = "app.toggle-dashboard"
     case toggleFeaturePanel = "app.toggle-feature-panel"
     case openCommandPalette = "app.open-command-palette"
+
+    var isPanelAction: Bool { self == .toggleDashboard || self == .toggleFeaturePanel }
 
     var title: String {
         switch self {
@@ -123,10 +124,8 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         switch self {
         case .openSettings, .openCommandPalette:
             .general
-        case .toggleDashboard:
-            .feature(.dashboardLayout)
-        case .toggleFeaturePanel:
-            .feature(.featurePanelLayout)
+        case .toggleDashboard, .toggleFeaturePanel:
+            .feature(.actionsAndShortcuts)
         }
     }
 
@@ -139,34 +138,6 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         }
     }
 
-}
-
-private extension FeatureSettingsPane {
-    init(landingPage: PluginSettingsLandingPage) {
-        switch landingPage {
-        case .dashboard:
-            self = .dashboardLayout
-        case .featurePanel:
-            self = .featurePanelLayout
-        case .marketplace:
-            self = .marketplace
-        }
-    }
-
-    var landingPage: PluginSettingsLandingPage? {
-        switch self {
-        case .actionsAndShortcuts, .automation:
-            nil
-        case .dashboardLayout:
-            .dashboard
-        case .featurePanelLayout:
-            .featurePanel
-        case .marketplace:
-            .marketplace
-        case .configuration:
-            nil
-        }
-    }
 }
 
 struct PluginHostCapabilities: Equatable, Sendable {
@@ -203,6 +174,15 @@ struct PluginSurfaceLayoutItem: Identifiable {
     let removesDataOnUninstall: Bool
     let category: String?
     let releaseChannel: String?
+}
+
+struct MenuBarPanelLayoutEntry: Identifiable {
+    let item: PluginSurfaceLayoutItem
+    let surface: PluginDisplaySurface
+
+    var instanceID: String? = nil
+    var entry: MenuBarPanelEntry { MenuBarPanelEntry(pluginID: item.id, surface: surface, instanceID: instanceID) }
+    var id: String { entry.id }
 }
 
 struct ActionOwnerAppearance {
@@ -409,8 +389,17 @@ final class PluginHost: ObservableObject {
     private let builtInPlugins: [any MacToolsPlugin]
     private let shortcutStore: ShortcutStore
     private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
+    let menuBarPanelStore: MenuBarPanelStore
+    let menuBarIconCoordinator: PluginMenuBarIconCoordinator
+    @Published private(set) var menuBarPanels: [MenuBarPanelDefinition] = []
+    private var visibleMenuBarPanelID: String?
+    private var menuBarPanelContentCache: [String: MenuBarPanelContentSnapshot] = [:]
+    /// Emitted after a complete panel update, including layout-only mutations.
+    let menuBarPanelContentDidChange = PassthroughSubject<Void, Never>()
+    var menuBarPanelPresentationHandler: ((String, Bool) -> Void)?
     private let preferencesBackupStore: any PreferencesBackupApplicationStoring
     private let automaticPreferencesBackupCoordinator: AutomaticPreferencesBackupCoordinator?
+    private let cloudPreferencesSyncCoordinator: CloudPreferencesSyncCoordinator?
     let preferencesBackupChangeReporter: PreferencesBackupChangeReporter
     private let globalShortcutManager: GlobalShortcutManager
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
@@ -421,6 +410,17 @@ final class PluginHost: ObservableObject {
     private let pluginStateChangeRebuildDelay: Duration
     let dynamicPluginManager: DynamicPluginManager?
     private let pluginCatalogManager: PluginCatalogManager?
+    let actionInputRegistry = ActionInputRegistry()
+    let actionInputAliases: CommandPaletteAliasStore
+
+    var commandPaletteAliasResolver: CommandPaletteAliasResolver {
+        CommandPaletteAliasResolver(items: actionInputRegistry.items, overrides: actionInputAliases.overrides)
+    }
+
+    func setActionInputAlias(_ alias: String?, for item: ActionInputItem) throws {
+        try actionInputAliases.set(alias, for: item, items: actionInputRegistry.items)
+        objectWillChange.send()
+    }
     let actionRegistry: ActionRegistry
     let actionExecutor: ActionExecutor
     let actionConfirmationService: ActionConfirmationRouter
@@ -453,9 +453,11 @@ final class PluginHost: ObservableObject {
     private var settingsViewCache: [SettingsViewCacheKey: PluginSettingsContentViewItem] = [:]
     private var visiblePanelSurfaces: Set<PluginPanelSurface> = []
     private var visiblePanelSurfacePluginIDs: [PluginPanelSurface: Set<String>] = [:]
+    private var isSynchronizingPanelSurfaces = false
     private var isolatedPluginFailures: [String: String] = [:]
     private var isHandlingPluginAction = false
     private var didLoadDynamicPlugins = false
+    private var areCloudPreferencesReady = false
     private var displayTopologyRefreshTask: Task<Void, Never>?
     private var pluginStateChangeRebuildTask: Task<Void, Never>?
     private var runtimeLocaleCancellable: AnyCancellable?
@@ -475,6 +477,9 @@ final class PluginHost: ObservableObject {
     @Published private(set) var primaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
     @Published private(set) var primaryPanelCompactIndicatorsByID: [String: PluginPrimaryPanelCompactIndicator] = [:]
     @Published private(set) var componentItems: [PluginComponentItem] = []
+    // Include removed entries for the library without mounting their views or changing visibility.
+    @Published private(set) var availablePanelItems: [PluginPanelItem] = []
+    @Published private(set) var availableComponentItems: [PluginComponentItem] = []
     // Legacy management projection retained for failure isolation and older
     // tests. Layout settings use the per-surface order projections below.
     @Published private(set) var featureManagementItems: [PluginFeatureManagementItem] = []
@@ -520,11 +525,15 @@ final class PluginHost: ObservableObject {
     @Published private(set) var automaticPreferencesBackupEnabled = false
     @Published private(set) var automaticPreferencesBackupSummary =
         AutomaticPreferencesBackupSummary.empty
+    @Published private(set) var cloudPreferencesSyncEnabled = false
+    @Published private(set) var cloudPreferencesSyncStatus: CloudPreferencesSyncStatus = .offline(reason: .disabled)
+    @Published private(set) var cloudPreferencesSyncDirectoryURL: URL?
 
     /// The app shell installs this while the application is running. The host
     /// emits typed requests but never manipulates windows or popovers directly.
     var appPresentationHandler: ((AppPresentationRequest) -> Void)?
     var componentDetailPresentationHandler: ((String, String) -> Void)?
+    var componentDetailHandlersByPanelID: [String: (String, String) -> Void] = [:]
 
     private let openPermissionSettings: (URL) -> Void
     private let permissionGuidanceHandler: PermissionCoordinator.GuidanceHandler
@@ -574,6 +583,9 @@ final class PluginHost: ObservableObject {
             automaticPreferencesBackupCoordinator: enablesAutomaticPreferencesBackups
                 ? AutomaticPreferencesBackupCoordinator(userDefaults: shortcutStore.userDefaults)
                 : nil,
+            cloudPreferencesSyncCoordinator: enablesAutomaticPreferencesBackups
+                ? CloudPreferencesSyncCoordinator(userDefaults: shortcutStore.userDefaults)
+                : nil,
             globalShortcutManager: GlobalShortcutManager(),
             displayConfigurationObserver: SystemDisplayConfigurationObserver(),
             accessibilityPermissionObserver: AccessibilityPermissionObserver(),
@@ -592,6 +604,7 @@ final class PluginHost: ObservableObject {
         preferencesBackupChangeReporter providedPreferencesBackupChangeReporter:
             PreferencesBackupChangeReporter? = nil,
         automaticPreferencesBackupCoordinator: AutomaticPreferencesBackupCoordinator? = nil,
+        cloudPreferencesSyncCoordinator: CloudPreferencesSyncCoordinator? = nil,
         globalShortcutManager: GlobalShortcutManager,
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
@@ -625,10 +638,17 @@ final class PluginHost: ObservableObject {
 
             return $0.metadata.order < $1.metadata.order
         }
+        self.actionInputAliases = CommandPaletteAliasStore(defaults: shortcutStore.userDefaults)
         self.shortcutStore = shortcutStore
         self.pluginDisplayPreferencesStore = pluginDisplayPreferencesStore
+        self.menuBarPanelStore = MenuBarPanelStore(
+            userDefaults: shortcutStore.userDefaults, reporter: preferencesBackupChangeReporter
+        )
+        self.menuBarPanels = menuBarPanelStore.configuration.displayPanels
+        self.menuBarIconCoordinator = PluginMenuBarIconCoordinator(userDefaults: shortcutStore.userDefaults)
         self.preferencesBackupStore = preferencesBackupStore
         self.automaticPreferencesBackupCoordinator = automaticPreferencesBackupCoordinator
+        self.cloudPreferencesSyncCoordinator = cloudPreferencesSyncCoordinator
         self.preferencesBackupChangeReporter = preferencesBackupChangeReporter
         self.globalShortcutManager = globalShortcutManager
         self.openPermissionSettings = openPermissionSettings
@@ -688,8 +708,9 @@ final class PluginHost: ObservableObject {
         )
 
         preferencesBackupChangeReporter.onCommittedChange = {
-            [weak automaticPreferencesBackupCoordinator] _ in
+            [weak automaticPreferencesBackupCoordinator, weak cloudPreferencesSyncCoordinator] _ in
             automaticPreferencesBackupCoordinator?.committedPreferencesDidChange()
+            cloudPreferencesSyncCoordinator?.committedPreferencesDidChange()
         }
 
         self.automationController.onCatalogChange = { [weak self] in
@@ -707,6 +728,9 @@ final class PluginHost: ObservableObject {
         configureCallbacks(for: self.builtInPlugins)
 
         if let dynamicPluginManager {
+            dynamicPluginManager.onPluginWillDeactivate = { [weak self] pluginID, reason in
+                self?.menuBarIconCoordinator.unregister(pluginID: pluginID, reason: reason)
+            }
             // The retired global checkbox becomes hidden on every surface
             // the plugin supports. Consume the package-store marker before
             // loading dynamic code, but do not hold or deactivate packages:
@@ -789,7 +813,40 @@ final class PluginHost: ObservableObject {
             }
         }
 
+        if let cloudPreferencesSyncCoordinator {
+            cloudPreferencesSyncCoordinator.isReadyToSync = { [weak self] in
+                self?.areCloudPreferencesReady ?? false
+            }
+            cloudPreferencesSyncEnabled = cloudPreferencesSyncCoordinator.isEnabled
+            cloudPreferencesSyncStatus = cloudPreferencesSyncCoordinator.status
+            cloudPreferencesSyncDirectoryURL = cloudPreferencesSyncCoordinator.syncDirectoryURL
+            cloudPreferencesSyncCoordinator.snapshotProvider = { [weak self] in
+                self?.makePreferencesBackup()
+            }
+            cloudPreferencesSyncCoordinator.importHandler = { [weak self] backup in
+                guard let self else { return }
+                let result = try self.importCloudPreferences(backup)
+                guard result.shortcutErrors.isEmpty else {
+                    throw NSError(
+                        domain: "MacTools.CloudPreferencesSync",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: result.shortcutErrors
+                            .sorted { $0.key < $1.key }
+                            .map(\.value)
+                            .joined(separator: "\n")]
+                    )
+                }
+            }
+            cloudPreferencesSyncCoordinator.statusHandler = { [weak self] status in
+                self?.cloudPreferencesSyncStatus = status
+            }
+            cloudPreferencesSyncCoordinator.directoryURLHandler = { [weak self] url in
+                self?.cloudPreferencesSyncDirectoryURL = url
+            }
+        }
+
         refreshAll()
+        startCloudPreferencesSyncIfReady()
     }
 
     isolated deinit {
@@ -813,11 +870,6 @@ final class PluginHost: ObservableObject {
         preferencesBackupStore.setLanguagePreference(rawValue: rawValue)
     }
 
-    @discardableResult
-    func setMenuBarClickBehaviorPreference(rawValue: String) -> Bool {
-        preferencesBackupStore.setMenuBarClickBehavior(rawValue: rawValue)
-    }
-
     func createAutomaticPreferencesBackupNow() async throws -> AutomaticPreferencesBackupWriteResult {
         guard let automaticPreferencesBackupCoordinator else {
             throw CocoaError(.featureUnsupported)
@@ -834,9 +886,45 @@ final class PluginHost: ObservableObject {
 
     func flushAutomaticPreferencesBackupBeforeTermination() {
         automaticPreferencesBackupCoordinator?.flushPendingBackupBeforeTermination()
+        cloudPreferencesSyncCoordinator?.flushPendingExportBeforeTermination()
+    }
+
+    func setCloudPreferencesSyncEnabled(_ enabled: Bool) {
+        cloudPreferencesSyncCoordinator?.setEnabled(enabled)
+        cloudPreferencesSyncEnabled = cloudPreferencesSyncCoordinator?.isEnabled ?? false
+        if let coordinator = cloudPreferencesSyncCoordinator {
+            cloudPreferencesSyncStatus = coordinator.status
+        }
+    }
+
+    func setCloudPreferencesSyncDirectoryURL(_ url: URL?) {
+        cloudPreferencesSyncCoordinator?.setSyncDirectoryURL(url)
+        cloudPreferencesSyncDirectoryURL = url
+        if let coordinator = cloudPreferencesSyncCoordinator {
+            cloudPreferencesSyncStatus = coordinator.status
+        }
+    }
+
+    func triggerCloudPreferencesSync() async throws {
+        guard let cloudPreferencesSyncCoordinator else {
+            throw CocoaError(.featureUnsupported)
+        }
+        try await cloudPreferencesSyncCoordinator.syncNow()
+    }
+
+    func resolveCloudPreferencesConflict(_ choice: CloudPreferencesConflictChoice) async throws {
+        try await cloudPreferencesSyncCoordinator?.resolveConflict(choice)
+    }
+
+    func openCloudPreferencesSyncFolder() {
+        guard let url = cloudPreferencesSyncDirectoryURL ?? cloudPreferencesSyncCoordinator?.syncDirectoryURL else {
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 
     func deactivateAllPlugins(reason: PluginDeactivationReason = .hostShutdown) {
+        menuBarIconCoordinator.deactivateAll(reason: reason)
         pluginStateChangeRebuildTask?.cancel()
         pluginStateChangeRebuildTask = nil
         hideAllPanelSurfaces()
@@ -934,7 +1022,8 @@ final class PluginHost: ObservableObject {
             pluginDisplay: pluginDisplayPreferencesStore.backupSnapshot(
                 defaultPluginIDs: defaultPluginIDs,
                 dashboardDefaultPluginIDs: defaultPluginIDs(for: .dashboard),
-                featurePanelDefaultPluginIDs: defaultPluginIDs(for: .featurePanel)
+                featurePanelDefaultPluginIDs: defaultPluginIDs(for: .featurePanel),
+                panelConfiguration: menuBarPanelStore.configuration
             ),
             shortcutCustomizations: selection.includesShortcuts ? shortcutCustomizations : [:],
             actionShortcutAssignments: selection.includesShortcuts
@@ -1021,14 +1110,22 @@ final class PluginHost: ObservableObject {
     func importPreferences(
         _ backup: PreferencesBackup,
         installingMissingPluginIDs requestedPluginIDs: Set<String>,
-        selection: PreferencesBackupSelection? = nil
+        selection: PreferencesBackupSelection? = nil,
+        progress: (PreferencesImportProgress) -> Void = { _ in }
     ) async throws -> PreferencesImportResult {
         let preview = try preferencesImportPreview(for: backup, selection: selection)
         let installablePluginIDs = Set(preview.installablePlugins.map(\.id))
+        let pluginIDs = requestedPluginIDs.intersection(installablePluginIDs).sorted()
         var installedPluginIDs: [String] = []
         var pluginInstallationFailures: [String: String] = [:]
 
-        for pluginID in requestedPluginIDs.intersection(installablePluginIDs).sorted() {
+        progress(.preparing(pluginCount: pluginIDs.count))
+        for (offset, pluginID) in pluginIDs.enumerated() {
+            progress(.installingPlugin(
+                id: pluginID,
+                number: offset + 1,
+                total: pluginIDs.count
+            ))
             do {
                 try await installPluginFromCatalog(pluginID: pluginID)
                 installedPluginIDs.append(pluginID)
@@ -1041,30 +1138,137 @@ final class PluginHost: ObservableObject {
             loadDynamicPluginsIfNeeded()
         }
 
-        var result = try importPreferences(backup, selection: selection)
-        result = PreferencesImportResult(
+        progress(.restoringPreferences(
+            completedPluginCount: pluginIDs.count,
+            totalPluginCount: pluginIDs.count
+        ))
+        let pluginIDsAwaitingRestart = Set(pluginManagementItems
+            .filter { $0.state == .restartRequired }
+            .map(\.id))
+            .subtracting(activePlugins.map { $0.metadata.id })
+        let importedResult = try importPreferences(backup, selection: selection)
+        var shortcutErrors = importedResult.shortcutErrors
+        let deferredPluginPreferenceIDs = installedPluginIDs.filter { pluginID in
+            guard pluginIDsAwaitingRestart.contains(pluginID) else { return false }
+            return shortcutErrors.removeValue(forKey: "plugin-preferences.\(pluginID)") != nil
+        }
+        let result = PreferencesImportResult(
             installedPluginIDs: installedPluginIDs,
+            deferredPluginPreferenceIDs: deferredPluginPreferenceIDs,
             pluginInstallationFailures: pluginInstallationFailures,
-            shortcutErrors: result.shortcutErrors
+            shortcutErrors: shortcutErrors
         )
         return result
+    }
+
+    private struct CloudLocalPreferences {
+        let workflows: [WorkflowDefinition]
+        let rules: [AutomationRule]
+        let shortcuts: [ActionShortcutAssignmentRecord]
+        let presets: [ActionInvocationPreset]
+        let shortcutCustomizations: [String: ShortcutCustomization]
+        let protectedPluginIDs: Set<String>
+        let pluginPreferences: [String: Data]
+
+        var workflowIDs: Set<UUID> { Set(workflows.map(\.id)) }
+    }
+
+    /// Cloud updates replace portable records only. Local records are captured
+    /// from their stores, since a portable backup deliberately omits them.
+    func importCloudPreferences(_ backup: PreferencesBackup) throws -> PreferencesImportResult {
+        let exported = makePreferencesBackup()
+        let portable = CloudPreferencesSyncCoordinator.filterMachineSpecificPreferences(exported)
+        let automation = automationController.preferencesBackupSnapshot()
+        let portableWorkflowIDs = Set((portable.workflows ?? []).map(\.id))
+        let portableRuleIDs = Set((portable.automationRules ?? []).map(\.id))
+        let portableShortcutIDs = Set(portable.actionShortcutAssignments.map(\.id))
+        let portablePresetIDs = Set((portable.actionInvocationPresets ?? []).map(\.id))
+        let rules = automation.rules.filter { !portableRuleIDs.contains($0.id) }
+        let shortcuts = shortcutAssignmentService.assignments.filter { !portableShortcutIDs.contains($0.id) }
+        let presets = actionPresetStore.presets().filter { !portablePresetIDs.contains($0.id) }
+        var protectedIDs = Set(automation.workflows.filter { !portableWorkflowIDs.contains($0.id) }.map(\.id))
+        protectedIDs.formUnion(rules.map(\.workflowID))
+        let references = shortcuts.map(\.reference) + presets.map(\.reference)
+        protectedIDs.formUnion(references.compactMap { WorkflowExecutionAnalysis.nestedWorkflowID(for: $0.key) })
+        var previousCount = -1
+        while previousCount != protectedIDs.count {
+            previousCount = protectedIDs.count
+            for workflow in automation.workflows where protectedIDs.contains(workflow.id) {
+                protectedIDs.formUnion(workflow.steps.compactMap {
+                    WorkflowExecutionAnalysis.nestedWorkflowID(for: $0.reference.key)
+                })
+            }
+        }
+        let workflows = automation.workflows.filter { protectedIDs.contains($0.id) }
+        let dependencyReferences = references + workflows.flatMap { $0.steps.map(\.reference) }
+        // Plugin payloads are opaque, replacement-based archives. A provider used
+        // by preserved local automation must retain its presets as well.
+        let protectedPluginIDs = Set(dependencyReferences.compactMap { reference -> String? in
+            guard WorkflowExecutionAnalysis.nestedWorkflowID(for: reference.key) == nil,
+                  let plugin = corePlugin(for: reference.key.providerID),
+                  let provider = plugin as? any PluginActionReferenceBackupProviding else { return nil }
+            let disposition = guardedValue(for: plugin, operation: "preserve local action dependencies",
+                                           provider.backupDisposition(for: reference))
+            guard disposition == .requiresPluginPreferences else { return nil }
+            return reference.key.providerID
+        })
+        let customizations = shortcutStore.customizations(for: shortcutDescriptors().map(\.itemID))
+            .filter { portable.shortcutCustomizations[$0.key] == nil }
+        let local = CloudLocalPreferences(
+            workflows: workflows, rules: rules, shortcuts: shortcuts, presets: presets,
+            shortcutCustomizations: customizations, protectedPluginIDs: protectedPluginIDs,
+            pluginPreferences: exported.pluginPreferences
+        )
+        return try restorePreferences(backup, preserving: local)
+    }
+
+    private func preservingLocalWorkflows(
+        _ context: PreferencesActionRestoreContext, local: CloudLocalPreferences?
+    ) -> PreferencesActionRestoreContext {
+        guard let local else { return context }
+        return PreferencesActionRestoreContext(
+            selection: context.selection,
+            payloadDefinedActionReferencesByPluginID: context.payloadDefinedActionReferencesByPluginID,
+            importedWorkflowIDs: context.importedWorkflowIDs.union(local.workflowIDs),
+            restorableWorkflowIDs: context.restorableWorkflowIDs.union(local.workflowIDs),
+            resolvableWorkflowIDs: context.resolvableWorkflowIDs.union(local.workflowIDs)
+        )
     }
 
     func importPreferences(
         _ backup: PreferencesBackup,
         selection requestedSelection: PreferencesBackupSelection? = nil
     ) throws -> PreferencesImportResult {
+        try restorePreferences(backup, selection: requestedSelection)
+    }
+
+    private func restorePreferences(
+        _ backup: PreferencesBackup,
+        selection requestedSelection: PreferencesBackupSelection? = nil,
+        preserving local: CloudLocalPreferences? = nil
+    ) throws -> PreferencesImportResult {
         let availableSelection = backup.effectiveSelection
         let selection = (requestedSelection ?? availableSelection).intersecting(availableSelection)
         _ = try preferencesImportPreview(for: backup, selection: selection)
         try automaticPreferencesBackupCoordinator?.createSafetySnapshotBeforeImport()
-        var restoreContext = makePreferencesActionRestoreContext(
+        var restoreContext = preservingLocalWorkflows(makePreferencesActionRestoreContext(
             backup: backup,
             selection: selection
-        )
+        ), local: local)
         let selectedPluginPreferences = backup.pluginPreferences.filter {
             selection.pluginPreferenceIDs.contains($0.key)
+                && !(local?.protectedPluginIDs.contains($0.key) ?? false)
         }
+        let restoredPluginPreferences = selectedPluginPreferences.reduce(into: [String: Data]()) { result, entry in
+            result[entry.key] = if let existing = local?.pluginPreferences[entry.key] {
+                CloudPreferencesSyncCoordinator.preservingMachineSpecificPluginPreferences(
+                    incoming: entry.value, local: existing, pluginID: entry.key
+                )
+            } else { entry.value }
+        }
+        let shortcutCustomizations = backup.shortcutCustomizations.merging(
+            local?.shortcutCustomizations ?? [:], uniquingKeysWith: { _, local in local }
+        )
         preferencesBackupRestoreContext = restoreContext
         defer {
             preferencesBackupRestoreContext = nil
@@ -1074,6 +1278,10 @@ final class PluginHost: ObservableObject {
         }
 
         if selection.includesPluginLayout {
+            let panelConfiguration = backup.pluginDisplay.panelConfiguration
+                ?? MenuBarPanelConfiguration().applyingLegacyClickBehavior(backup.application.menuBarClickBehavior)
+            menuBarPanelStore.replace(panelConfiguration)
+            menuBarPanels = menuBarPanelStore.configuration.displayPanels
             pluginDisplayPreferencesStore.setOrderedPluginIDs(
                 backup.pluginDisplay.orderedPluginIDs,
                 defaultPluginIDs: defaultPluginIDs
@@ -1109,7 +1317,7 @@ final class PluginHost: ObservableObject {
                 : nil
         })
         var shortcutErrors: [String: String] = [:]
-        let providerPreferences = selectedPluginPreferences.filter {
+        let providerPreferences = restoredPluginPreferences.filter {
             !actionSurfacePluginIDs.contains($0.key)
         }
         let restoredProviderIDs = restorePortablePluginPreferences(providerPreferences)
@@ -1122,11 +1330,11 @@ final class PluginHost: ObservableObject {
         }
         // Only a successfully validated and persisted payload can authorize actions that depend
         // on that payload. This closes the gap between preflight decoding and stateful restore.
-        restoreContext = makePreferencesActionRestoreContext(
+        restoreContext = preservingLocalWorkflows(makePreferencesActionRestoreContext(
             backup: backup,
             selection: selection,
             restoredPluginPreferenceIDs: restoredProviderIDs
-        )
+        ), local: local)
         preferencesBackupRestoreContext = restoreContext
         // Portable plugin settings can create action catalog identities (for example,
         // restored Fan Control preset UUIDs). Rebuild before dependent references.
@@ -1139,14 +1347,15 @@ final class PluginHost: ObservableObject {
             let restorableIDs = restoreContext.restorableWorkflowIDs
             let restored = automationController.restorePreferences(
                 workflows: workflows.compactMap { workflow in
-                    restorableIDs.contains(workflow.id)
+                    restorableIDs.contains(workflow.id) && !(local?.workflowIDs.contains(workflow.id) ?? false)
                         ? migratedWorkflowForRestore(workflow)
                         : nil
-                },
-                rules: rules.filter {
-                    restorableIDs.contains($0.workflowID)
-                        && AutomationRulePortabilityAnalysis.isPortable($0)
-                }
+                } + (local?.workflows ?? []),
+                rules: rules.filter { rule in
+                    restorableIDs.contains(rule.workflowID)
+                        && AutomationRulePortabilityAnalysis.isPortable(rule)
+                        && !(local?.rules.contains(where: { $0.id == rule.id }) ?? false)
+                } + (local?.rules ?? [])
             )
             if !restored {
                 shortcutErrors["automation"] = FeatureL10n.string("无法保存工作流。")
@@ -1164,7 +1373,7 @@ final class PluginHost: ObservableObject {
         // Action-surface layouts are restored only after their referenced providers and
         // workflow dependency graph are known, so a selective import cannot retain a
         // dangling Grid or Trackpad action.
-        let surfacePreferences = selectedPluginPreferences.filter {
+        let surfacePreferences = restoredPluginPreferences.filter {
             actionSurfacePluginIDs.contains($0.key)
         }
         let restoredSurfaceIDs = restorePortablePluginPreferences(surfacePreferences)
@@ -1182,7 +1391,7 @@ final class PluginHost: ObservableObject {
                     uniqueKeysWithValues: AppShortcutAction.allCases.map { action in
                         (
                             action,
-                            backup.shortcutCustomizations[action.rawValue]
+                            shortcutCustomizations[action.rawValue]
                                 ?? .inheritDefault
                         )
                     }
@@ -1191,7 +1400,7 @@ final class PluginHost: ObservableObject {
                     descriptors.map { descriptor in
                         (
                             descriptor.itemID,
-                            backup.shortcutCustomizations[descriptor.itemID]
+                            shortcutCustomizations[descriptor.itemID]
                                 ?? .inheritDefault
                         )
                     },
@@ -1215,9 +1424,10 @@ final class PluginHost: ObservableObject {
                         customizations: targetCustomizations,
                         descriptors: descriptors
                     )
-                    let importedAssignments = backup.actionShortcutAssignments.filter {
-                        actionReferenceRestorePortability($0.reference) != .knownNonPortable
-                    }
+                    let importedAssignments = backup.actionShortcutAssignments.filter { assignment in
+                        actionReferenceRestorePortability(assignment.reference) != .knownNonPortable
+                            && !(local?.shortcuts.contains(where: { $0.id == assignment.id }) ?? false)
+                    } + (local?.shortcuts ?? [])
                     switch shortcutAssignmentService.validateImport(
                         importedAssignments,
                         reservedRegistrations: reservedState.registrations,
@@ -1236,7 +1446,7 @@ final class PluginHost: ObservableObject {
                         case .success:
                             shortcutErrors.merge(
                                 applyImportedShortcutCustomizations(
-                                    backup.shortcutCustomizations,
+                                    shortcutCustomizations,
                                     bridgesLegacyActionAssignments: false,
                                     notifiesActionBackedDescriptors: false
                                 ),
@@ -1249,7 +1459,7 @@ final class PluginHost: ObservableObject {
             } else {
                 shortcutErrors.merge(
                     applyImportedShortcutCustomizations(
-                        backup.shortcutCustomizations,
+                        shortcutCustomizations,
                         bridgesLegacyActionAssignments: true
                     ),
                     uniquingKeysWith: { existing, _ in existing }
@@ -1259,7 +1469,8 @@ final class PluginHost: ObservableObject {
         if selection.includesRunLinks,
            let presets = backup.actionInvocationPresets,
            !actionPresetStore.replaceAllForRecovery(presets.compactMap { preset in
-               guard actionReferenceRestorePortability(preset.reference) != .knownNonPortable else {
+               guard actionReferenceRestorePortability(preset.reference) != .knownNonPortable,
+                     !(local?.presets.contains(where: { $0.id == preset.id }) ?? false) else {
                    return nil
                }
                return ActionInvocationPreset(
@@ -1268,7 +1479,7 @@ final class PluginHost: ObservableObject {
                    createdAt: preset.createdAt,
                    formatVersion: preset.formatVersion
                )
-           }) {
+           } + (local?.presets ?? [])) {
             shortcutErrors["run-links"] = FeatureL10n.string("无法保存运行链接预设。")
         }
         rebuildDerivedState()
@@ -1297,6 +1508,11 @@ final class PluginHost: ObservableObject {
         cachedPanelStatesByID.removeAll()
         cachedComponentStatesByID.removeAll()
         syncPluginManagementState()
+        menuBarIconCoordinator.refreshPrimaryIconOwner(
+            pluginTitle: menuBarIconCoordinator.primaryIconOwner.flatMap {
+                dynamicPluginManifestsByID[$0.pluginID]?.localizedDisplayName
+            }
+        )
         localizationRevision &+= 1
         rebuildDerivedState()
         syncGlobalShortcuts()
@@ -2039,39 +2255,10 @@ final class PluginHost: ObservableObject {
         appPresentationHandler?(.settings(.feature(.actionsAndShortcuts)))
     }
 
-    /// Chooses the entry page for a normal Plugins-tab selection. Explicit
-    /// navigation to Marketplace or a plugin configuration bypasses this so
-    /// the requested destination is always respected.
-    func pluginSettingsLandingPage() -> FeatureSettingsPane {
-        let dashboardIsAvailable = !dashboardLayoutItems.isEmpty || !dashboardHiddenLayoutItems.isEmpty
-        let featurePanelIsAvailable = !featurePanelLayoutItems.isEmpty || !featurePanelHiddenLayoutItems.isEmpty
-
-        let landingPage: PluginSettingsLandingPage
-        if !dashboardIsAvailable && !featurePanelIsAvailable {
-            landingPage = .marketplace
-        } else if let savedPage = pluginDisplayPreferencesStore.lastPluginSettingsLandingPage(),
-                  isAvailable(savedPage, dashboardIsAvailable: dashboardIsAvailable, featurePanelIsAvailable: featurePanelIsAvailable) {
-            landingPage = savedPage
-        } else if dashboardIsAvailable {
-            landingPage = .dashboard
-        } else {
-            landingPage = .featurePanel
-        }
-
-        // This automatic route must not replace the user's saved choice. For
-        // example, temporarily having only settings-only plugins should not
-        // make Marketplace their permanent landing page after they install a
-        // layout-capable plugin again.
-        return FeatureSettingsPane(landingPage: landingPage)
-    }
-
     @discardableResult
     func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) -> Bool {
         switch pane {
-        case .actionsAndShortcuts, .automation, .dashboardLayout, .featurePanelLayout, .marketplace:
-            if let landingPage = pane.landingPage {
-                pluginDisplayPreferencesStore.setLastPluginSettingsLandingPage(landingPage)
-            }
+        case .actionsAndShortcuts, .automation, .marketplace:
             return true
         case let .configuration(pluginID):
             guard pluginSettingsItems.contains(where: { $0.id == pluginID }) else {
@@ -2214,6 +2401,28 @@ final class PluginHost: ObservableObject {
         rebuildDerivedState()
     }
 
+    /// Moves only currently rendered items. Runtime-hidden plugins keep their slots,
+    /// and the preferences store also preserves slots hidden by the user's settings.
+    func moveRenderedPlugin(id pluginID: String, toOffset targetOffset: Int, on surface: PluginDisplaySurface) {
+        var renderedIDs = surface == .dashboard ? componentItems.map(\.id) : panelItems.map(\.id)
+        guard let currentIndex = renderedIDs.firstIndex(of: pluginID) else { return }
+        let clampedOffset = min(max(targetOffset, 0), renderedIDs.count)
+        guard currentIndex != clampedOffset, currentIndex + 1 != clampedOffset else { return }
+
+        let renderedIDSet = Set(renderedIDs)
+        renderedIDs.move(fromOffsets: IndexSet(integer: currentIndex), toOffset: clampedOffset)
+        var reorderedIDs = renderedIDs.makeIterator()
+        let orderedIDs = visiblePluginIDs(for: surface).map { id in
+            renderedIDSet.contains(id) ? reorderedIDs.next()! : id
+        }
+        pluginDisplayPreferencesStore.setVisiblePluginIDs(
+            orderedIDs,
+            for: surface,
+            defaultPluginIDs: defaultPluginIDs(for: surface)
+        )
+        rebuildDerivedState()
+    }
+
     func setPluginVisible(_ isVisible: Bool, id pluginID: String, on surface: PluginDisplaySurface) {
         pluginDisplayPreferencesStore.setPluginVisible(
             isVisible,
@@ -2337,6 +2546,13 @@ final class PluginHost: ObservableObject {
         return item
     }
 
+    func componentPreviewView(for itemID: String) -> AnyView? {
+        guard availableComponentItems.contains(where: { $0.id == itemID }),
+              let plugin = corePlugin(for: itemID), let panel = plugin.componentPanel else { return nil }
+        return guardedValue(for: plugin, operation: "make component preview",
+            panel.makeView(context: PluginComponentContext(pluginID: itemID, dismiss: {}, isPanelVisible: false)))
+    }
+
     func componentDetailContent(
         pluginID: String,
         detailID: String,
@@ -2370,16 +2586,15 @@ final class PluginHost: ObservableObject {
             visiblePanelSurfaces.remove(surface)
         }
 
-        let visiblePluginIDs = isVisible ? pluginIDs(for: surface) : []
-        updateVisiblePanelSurface(surface, visiblePluginIDs: visiblePluginIDs)
+        syncVisiblePanelSurfaces()
     }
 
     func isComponentViewCached(for itemID: String) -> Bool {
         componentViewCache[itemID] != nil
     }
 
-    func prewarmComponentViews(dismiss: @escaping () -> Void) {
-        for item in componentItems {
+    func prewarmComponentViews(panelID: String? = nil, dismiss: @escaping () -> Void) {
+        for item in panelID.map({ componentItems(in: $0) }) ?? componentItems {
             _ = componentViewItem(for: item.id, dismiss: dismiss)
         }
     }
@@ -2503,9 +2718,20 @@ final class PluginHost: ObservableObject {
         componentViewCache.removeAll()
     }
 
+    func recheckPluginRequirements() {
+        dynamicPluginManager?.reloadInstalledPlugins()
+        syncPluginManagementState()
+    }
+
     func refreshPluginCatalog() async {
         await pluginCatalogManager?.refreshCatalog()
         syncPluginManagementState()
+    }
+
+    private func startCloudPreferencesSyncIfReady() {
+        guard dynamicPluginManager == nil || didLoadDynamicPlugins else { return }
+        areCloudPreferencesReady = true
+        cloudPreferencesSyncCoordinator?.start()
     }
 
     func loadDynamicPluginsIfNeeded() {
@@ -2518,6 +2744,7 @@ final class PluginHost: ObservableObject {
         configureCallbacks(for: dynamicPlugins)
         syncPluginManagementState()
         refreshAll()
+        startCloudPreferencesSyncIfReady()
     }
 
     var hasInstalledDynamicPlugins: Bool {
@@ -2665,6 +2892,7 @@ final class PluginHost: ObservableObject {
     func uninstallDynamicPlugin(pluginID: String, removeData: Bool = false) throws {
         try dynamicPluginManager?.uninstallPlugin(pluginID: pluginID, removeData: removeData)
         pluginDisplayPreferencesStore.removePlugin(pluginID)
+        menuBarPanelStore.removePlugin(id: pluginID)
         shortcutStore.removeCustomizations(forPluginID: pluginID)
         shortcutErrors = shortcutErrors.filter { !$0.key.hasPrefix("\(pluginID).shortcut.") }
         isolatedPluginFailures.removeValue(forKey: pluginID)
@@ -3099,6 +3327,15 @@ final class PluginHost: ObservableObject {
         for plugin in plugins {
             let pluginID = plugin.metadata.id
 
+            if let inputRequester = plugin as? any PluginActionInputPresentationRequesting {
+                inputRequester.requestActionInput = { [weak self, weak plugin] key in
+                    guard let self, let plugin, key.providerID == pluginID,
+                          self.corePlugin(for: pluginID) === plugin,
+                          let item = self.actionInputRegistry.items.first(where: { $0.id == key }) else { return }
+                    self.appPresentationHandler?(.composeActionInput(item))
+                }
+            }
+
             plugin.onStateChange = { [weak self] in
                 self?.rebuildDerivedStateAfterPluginChange(pluginID: pluginID)
             }
@@ -3210,7 +3447,11 @@ final class PluginHost: ObservableObject {
             }
             if let componentDetailPresenting = plugin as? any PluginComponentDetailPresenting {
                 componentDetailPresenting.requestComponentDetailPresentation = { [weak self] detailID in
-                    self?.componentDetailPresentationHandler?(pluginID, detailID)
+                    guard let self else { return }
+                    if let panelID = self.visibleMenuBarPanelID,
+                       let handler = self.componentDetailHandlersByPanelID[panelID] {
+                        handler(pluginID, detailID)
+                    } else { self.componentDetailPresentationHandler?(pluginID, detailID) }
                 }
             }
             if let actionGridConsumer = plugin as? any ActionGridHostContextConsuming {
@@ -3235,6 +3476,10 @@ final class PluginHost: ObservableObject {
             configureHostStatusItemCallbacks(for: [plugin])
         }
         configureTrackpadGestureBridge()
+        let pendingIconPluginIDs: Set<String>? = dynamicPluginManager != nil && !didLoadDynamicPlugins
+            ? nil
+            : Set(pluginManagementItems.filter { $0.state == .restartRequired }.map(\.id))
+        menuBarIconCoordinator.synchronize(with: activePlugins, pendingPluginIDs: pendingIconPluginIDs)
     }
 
     private let trackpadGestureBridge = TrackpadGestureBridge()
@@ -3537,7 +3782,7 @@ final class PluginHost: ObservableObject {
         let featurePanelHiddenDescriptors = hiddenPluginDescriptors(for: .featurePanel)
         let dashboardHiddenDescriptors = hiddenPluginDescriptors(for: .dashboard)
 
-        panelItems = featurePanelOrderedDescriptors.compactMap { descriptor in
+        availablePanelItems = (featurePanelOrderedDescriptors + featurePanelHiddenDescriptors).compactMap { descriptor in
             guard descriptor.hasPrimaryPanel else {
                 return nil
             }
@@ -3581,7 +3826,10 @@ final class PluginHost: ObservableObject {
             )
         }
 
-        componentItems = dashboardOrderedDescriptors.compactMap { descriptor in
+        let visibleFeatureIDs = Set(featurePanelOrderedDescriptors.map { $0.metadata.id })
+        panelItems = availablePanelItems.filter { visibleFeatureIDs.contains($0.id) }
+
+        availableComponentItems = (dashboardOrderedDescriptors + dashboardHiddenDescriptors).compactMap { descriptor in
             guard descriptor.hasComponentPanel else {
                 return nil
             }
@@ -3618,6 +3866,9 @@ final class PluginHost: ObservableObject {
                 isEnabled: state.isEnabled
             )
         }
+        let visibleComponentIDs = Set(dashboardOrderedDescriptors.map { $0.metadata.id })
+        componentItems = availableComponentItems.filter { visibleComponentIDs.contains($0.id) }
+        menuBarPanelContentCache.removeAll(keepingCapacity: true)
         trimComponentViewCache(keeping: Set(componentItems.map(\.id)))
         syncVisiblePanelSurfaces()
 
@@ -3712,6 +3963,7 @@ final class PluginHost: ObservableObject {
                     canClear: !descriptor.definition.isRequired && binding != nil,
                     usesDefaultValue: customization == .inheritDefault,
                     errorMessage: shortcutErrors[descriptor.itemID]
+                        ?? eventShortcutConflictError(for: descriptor)
                         ?? binding.flatMap {
                             MacToolsReservedShortcutBindings.validationError(for: $0)?
                                 .localizedDescription
@@ -3821,6 +4073,8 @@ final class PluginHost: ObservableObject {
 
         if isolatedPluginFailures.count > isolatedPluginCountAtStart {
             rebuildDerivedState()
+        } else {
+            menuBarPanelContentDidChange.send()
         }
     }
 
@@ -3984,6 +4238,11 @@ final class PluginHost: ObservableObject {
         )
 
         let issues = actionRegistry.synchronize(registrations)
+        actionInputRegistry.synchronize(activePlugins, readDescriptors: { plugin in
+            guard let provider = plugin as? any PluginActionInputProviding else { return [] }
+            return self.guardedValue(for: plugin, operation: "read action input descriptors",
+                                     provider.actionInputDescriptors) ?? []
+        }, definitionLookup: { self.actionRegistry.definition(for: $0) })
         actionRegistryIssues = issues
         if issues.isEmpty {
             AppLog.pluginHost.info(
@@ -4344,7 +4603,7 @@ final class PluginHost: ObservableObject {
 
     private func hostActionRegistration() -> ActionProviderRegistration {
         let providerID = "mactools"
-        let definitions = AppShortcutAction.allCases.map { action in
+        let definitions = AppShortcutAction.allCases.filter { !$0.isPanelAction }.map { action in
             ActionDefinition(
                 key: ActionKey(providerID: providerID, actionID: action.rawValue),
                 title: action.title,
@@ -4354,11 +4613,22 @@ final class PluginHost: ObservableObject {
                 capabilities: [.foregroundInteractive]
             )
         }
+        let panelDefinitions = menuBarPanels.map { panel in
+            ActionDefinition(
+                key: panelActionReference(id: panel.id).key,
+                title: panel.title,
+                description: FeatureL10n.string("显示、隐藏或切换到此面板。"),
+                systemImage: panel.systemImage,
+                externalInvocationPolicy: .unavailable,
+                capabilities: [.foregroundInteractive]
+            )
+        }
+        let allDefinitions = definitions + panelDefinitions
         return ActionProviderRegistration(
             providerID: providerID,
             identity: ObjectIdentifier(self),
-            definitions: definitions,
-            catalogEntries: definitions.map {
+            definitions: allDefinitions,
+            catalogEntries: allDefinitions.map {
                 ActionCatalogEntry(
                     reference: ActionReference(key: $0.key),
                     title: $0.title,
@@ -4367,6 +4637,13 @@ final class PluginHost: ObservableObject {
             },
             availability: { _ in .available },
             begin: { [weak self] invocation in
+                if let self,
+                   let panel = self.menuBarPanels.first(where: {
+                       !$0.isDefault && self.panelActionReference(id: $0.id).key == invocation.reference.key
+                   }), let handler = self.menuBarPanelPresentationHandler {
+                    handler(panel.id, true)
+                    return .success(ActionExecutionHandle(operation: { .succeeded() }))
+                }
                 guard let self,
                       let action = AppShortcutAction(rawValue: invocation.reference.key.actionID),
                       let appPresentationHandler = self.appPresentationHandler else {
@@ -4673,6 +4950,7 @@ final class PluginHost: ObservableObject {
         }
 
         isolatedPluginFailures[pluginID] = message
+        menuBarIconCoordinator.unregister(pluginID: pluginID, reason: .disabled)
         removePluginFromVisiblePanelSurfaces(pluginID, notify: false)
         cachedPanelStatesByID.removeValue(forKey: pluginID)
         cachedComponentStatesByID.removeValue(forKey: pluginID)
@@ -4698,6 +4976,7 @@ final class PluginHost: ObservableObject {
         plugin.onStateChange = nil
         (plugin as? any PluginActionSafetyStateChangeProviding)?.onActionSafetyStateChange = nil
         plugin.requestPermissionGuidance = nil
+        (plugin as? any PluginActionInputPresentationRequesting)?.requestActionInput = nil
         plugin.shortcutBindingResolver = nil
         (plugin as? any PluginFocusedWindowTargetConsuming)?
             .focusedWindowTargetProvider = nil
@@ -5158,6 +5437,11 @@ final class PluginHost: ObservableObject {
     }
 
     private func pluginIDs(for surface: PluginPanelSurface) -> Set<String> {
+        if let panelID = visibleMenuBarPanelID {
+            return surface == .component
+                ? Set(componentItems(in: panelID).map(\.id))
+                : Set(panelItems(in: panelID).map(\.id))
+        }
         switch surface {
         case .component:
             return Set(componentItems.map(\.id))
@@ -5167,54 +5451,46 @@ final class PluginHost: ObservableObject {
     }
 
     private func syncVisiblePanelSurfaces() {
-        for surface in visiblePanelSurfaces {
-            updateVisiblePanelSurface(
-                surface,
-                visiblePluginIDs: pluginIDs(for: surface)
-            )
+        guard !isSynchronizingPanelSurfaces else { return }
+        isSynchronizingPanelSurfaces = true
+        defer { isSynchronizingPanelSurfaces = false }
+
+        // Record each delivered transition before calling the plugin. Callbacks
+        // may refresh, remove an entry, or close the panel synchronously; derive
+        // the next transition again instead of delivering a stale notification.
+        while true {
+            var desired: [PluginPanelSurface: Set<String>] = [:]
+            for surface in visiblePanelSurfaces {
+                desired[surface] = pluginIDs(for: surface).filter { id in
+                    corePlugin(for: id).map { !isPluginIsolated($0) } ?? false
+                }
+            }
+
+            // Acquire consumers before releasing them when changing surfaces.
+            if let (surface, id) = PluginPanelSurface.allCases.lazy.compactMap({ surface in
+                desired[surface, default: []].subtracting(self.visiblePanelSurfacePluginIDs[surface, default: []])
+                    .first.map { (surface, $0) }
+            }).first {
+                visiblePanelSurfacePluginIDs[surface, default: []].insert(id)
+                notifyPanelSurfaceVisible(surface, pluginID: id)
+            } else if let (surface, id) = PluginPanelSurface.allCases.lazy.compactMap({ surface in
+                self.visiblePanelSurfacePluginIDs[surface, default: []].subtracting(desired[surface, default: []])
+                    .first.map { (surface, $0) }
+            }).first {
+                visiblePanelSurfacePluginIDs[surface]?.remove(id)
+                if visiblePanelSurfacePluginIDs[surface]?.isEmpty == true {
+                    visiblePanelSurfacePluginIDs.removeValue(forKey: surface)
+                }
+                notifyPanelSurfaceHidden(surface, pluginID: id)
+            } else {
+                return
+            }
         }
     }
 
     private func hideAllPanelSurfaces() {
-        for surface in PluginPanelSurface.allCases {
-            updateVisiblePanelSurface(surface, visiblePluginIDs: [])
-        }
         visiblePanelSurfaces.removeAll()
-    }
-
-    private func updateVisiblePanelSurface(
-        _ surface: PluginPanelSurface,
-        visiblePluginIDs nextVisiblePluginIDs: Set<String>
-    ) {
-        let previousVisiblePluginIDs = visiblePanelSurfacePluginIDs[surface] ?? []
-        let hiddenPluginIDs = previousVisiblePluginIDs.subtracting(nextVisiblePluginIDs)
-        let shownPluginIDs = nextVisiblePluginIDs.subtracting(previousVisiblePluginIDs)
-
-        guard !hiddenPluginIDs.isEmpty || !shownPluginIDs.isEmpty else {
-            return
-        }
-
-        for pluginID in hiddenPluginIDs {
-            notifyPanelSurfaceHidden(surface, pluginID: pluginID)
-        }
-
-        for pluginID in shownPluginIDs {
-            notifyPanelSurfaceVisible(surface, pluginID: pluginID)
-        }
-
-        let visiblePluginIDs = nextVisiblePluginIDs.filter { pluginID in
-            guard let plugin = corePlugin(for: pluginID) else {
-                return false
-            }
-
-            return !isPluginIsolated(plugin)
-        }
-
-        if visiblePluginIDs.isEmpty {
-            visiblePanelSurfacePluginIDs.removeValue(forKey: surface)
-        } else {
-            visiblePanelSurfacePluginIDs[surface] = visiblePluginIDs
-        }
+        syncVisiblePanelSurfaces()
     }
 
     private func notifyPanelSurfaceVisible(_ surface: PluginPanelSurface, pluginID: String) {
@@ -5253,14 +5529,14 @@ final class PluginHost: ObservableObject {
                 continue
             }
 
-            if notify {
-                notifyPanelSurfaceHidden(surface, pluginID: pluginID)
-            }
-
             if pluginIDs.isEmpty {
                 visiblePanelSurfacePluginIDs.removeValue(forKey: surface)
             } else {
                 visiblePanelSurfacePluginIDs[surface] = pluginIDs
+            }
+
+            if notify {
+                notifyPanelSurfaceHidden(surface, pluginID: pluginID)
             }
         }
     }
@@ -5268,21 +5544,6 @@ final class PluginHost: ObservableObject {
     private func trimSettingsViewCache(keeping settingsPluginIDs: Set<String>) {
         settingsViewCache = settingsViewCache.filter {
             settingsPluginIDs.contains($0.key.pluginID)
-        }
-    }
-
-    private func isAvailable(
-        _ landingPage: PluginSettingsLandingPage,
-        dashboardIsAvailable: Bool,
-        featurePanelIsAvailable: Bool
-    ) -> Bool {
-        switch landingPage {
-        case .dashboard:
-            dashboardIsAvailable
-        case .featurePanel:
-            featurePanelIsAvailable
-        case .marketplace:
-            true
         }
     }
 
@@ -5359,11 +5620,32 @@ final class PluginHost: ObservableObject {
         )
     }
 
+    private func consumedShortcutBindings(_ binding: ShortcutBinding, for descriptor: ShortcutDescriptor) -> Set<ShortcutBinding> {
+        // Window Switcher's existing phase-based shortcut contract also consumes
+        // Shift for reverse cycling. Account for that chord in host validation
+        // without extending the PluginKit shortcut-definition contract.
+        guard descriptor.pluginID == "window-switcher",
+              descriptor.plugin is any PluginShortcutEventHandling,
+              !binding.modifiers.contains(.shift) else { return [binding] }
+        return [binding, ShortcutBinding(keyCode: binding.keyCode, modifiers: binding.modifiers.union(.shift))]
+    }
+
+    private func shortcutBindingsConflict(_ binding: ShortcutBinding, for descriptor: ShortcutDescriptor,
+                                         with otherBinding: ShortcutBinding, for other: ShortcutDescriptor) -> Bool {
+        // Explicit scope bindings win inside Window Switcher. Its implicit
+        // reverse chord must not shadow a shortcut owned by another plugin.
+        if descriptor.pluginID == other.pluginID { return binding == otherBinding }
+        return !consumedShortcutBindings(binding, for: descriptor)
+            .isDisjoint(with: consumedShortcutBindings(otherBinding, for: other))
+    }
+
     private func pluginShortcutConflict(
         for binding: ShortcutBinding,
         descriptors: [ShortcutDescriptor]
     ) -> ShortcutDescriptor? {
-        descriptors.first { resolvedBinding(for: $0) == binding }
+        descriptors.first { descriptor in
+            resolvedBinding(for: descriptor).map { consumedShortcutBindings($0, for: descriptor).contains(binding) } ?? false
+        }
     }
 
     private func appShortcutConflictError(
@@ -5380,16 +5662,27 @@ final class PluginHost: ObservableObject {
         ).localizedDescription
     }
 
+    private func eventShortcutConflictError(for descriptor: ShortcutDescriptor) -> String? {
+        guard descriptor.plugin is any PluginShortcutEventHandling,
+              let binding = legacyResolvedBinding(for: descriptor) else { return nil }
+        do {
+            try validateShortcutCustomization(.custom(binding), for: descriptor)
+        } catch { return error.localizedDescription }
+        if let conflict = shortcutAssignmentService.assignments.first(where: { consumedShortcutBindings(binding, for: descriptor).contains($0.binding) }) {
+            return ShortcutValidationError.duplicate(
+                ownerDescription: actionRegistry.definition(for: conflict.reference.key)?.title ?? conflict.reference.key.actionID
+            ).localizedDescription
+        }
+        return nil
+    }
+
     private func legacyResolvedBinding(
         forPluginID pluginID: String,
         shortcutDefinitionID: String
     ) -> ShortcutBinding? {
         guard let descriptor = shortcutDescriptors().first(where: {
             $0.pluginID == pluginID && $0.definition.id == shortcutDefinitionID
-        }) else {
-            return nil
-        }
-
+        }), eventShortcutConflictError(for: descriptor) == nil else { return nil }
         return legacyResolvedBinding(for: descriptor)
     }
 
@@ -5573,7 +5866,7 @@ final class PluginHost: ObservableObject {
 
             for otherDescriptor in descriptors.dropFirst(index + 1) {
                 guard let otherBinding = bindingsByID[otherDescriptor.itemID] ?? nil,
-                      otherBinding == binding,
+                      shortcutBindingsConflict(binding, for: descriptor, with: otherBinding, for: otherDescriptor),
                       !canShareShortcutBinding(descriptor, with: otherDescriptor)
                 else {
                     continue
@@ -5610,7 +5903,7 @@ final class PluginHost: ObservableObject {
 
             for descriptor in descriptors {
                 guard let binding = bindingsByID[descriptor.itemID] ?? nil,
-                      binding == appBinding
+                      consumedShortcutBindings(binding, for: descriptor).contains(appBinding)
                 else {
                     continue
                 }
@@ -5723,10 +6016,10 @@ final class PluginHost: ObservableObject {
                 throw error
             }
 
-            if let conflict = shortcutDescriptors().first(where: {
-                $0.itemID != descriptor.itemID
-                    && resolvedBinding(for: $0) == candidate
-                    && !canShareShortcutBinding(descriptor, with: $0)
+            if let conflict = shortcutDescriptors().first(where: { other in
+                other.itemID != descriptor.itemID
+                    && resolvedBinding(for: other).map { shortcutBindingsConflict(candidate, for: descriptor, with: $0, for: other) } == true
+                    && !canShareShortcutBinding(descriptor, with: other)
             }) {
                 throw ShortcutValidationError.duplicate(
                     ownerDescription: "\(conflict.pluginTitle) · \(conflict.definition.title)"
@@ -5734,7 +6027,7 @@ final class PluginHost: ObservableObject {
             }
 
             if let conflict = AppShortcutAction.allCases.first(where: {
-                resolvedAppShortcutBinding(for: $0) == candidate
+                resolvedAppShortcutBinding(for: $0).map { consumedShortcutBindings(candidate, for: descriptor).contains($0) } ?? false
             }) {
                 throw ShortcutValidationError.duplicate(
                     ownerDescription: conflict.title
@@ -5904,6 +6197,13 @@ final class PluginHost: ObservableObject {
             reservedRegistrations: registrations,
             reservedOwnerDescriptions: ownerDescriptions
         )
+        // Phase-aware listeners own their event taps. Refresh their host-resolved
+        // bindings after dynamic defaults or action assignments change; do not
+        // Carbon-register their active-only shortcuts.
+        for descriptor in descriptors where descriptor.plugin is any PluginShortcutEventHandling {
+            notifyShortcutBindingChange(for: descriptor, binding: legacyResolvedBinding(
+                forPluginID: descriptor.pluginID, shortcutDefinitionID: descriptor.definition.id))
+        }
         actionShortcutItems = shortcutAssignmentService.settingsItems
         shortcutBindingRevision = shortcutAssignmentService.revision
         actionShortcutCatalogItems = buildActionShortcutCatalogItems()
@@ -6242,5 +6542,263 @@ final class PluginHost: ObservableObject {
         case system(PluginPermissionKind)
         case fullDiskAccess
         case extensionManagement
+    }
+}
+
+
+struct MenuBarPanelContentSnapshot {
+    let entries: [MenuBarPanelEntry]
+    let components: [PluginComponentItem]
+    let features: [PluginPanelItem]
+}
+
+extension PluginHost {
+    var visibleMenuBarPanels: [MenuBarPanelDefinition] { menuBarPanels.filter { !$0.isHidden } }
+
+    func panelItems(in panelID: String) -> [PluginPanelItem] {
+        panelContentSnapshot(in: panelID).features
+    }
+
+    func componentItems(in panelID: String) -> [PluginComponentItem] {
+        panelContentSnapshot(in: panelID).components
+    }
+
+    func panelLayoutItems(in panelID: String, surface: PluginDisplaySurface, hidden: Bool = false) -> [PluginSurfaceLayoutItem] {
+        let items = switch (surface, hidden) {
+        case (.dashboard, false): dashboardLayoutItems
+        case (.dashboard, true): dashboardHiddenLayoutItems
+        case (.featurePanel, false): featurePanelLayoutItems
+        case (.featurePanel, true): featurePanelHiddenLayoutItems
+        }
+        let lookup = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        return menuBarPanelStore.configuration.orderedIDs(
+            items.map(\.id), surface: surface, panelID: panelID
+        ).compactMap { lookup[$0] }
+    }
+
+    func panelID(pluginID: String, surface: PluginDisplaySurface) -> String {
+        menuBarPanelStore.configuration.panelID(pluginID: pluginID, surface: surface)
+    }
+
+    func panelEntries(in panelID: String) -> [MenuBarPanelEntry] {
+        panelContentSnapshot(in: panelID).entries
+    }
+
+    func panelContentSnapshot(in panelID: String) -> MenuBarPanelContentSnapshot {
+        if let cached = menuBarPanelContentCache[panelID] { return cached }
+        let entries = self.componentItems.map { MenuBarPanelEntry(pluginID: $0.id, surface: .dashboard) }
+            + self.panelItems.map { MenuBarPanelEntry(pluginID: $0.id, surface: .featurePanel) }
+        let ordered = menuBarPanelStore.configuration.orderedEntries(entries, panelID: panelID)
+        let components = Dictionary(uniqueKeysWithValues: self.componentItems.map { ($0.id, $0) })
+        let features = Dictionary(uniqueKeysWithValues: self.panelItems.map { ($0.id, $0) })
+        var seen: Set<String> = []
+        var componentItems: [PluginComponentItem] = []
+        var panelItems: [PluginPanelItem] = []
+        for entry in ordered where seen.insert(entry.templateID).inserted {
+            switch entry.surface {
+            case .dashboard: if let item = components[entry.pluginID] { componentItems.append(item) }
+            case .featurePanel: if let item = features[entry.pluginID] { panelItems.append(item) }
+            }
+        }
+        let snapshot = MenuBarPanelContentSnapshot(entries: ordered, components: componentItems, features: panelItems)
+        menuBarPanelContentCache[panelID] = snapshot
+        return snapshot
+    }
+
+    func panelLayoutEntries(in panelID: String, hidden: Bool = false) -> [MenuBarPanelLayoutEntry] {
+        let items = (hidden ? dashboardHiddenLayoutItems : dashboardLayoutItems).map {
+            MenuBarPanelLayoutEntry(item: $0, surface: .dashboard)
+        } + (hidden ? featurePanelHiddenLayoutItems : featurePanelLayoutItems).map {
+            MenuBarPanelLayoutEntry(item: $0, surface: .featurePanel)
+        }
+        let lookup = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
+        return menuBarPanelStore.configuration.orderedEntries(items.map(\.entry), panelID: panelID)
+            .compactMap { entry in
+                guard var item = lookup[entry.templateID] else { return nil }
+                item.instanceID = entry.instanceID
+                return item
+            }
+    }
+
+    @discardableResult
+    func addMenuBarPanel() -> String? {
+        guard let id = menuBarPanelStore.addPanel() else { return nil }
+        panelConfigurationDidChange()
+        return id
+    }
+
+    func updateMenuBarPanel(_ panel: MenuBarPanelDefinition) {
+        let previous = menuBarPanelStore.configuration
+        menuBarPanelStore.updatePanel(panel)
+        guard previous != menuBarPanelStore.configuration else { return }
+        panelConfigurationDidChange()
+    }
+
+    @discardableResult
+    func deleteMenuBarPanel(id: String) -> String? {
+        guard menuBarPanels.contains(where: { $0.id == id && !$0.isDefault }) else { return nil }
+        if case let .failure(error) = shortcutAssignmentService.clear(panelActionReference(id: id)) {
+            return error.localizedDescription
+        }
+        menuBarPanelStore.deletePanel(id: id)
+        panelConfigurationDidChange()
+        return nil
+    }
+
+    func moveMenuBarPanel(id: String, toOffset: Int) {
+        menuBarPanelStore.movePanel(id: id, toOffset: toOffset)
+        panelConfigurationDidChange()
+    }
+
+    var lastSelectedMenuBarPanelID: String { menuBarPanelStore.lastSelectedPanelID }
+
+    func rememberMenuBarPanelSelection(id: String) {
+        menuBarPanelStore.rememberSelection(id: id)
+    }
+
+    @discardableResult
+    func restoreDefaultMenuBarPanelLayout() -> String? {
+        let retiredActionIDs = Set(menuBarPanels.filter { !$0.isDefault }.map {
+            panelActionReference(id: $0.id).key.actionID
+        })
+        // Remove all custom-panel shortcuts in one write before changing the layout.
+        if !retiredActionIDs.isEmpty,
+           case let .failure(error) = shortcutAssignmentService.removeRetiredAssignments(
+               providerID: "mactools", actionIDs: retiredActionIDs)
+        {
+            return error.localizedDescription
+        }
+        menuBarPanelStore.replace(MenuBarPanelConfiguration())
+        for surface in PluginDisplaySurface.allCases {
+            pluginDisplayPreferencesStore.resetOrder(for: surface, defaultPluginIDs: defaultPluginIDs(for: surface))
+        }
+        panelConfigurationDidChange(refreshDisplayPreferences: true)
+        return nil
+    }
+
+    func assignPanelEntry(pluginID: String, surface: PluginDisplaySurface, to panelID: String) {
+        guard defaultPluginIDs(for: surface).contains(pluginID),
+              menuBarPanels.contains(where: { $0.id == panelID }),
+              self.panelID(pluginID: pluginID, surface: surface) != panelID else { return }
+        let entries = PluginDisplaySurface.allCases.flatMap { surface in
+            pluginDisplayPreferencesStore.orderedPluginIDs(
+                for: surface, defaultPluginIDs: defaultPluginIDs(for: surface)
+            ).map { MenuBarPanelEntry(pluginID: $0, surface: surface) }
+        }
+        let destination = menuBarPanelStore.configuration.orderedEntries(entries, panelID: panelID)
+        menuBarPanelStore.assign(pluginID: pluginID, surface: surface, to: panelID, destinationOrder: destination)
+        panelConfigurationDidChange()
+    }
+
+    /// Every addition creates an independent display instance, leaving existing entries in place.
+    @discardableResult
+    func addPanelEntry(_ entry: MenuBarPanelEntry, to panelID: String) -> Bool {
+        let available = entry.surface == .dashboard
+            ? availableComponentItems.contains { $0.id == entry.pluginID }
+            : availablePanelItems.contains { $0.id == entry.pluginID }
+        guard available, visibleMenuBarPanels.contains(where: { $0.id == panelID }) else { return false }
+        let wasVisible = entry.surface == .dashboard
+            ? componentItems.contains { $0.id == entry.pluginID }
+            : panelItems.contains { $0.id == entry.pluginID }
+        guard menuBarPanelStore.addInstance(of: entry, to: panelID,
+            visibleOrder: panelEntries(in: panelID), suppressDefault: !wasVisible) != nil else { return false }
+        pluginDisplayPreferencesStore.setPluginVisible(true, pluginID: entry.pluginID, on: entry.surface,
+            defaultPluginIDs: defaultPluginIDs(for: entry.surface))
+        panelConfigurationDidChange(refreshDisplayPreferences: !wasVisible)
+        return true
+    }
+
+    @discardableResult
+    func removePanelEntry(_ entry: MenuBarPanelEntry, from panelID: String) -> Bool {
+        guard panelEntries(in: panelID).contains(entry) else { return false }
+        menuBarPanelStore.removeEntry(entry)
+        panelConfigurationDidChange()
+        return true
+    }
+
+    func movePanelEntry(pluginID: String, surface: PluginDisplaySurface, panelID: String, toOffset: Int, hidden: Bool = false) {
+        movePanelEntry(MenuBarPanelEntry(pluginID: pluginID, surface: surface), panelID: panelID, toOffset: toOffset, hidden: hidden)
+    }
+
+    func movePanelEntry(_ entry: MenuBarPanelEntry, panelID: String, toOffset: Int, hidden: Bool = false) {
+        var entries = hidden ? panelLayoutEntries(in: panelID, hidden: true).map(\.entry) : panelEntries(in: panelID)
+        guard let index = entries.firstIndex(of: entry) else { return }
+        entries.move(fromOffsets: IndexSet(integer: index), toOffset: min(max(toOffset, 0), entries.count))
+        let baseline = PluginDisplaySurface.allCases.flatMap { surface in
+            pluginDisplayPreferencesStore.orderedPluginIDs(for: surface, defaultPluginIDs: defaultPluginIDs(for: surface))
+                .map { MenuBarPanelEntry(pluginID: $0, surface: surface) }
+        }
+        menuBarPanelStore.setOrder(entries, panelID: panelID, preserving:
+            menuBarPanelStore.configuration.orderedEntries(baseline, panelID: panelID))
+        panelConfigurationDidChange()
+    }
+
+    /// Persist assignment and insertion order together, so observers never see an intermediate layout.
+    func transferPanelEntry(_ entry: MenuBarPanelEntry, from source: String, to destination: String,
+                            at offset: Int) -> MenuBarPanelLayoutChange? {
+        guard source != destination, panelEntries(in: source).contains(entry),
+              visibleMenuBarPanels.contains(where: { $0.id == destination }) else { return nil }
+        var visible = panelEntries(in: destination)
+        guard !visible.contains(entry) else { return nil }
+        visible.insert(entry, at: min(max(offset, 0), visible.count))
+        let baseline = PluginDisplaySurface.allCases.flatMap { surface in
+            pluginDisplayPreferencesStore.orderedPluginIDs(for: surface, defaultPluginIDs: defaultPluginIDs(for: surface))
+                .map { MenuBarPanelEntry(pluginID: $0, surface: surface) }
+        }
+        let before = menuBarPanelStore.configuration
+        menuBarPanelStore.assign(entry, to: destination,
+            destinationOrder: before.orderedEntries(baseline, panelID: destination), visibleOrder: visible)
+        let change = MenuBarPanelLayoutChange(before: before, after: menuBarPanelStore.configuration)
+        guard change.before != change.after else { return nil }
+        panelConfigurationDidChange()
+        return change
+    }
+
+    func canUndoPanelLayoutChange(_ change: MenuBarPanelLayoutChange) -> Bool {
+        menuBarPanelStore.configuration == change.after
+    }
+
+    @discardableResult
+    func undoPanelLayoutChange(_ change: MenuBarPanelLayoutChange) -> Bool {
+        guard canUndoPanelLayoutChange(change) else { return false }
+        menuBarPanelStore.replace(change.before)
+        panelConfigurationDidChange()
+        return true
+    }
+
+    func setVisibleMenuBarPanel(_ panelID: String?) {
+        visibleMenuBarPanelID = panelID
+        visiblePanelSurfaces = panelID == nil ? [] : Set(PluginPanelSurface.allCases)
+        syncVisiblePanelSurfaces()
+    }
+
+    func panelActionReference(id: String) -> ActionReference {
+        let actionID: String
+        switch id {
+        case MenuBarPanelDefinition.componentsID: actionID = AppShortcutAction.toggleDashboard.rawValue
+        case MenuBarPanelDefinition.featuresID: actionID = AppShortcutAction.toggleFeaturePanel.rawValue
+        default: actionID = "app.toggle-panel.\(id)"
+        }
+        return ActionReference(key: ActionKey(providerID: "mactools", actionID: actionID))
+    }
+
+    private func panelConfigurationDidChange(refreshDisplayPreferences: Bool = false) {
+        let panels = menuBarPanelStore.configuration.displayPanels
+        if panels != menuBarPanels || refreshDisplayPreferences {
+            menuBarPanels = panels
+            if let visibleID = visibleMenuBarPanelID,
+               !panels.contains(where: { $0.id == visibleID && !$0.isHidden }) {
+                visibleMenuBarPanelID = panels.first(where: { !$0.isHidden })?.id
+            }
+            rebuildDerivedState(dirtyPluginIDs: [])
+            syncGlobalShortcuts()
+        } else {
+            // Moving/removing an instance changes presentation, not permissions,
+            // action registrations, plugin settings, or background activation.
+            objectWillChange.send()
+            menuBarPanelContentCache.removeAll(keepingCapacity: true)
+            syncVisiblePanelSurfaces()
+            menuBarPanelContentDidChange.send()
+        }
     }
 }

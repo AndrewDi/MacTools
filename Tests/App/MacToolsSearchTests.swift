@@ -75,7 +75,7 @@ final class MacToolsSearchTests: XCTestCase {
             $0.kind == .command && $0.title == "让显示器休眠"
         })
         XCTAssertTrue(index.items.contains {
-            $0.kind == .command && $0.title == AppShortcutAction.toggleDashboard.title
+            $0.kind == .command && $0.title == host.menuBarPanels[0].title
         })
         XCTAssertFalse(index.items.contains {
             $0.kind == .command && $0.title == AppShortcutAction.openCommandPalette.title
@@ -147,7 +147,7 @@ final class MacToolsSearchTests: XCTestCase {
         host.appPresentationHandler = { requests.append($0) }
         let result = try XCTUnwrap(
             MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
-                $0.title == AppShortcutAction.toggleDashboard.title
+                $0.title == host.menuBarPanels[0].title
             }
         )
         guard case let .executeAction(reference) = result.action else {
@@ -167,7 +167,7 @@ final class MacToolsSearchTests: XCTestCase {
             pluginHost: makePluginHostForTests(plugins: [])
         )
 
-        for action in [AppShortcutAction.openSettings, .openCommandPalette] {
+        for action in AppShortcutAction.allCases {
             XCTAssertFalse(
                 index.results(matching: action.title).contains {
                     $0.id == "general-setting.appShortcuts"
@@ -284,6 +284,44 @@ final class MacToolsSearchTests: XCTestCase {
             }
             return definition.action == hideAction
         })
+    }
+
+    func testModelQueryBindingKeepsCanonicalQueryAndResultsInSync() {
+        let suiteName = "MacToolsSearchQueryBindingTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let model = UnifiedSearchPaletteModel(
+            commandContext: AppHostCommandContext(
+                pluginHost: makePluginHostForTests(plugins: [SearchableTestPlugin()]),
+                launchAtLoginController: LaunchAtLoginController(
+                    service: SearchTestLaunchAtLoginService()
+                ),
+                appearanceUserDefaults: defaults
+            ),
+            recentStore: CommandPaletteRecentStore(userDefaults: defaults)
+        )
+        var transitions: [(String, String)] = []
+        let binding = model.queryBinding { oldQuery, newQuery in
+            transitions.append((oldQuery, newQuery))
+        }
+
+        binding.wrappedValue = "快捷键目标"
+
+        XCTAssertEqual(model.query, "快捷键目标")
+        XCTAssertEqual(model.sections.map(\.kind), [.results])
+        XCTAssertEqual(model.results.map(\.title), ["快捷键目标"])
+        XCTAssertEqual(transitions.count, 1)
+        XCTAssertEqual(transitions.first?.0, "")
+        XCTAssertEqual(transitions.first?.1, "快捷键目标")
+
+        binding.wrappedValue = "快捷键目标"
+        XCTAssertEqual(transitions.count, 1)
+
+        binding.wrappedValue = ""
+        XCTAssertEqual(model.query, "")
+        XCTAssertFalse(model.sections.contains { $0.kind == .results })
+        XCTAssertEqual(transitions.count, 2)
     }
 
     func testModelAutomaticallyRebuildsAfterLaunchAtLoginChanges() async {
@@ -505,27 +543,15 @@ final class MacToolsSearchTests: XCTestCase {
         )
     }
 
-    func testSurfaceOnlyPluginNavigatesToAndRevealsItsFeaturePanelRow() throws {
+    func testPanelOnlyPluginWithoutSettingsOrMarketplaceDoesNotCreateNavigationResult() {
         let plugin = SurfaceOnlySearchTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
-        let result = try XCTUnwrap(
-            MacToolsSearchIndexBuilder.build(pluginHost: host).items.first {
-                $0.title == plugin.metadata.title
-            }
-        )
-
-        XCTAssertEqual(
-            result.action,
-            .navigate(
-                destination: .plugins(.featurePanelLayout),
-                target: .surface(
-                    SurfaceSettingsSearchTarget(
-                        surface: .featurePanel,
-                        pluginID: plugin.metadata.id
-                    )
-                )
-            )
-        )
+        XCTAssertTrue(host.pluginSettingsItems.isEmpty)
+        XCTAssertTrue(host.pluginManagementItems.isEmpty)
+        let index = MacToolsSearchIndexBuilder.build(pluginHost: host)
+        XCTAssertFalse(index.items.contains {
+            $0.kind == .navigation && $0.title == plugin.metadata.title
+        }, "A runtime-only plugin must not create a link to a removed or unavailable settings page")
     }
 
     func testSearchUsesTitleDescriptionAndKeywordsWithAllTokenMatching() {
@@ -553,8 +579,6 @@ final class MacToolsSearchTests: XCTestCase {
         XCTAssertEqual(
             results.map(\.id),
             [
-                "navigation.dashboard",
-                "navigation.feature-panel",
                 "navigation.actions-and-shortcuts",
                 "navigation.automation",
                 "navigation.marketplace",

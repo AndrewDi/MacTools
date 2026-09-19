@@ -9,8 +9,10 @@ final class WindowLayoutsStore {
         static let cyclesHalves = "cycles-halves"
         static let respectsStageManager = "respects-stage-manager"
         static let showsCommandFeedback = "shows-command-feedback"
+        static let centeredGuidesEnabled = "centered-guides.enabled"
         static let modifierDragEnabled = "modifier-drag.enabled"
         static let modifierDragModifiers = "modifier-drag.modifiers"
+        static let modifierDragShowsIndicator = "modifier-drag.shows-indicator"
         static let shortcutPreset = "shortcut-preset"
         static let library = "library.v1"
         static let quarantinedLibrary = "library.v1.quarantined"
@@ -34,8 +36,10 @@ final class WindowLayoutsStore {
     private(set) var cyclesHalves: Bool
     private(set) var respectsStageManager: Bool
     private(set) var showsCommandFeedback: Bool
+    private(set) var centeredGuidesEnabled: Bool
     private(set) var modifierDragEnabled: Bool
     private(set) var modifierDragModifiers: ShortcutModifiers
+    private(set) var modifierDragShowsIndicator: Bool
     private(set) var shortcutPreset: WindowShortcutPreset
     private(set) var customCommands: [WindowCustomCommand] = []
     private(set) var revision: UInt64 = 0
@@ -50,7 +54,9 @@ final class WindowLayoutsStore {
         self.cyclesHalves = (storage.object(forKey: StorageKey.cyclesHalves) as? NSNumber)?.boolValue ?? false
         self.respectsStageManager = (storage.object(forKey: StorageKey.respectsStageManager) as? NSNumber)?.boolValue ?? true
         self.showsCommandFeedback = (storage.object(forKey: StorageKey.showsCommandFeedback) as? NSNumber)?.boolValue ?? false
+        self.centeredGuidesEnabled = (storage.object(forKey: StorageKey.centeredGuidesEnabled) as? NSNumber)?.boolValue ?? false
         self.modifierDragEnabled = (storage.object(forKey: StorageKey.modifierDragEnabled) as? NSNumber)?.boolValue ?? false
+        self.modifierDragShowsIndicator = (storage.object(forKey: StorageKey.modifierDragShowsIndicator) as? NSNumber)?.boolValue ?? true
         let storedModifierRawValue = (storage.object(forKey: StorageKey.modifierDragModifiers) as? NSNumber)?.uint8Value
         let storedModifiers = storedModifierRawValue.map(ShortcutModifiers.init(rawValue:))
         if let storedModifiers,
@@ -95,6 +101,12 @@ final class WindowLayoutsStore {
         recordMutation()
     }
 
+    func setCenteredGuidesEnabled(_ enabled: Bool) {
+        centeredGuidesEnabled = enabled
+        storage.set(enabled, forKey: StorageKey.centeredGuidesEnabled)
+        recordMutation()
+    }
+
     func setModifierDragEnabled(_ enabled: Bool) {
         modifierDragEnabled = enabled
         storage.set(enabled, forKey: StorageKey.modifierDragEnabled)
@@ -105,6 +117,12 @@ final class WindowLayoutsStore {
         guard !modifiers.isEmpty, modifiers.containsOnlySupportedValues else { return }
         modifierDragModifiers = modifiers
         storage.set(modifiers.rawValue, forKey: StorageKey.modifierDragModifiers)
+        recordMutation()
+    }
+
+    func setModifierDragShowsIndicator(_ enabled: Bool) {
+        modifierDragShowsIndicator = enabled
+        storage.set(enabled, forKey: StorageKey.modifierDragShowsIndicator)
         recordMutation()
     }
 
@@ -119,14 +137,18 @@ final class WindowLayoutsStore {
         cyclesHalves = false
         respectsStageManager = true
         showsCommandFeedback = false
+        centeredGuidesEnabled = false
+        storage.removeObject(forKey: StorageKey.centeredGuidesEnabled)
         modifierDragEnabled = false
         modifierDragModifiers = Self.defaultModifierDragModifiers
+        modifierDragShowsIndicator = true
         storage.removeObject(forKey: StorageKey.gap)
         storage.removeObject(forKey: StorageKey.cyclesHalves)
         storage.removeObject(forKey: StorageKey.respectsStageManager)
         storage.removeObject(forKey: StorageKey.showsCommandFeedback)
         storage.removeObject(forKey: StorageKey.modifierDragEnabled)
         storage.removeObject(forKey: StorageKey.modifierDragModifiers)
+        storage.removeObject(forKey: StorageKey.modifierDragShowsIndicator)
         recordMutation()
     }
 

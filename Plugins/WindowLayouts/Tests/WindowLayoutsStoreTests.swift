@@ -4,6 +4,16 @@ import MacToolsPluginKit
 
 @MainActor
 final class WindowLayoutsStoreTests: XCTestCase {
+    func testCenteredGuidesAreOptInPersistAndReset() {
+        let storage = StoreMemoryStorage()
+        let store = WindowLayoutsStore(storage: storage)
+        XCTAssertFalse(store.centeredGuidesEnabled)
+        store.setCenteredGuidesEnabled(true)
+        XCTAssertTrue(WindowLayoutsStore(storage: storage).centeredGuidesEnabled)
+        store.reset()
+        XCTAssertFalse(WindowLayoutsStore(storage: storage).centeredGuidesEnabled)
+    }
+
     func testPersistsCustomCommandsWithStableActionIDs() throws {
         let storage = StoreMemoryStorage()
         let store = WindowLayoutsStore(storage: storage)
@@ -25,6 +35,18 @@ final class WindowLayoutsStoreTests: XCTestCase {
 
         store.reset()
         XCTAssertFalse(WindowLayoutsStore(storage: storage).showsCommandFeedback)
+    }
+
+    func testPersistsAndResetsModifierDragShowsIndicatorPreference() {
+        let storage = StoreMemoryStorage()
+        let store = WindowLayoutsStore(storage: storage)
+
+        XCTAssertTrue(store.modifierDragShowsIndicator)
+        store.setModifierDragShowsIndicator(false)
+        XCTAssertFalse(WindowLayoutsStore(storage: storage).modifierDragShowsIndicator)
+
+        store.reset()
+        XCTAssertTrue(WindowLayoutsStore(storage: storage).modifierDragShowsIndicator)
     }
 
     func testPersistsAndResetsModifierDragConfiguration() {

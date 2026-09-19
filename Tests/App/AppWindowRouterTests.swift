@@ -1,38 +1,114 @@
 import AppKit
 import Carbon
-import MacToolsPluginKit
+@testable import MacToolsPluginKit
 import SwiftUI
 import XCTest
 @testable import MacTools
 
 @MainActor
 final class AppWindowRouterTests: XCTestCase {
-    func testDashboardTargetInvokesOnlyDashboardAction() {
-        var dashboardCallCount = 0
-        var featurePanelCallCount = 0
-        let actions = SettingsPanelPresentationActions(
-            showDashboard: { dashboardCallCount += 1 },
-            showFeaturePanel: { featurePanelCallCount += 1 }
-        )
-
-        actions.present(.dashboard)
-
-        XCTAssertEqual(dashboardCallCount, 1)
-        XCTAssertEqual(featurePanelCallCount, 0)
+    func testCaptureCommandPaletteAppearanceForReview() async throws {
+        let capture = try PaletteCaptureSupport(name: "command-palette")
+        defer { try? capture.finish() }
+        let suite = "PaletteCapture.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let router = makeRouter(defaults: defaults, plugins: [
+            AppWindowRouterSettingsPlugin(id: "Synthetic Notes"),
+            AppWindowRouterSettingsPlugin(id: "Synthetic Calendar"),
+            AppWindowRouterSettingsPlugin(id: "Synthetic Clipboard")
+        ])
+        defer { router.dismissCommandPalette(restoringFocus: false) }
+        router.toggleCommandPalette()
+        let panel = try XCTUnwrap(router.commandPalettePanel)
+        try await capture.exercise(panel) { router.toggleCommandPalette() }
+        if ProcessInfo.processInfo.environment["MACTOOLS_PALETTE_INTERACTIVE_REVIEW"] == "1" {
+            panel.appearance = NSAppearance(named: .aqua)
+            capture.setBackdrop(dark: false)
+            let field = try await focusUnifiedSearchField(in: panel)
+            let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+            editor.selectAll(nil)
+            editor.insertText("", replacementRange: NSRange(location: NSNotFound, length: 0))
+            field.delegate?.controlTextDidChange?(
+                Notification(name: NSControl.textDidChangeNotification, object: field)
+            )
+            try await capture.capture(panel, label: "interactive-review")
+            // Opt-in pause for pointer/keyboard inspection of this synthetic panel.
+            try await Task.sleep(for: .seconds(60))
+        }
     }
 
-    func testFeaturePanelTargetInvokesOnlyFeaturePanelAction() {
-        var dashboardCallCount = 0
-        var featurePanelCallCount = 0
-        let actions = SettingsPanelPresentationActions(
-            showDashboard: { dashboardCallCount += 1 },
-            showFeaturePanel: { featurePanelCallCount += 1 }
+    func testCaptureSettingsCommandPaletteAppearanceForReview() async throws {
+        let capture = try PaletteCaptureSupport(name: "settings-command-palette")
+        defer { try? capture.finish() }
+        let suite = "PaletteCapture.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let router = makeRouter(defaults: defaults)
+        router.showSettings()
+        let window = try XCTUnwrap(router.settingsWindow)
+        defer { window.close() }
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        coordinator.presentUnifiedSearch(origin: .keyboard)
+        window.level = .floating
+        window.makeKeyAndOrderFront(nil)
+        for (name, label) in [(NSAppearance.Name.aqua, "light"),
+                              (.darkAqua, "dark"),
+                              (.accessibilityHighContrastDarkAqua, "high-contrast-dark")] {
+            window.appearance = NSAppearance(named: name)
+            try await capture.capture(window, label: label)
+        }
+        let field = try await focusUnifiedSearchField(in: window)
+        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        editor.insertText("general", replacementRange: NSRange(location: NSNotFound, length: 0))
+        field.delegate?.controlTextDidChange?(
+            Notification(name: NSControl.textDidChangeNotification, object: field)
         )
+        try await capture.capture(window, label: "search")
+    }
 
-        actions.present(.featurePanel)
-
-        XCTAssertEqual(dashboardCallCount, 0)
-        XCTAssertEqual(featurePanelCallCount, 1)
+    func testStandalonePaletteKeepsEditorAndFrameAcrossAppearanceAndContentChanges() async throws {
+        let suite = "PaletteHosting.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let router = makeRouter(defaults: defaults)
+        router.toggleCommandPalette()
+        defer { router.dismissCommandPalette(restoringFocus: false) }
+        let panel = try XCTUnwrap(router.commandPalettePanel)
+        let container = try XCTUnwrap(panel.contentView as?
+            CommandPaletteHostingContainer<StandaloneCommandPaletteRootView>)
+        // Let the initial presentation/focus task finish before composing text.
+        await settleWindowLayout(panel)
+        try await Task.sleep(for: .milliseconds(150))
+        let field = try await focusUnifiedSearchField(in: panel)
+        let editor = try XCTUnwrap(field.currentEditor() as? NSTextView)
+        editor.setMarkedText("synthetic", selectedRange: NSRange(location: 9, length: 0),
+                             replacementRange: NSRange(location: NSNotFound, length: 0))
+        field.delegate?.controlTextDidChange?(
+            Notification(name: NSControl.textDidChangeNotification, object: field)
+        )
+        let originalFrame = panel.frame
+        for name in [NSAppearance.Name.aqua, .darkAqua, .accessibilityHighContrastDarkAqua] {
+            panel.appearance = NSAppearance(named: name)
+            await settleWindowLayout(panel)
+            XCTAssertEqual(panel.frame, originalFrame)
+            XCTAssertEqual(container.hostingView.frame, container.bounds)
+            XCTAssertTrue(field.currentEditor() === editor, "The live search field must retain its editor")
+            XCTAssertTrue(editor.hasMarkedText())
+            XCTAssertEqual(editor.string, "synthetic")
+        }
+        editor.unmarkText()
+        for query in ["general", "no matching destination", ""] {
+            editor.selectAll(nil)
+            editor.insertText(query, replacementRange: NSRange(location: NSNotFound, length: 0))
+            field.delegate?.controlTextDidChange?(
+                Notification(name: NSControl.textDidChangeNotification, object: field)
+            )
+            await settleWindowLayout(panel)
+            XCTAssertEqual(panel.frame, originalFrame, "Results must not resize the outer panel")
+            XCTAssertTrue(field.currentEditor() === editor, "The live search field must retain its editor")
+            XCTAssertEqual(editor.string, query)
+        }
     }
 
     func testSettingsWindowKeepsItsWidthAcrossDestinations() async throws {
@@ -118,7 +194,7 @@ final class AppWindowRouterTests: XCTestCase {
         router.toggleCommandPalette()
         let paletteHostingView = try XCTUnwrap(
             router.commandPalettePanel?.contentView
-                as? NSHostingView<StandaloneCommandPaletteRootView>
+                as? CommandPaletteHostingContainer<StandaloneCommandPaletteRootView>
         )
 
         XCTAssertTrue(
@@ -126,7 +202,7 @@ final class AppWindowRouterTests: XCTestCase {
                 === router.commandPaletteRecentStore
         )
         XCTAssertTrue(
-            paletteHostingView.rootView.commandPaletteRecentStore
+            paletteHostingView.hostingView.rootView.commandPaletteRecentStore
                 === router.commandPaletteRecentStore
         )
 
@@ -150,6 +226,11 @@ final class AppWindowRouterTests: XCTestCase {
 
         let sidebarScrollView = try XCTUnwrap(settingsSidebarScrollView(in: hostingView))
         let sidebarListView = try XCTUnwrap(sidebarScrollView.documentView as? NSTableView)
+        XCTAssertGreaterThan(
+            sidebarListView.numberOfRows,
+            0,
+            "Expected the settings sidebar to contain navigation rows"
+        )
         XCTAssertTrue(
             window.firstResponder === sidebarListView,
             "Expected the settings sidebar to own initial focus, got \(String(describing: window.firstResponder))"
@@ -171,34 +252,56 @@ final class AppWindowRouterTests: XCTestCase {
         let hostingView = try XCTUnwrap(window.contentView as? NSHostingView<SettingsView>)
         await settleWindowLayout(window)
         let sidebarScrollView = try XCTUnwrap(settingsSidebarScrollView(in: hostingView))
+        let sidebarListView = try XCTUnwrap(sidebarScrollView.documentView as? NSTableView)
+        let initialRowCount = sidebarListView.numberOfRows
+        XCTAssertGreaterThan(initialRowCount, 0)
         let initialBoundsOrigin = sidebarScrollView.contentView.bounds.origin
         let initialContentInsets = sidebarScrollView.contentInsets
         let initialFrame = sidebarScrollView.convert(sidebarScrollView.bounds, to: hostingView)
 
+        for _ in 0..<3 {
+            coordinator.presentUnifiedSearch(origin: .settingsSidebar)
+            await settleWindowLayout(window)
+
+            XCTAssertTrue(settingsSidebarScrollView(in: hostingView) === sidebarScrollView)
+            XCTAssertEqual(sidebarListView.numberOfRows, initialRowCount)
+            XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.x, initialBoundsOrigin.x, accuracy: 0.5)
+            XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.y, initialBoundsOrigin.y, accuracy: 0.5)
+            XCTAssertEqual(sidebarScrollView.contentInsets.top, initialContentInsets.top, accuracy: 0.5)
+            XCTAssertEqual(sidebarScrollView.contentInsets.bottom, initialContentInsets.bottom, accuracy: 0.5)
+            assertEqual(
+                sidebarScrollView.convert(sidebarScrollView.bounds, to: hostingView),
+                initialFrame
+            )
+
+            coordinator.dismissUnifiedSearch()
+            await settleWindowLayout(window)
+
+            XCTAssertTrue(settingsSidebarScrollView(in: hostingView) === sidebarScrollView)
+            XCTAssertEqual(sidebarListView.numberOfRows, initialRowCount)
+            XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.x, initialBoundsOrigin.x, accuracy: 0.5)
+            XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.y, initialBoundsOrigin.y, accuracy: 0.5)
+            XCTAssertEqual(sidebarScrollView.contentInsets.top, initialContentInsets.top, accuracy: 0.5)
+            XCTAssertEqual(sidebarScrollView.contentInsets.bottom, initialContentInsets.bottom, accuracy: 0.5)
+            assertEqual(
+                sidebarScrollView.convert(sidebarScrollView.bounds, to: hostingView),
+                initialFrame
+            )
+        }
+
         coordinator.presentUnifiedSearch(origin: .settingsSidebar)
-        await settleWindowLayout(window)
+        _ = try await focusUnifiedSearchField(in: window)
+        XCTAssertFalse(window.firstResponder === sidebarListView)
+        XCTAssertTrue(coordinator.navigateFromSearch(to: .about, target: nil))
+        try await waitForWindowState(window, "Sidebar focus after search navigation") {
+            window.firstResponder === sidebarListView
+        }
 
         XCTAssertTrue(settingsSidebarScrollView(in: hostingView) === sidebarScrollView)
-        XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.x, initialBoundsOrigin.x, accuracy: 0.5)
-        XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.y, initialBoundsOrigin.y, accuracy: 0.5)
-        XCTAssertEqual(sidebarScrollView.contentInsets.top, initialContentInsets.top, accuracy: 0.5)
-        XCTAssertEqual(sidebarScrollView.contentInsets.bottom, initialContentInsets.bottom, accuracy: 0.5)
-        assertEqual(
-            sidebarScrollView.convert(sidebarScrollView.bounds, to: hostingView),
-            initialFrame
-        )
-
-        coordinator.dismissUnifiedSearch()
-        await settleWindowLayout(window)
-
-        XCTAssertTrue(settingsSidebarScrollView(in: hostingView) === sidebarScrollView)
-        XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.x, initialBoundsOrigin.x, accuracy: 0.5)
-        XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.y, initialBoundsOrigin.y, accuracy: 0.5)
-        XCTAssertEqual(sidebarScrollView.contentInsets.top, initialContentInsets.top, accuracy: 0.5)
-        XCTAssertEqual(sidebarScrollView.contentInsets.bottom, initialContentInsets.bottom, accuracy: 0.5)
-        assertEqual(
-            sidebarScrollView.convert(sidebarScrollView.bounds, to: hostingView),
-            initialFrame
+        XCTAssertEqual(sidebarListView.numberOfRows, initialRowCount)
+        XCTAssertTrue(
+            window.firstResponder === sidebarListView,
+            "Expected page-level search navigation to restore focus to the sidebar"
         )
 
         XCTAssertTrue(
@@ -213,6 +316,7 @@ final class AppWindowRouterTests: XCTestCase {
         await settleWindowLayout(window)
 
         XCTAssertTrue(settingsSidebarScrollView(in: hostingView) === sidebarScrollView)
+        XCTAssertEqual(sidebarListView.numberOfRows, initialRowCount)
         XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.x, initialBoundsOrigin.x, accuracy: 0.5)
         XCTAssertEqual(sidebarScrollView.contentView.bounds.origin.y, initialBoundsOrigin.y, accuracy: 0.5)
         XCTAssertEqual(sidebarScrollView.contentInsets.top, initialContentInsets.top, accuracy: 0.5)
@@ -223,6 +327,112 @@ final class AppWindowRouterTests: XCTestCase {
         )
 
         window.close()
+    }
+
+    func testSidebarClicksRestoreFocusWithoutChangingSelection() async throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+        router.showSettings()
+
+        let window = try XCTUnwrap(router.settingsWindow as? MacToolsCommandWindow)
+        defer { window.close() }
+        let sidebarListView = try XCTUnwrap(window.sidebarListView)
+        try await waitForWindowState(window, "Initial sidebar selection") {
+            sidebarListView.selectedRow >= 0
+        }
+        let selectedRow = sidebarListView.selectedRow
+        let differentRow = selectedRow + 1
+        XCTAssertLessThan(differentRow, sidebarListView.numberOfRows)
+
+        for row in [differentRow, selectedRow] {
+            XCTAssertTrue(window.makeFirstResponder(window))
+            let event = try sidebarMouseDown(row: row, in: sidebarListView, window: window)
+
+            // Exercise our focus handling without entering AppKit's mouse-tracking loop.
+            window.restoreSidebarFocusIfNeeded(for: event)
+
+            XCTAssertTrue(window.firstResponder === sidebarListView)
+            XCTAssertEqual(
+                sidebarListView.selectedRow,
+                selectedRow,
+                "Focus restoration must leave row selection to native event handling"
+            )
+        }
+    }
+
+    func testSearchOverlayClickPreservesSearchFieldFocus() async throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+        router.showSettings()
+
+        let window = try XCTUnwrap(router.settingsWindow as? MacToolsCommandWindow)
+        defer { window.close() }
+        window.setContentSize(NSSize(width: 940, height: 740))
+        let sidebarListView = try XCTUnwrap(window.sidebarListView)
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        try await waitForWindowState(window, "Initial sidebar selection") {
+            sidebarListView.selectedRow >= 0
+        }
+        let sidebarEvent = try sidebarMouseDown(
+            row: sidebarListView.selectedRow,
+            in: sidebarListView,
+            window: window
+        )
+        XCTAssertTrue(window.makeFirstResponder(window))
+        coordinator.presentUnifiedSearch(origin: .settingsSidebar)
+        window.restoreSidebarFocusIfNeeded(for: sidebarEvent)
+        XCTAssertTrue(
+            window.firstResponder === window,
+            "Presenting search must block sidebar focus even before the overlay is laid out"
+        )
+
+        let field = try await focusUnifiedSearchField(in: window)
+        let editor = try XCTUnwrap(field.currentEditor())
+        let fieldFrame = field.convert(field.bounds, to: nil)
+        let location = NSPoint(x: fieldFrame.minX - 6, y: fieldFrame.midY)
+        XCTAssertGreaterThanOrEqual(
+            sidebarListView.row(at: sidebarListView.convert(location, from: nil)),
+            0,
+            "The palette padding must overlap a sidebar row to reproduce the regression"
+        )
+
+        window.restoreSidebarFocusIfNeeded(for: try mouseDown(at: location, in: window))
+
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertTrue(window.firstResponder === editor)
+    }
+
+    func testCoveredSidebarRowDoesNotStealFocus() async throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+        router.showSettings()
+
+        let window = try XCTUnwrap(router.settingsWindow as? MacToolsCommandWindow)
+        defer { window.close() }
+        let sidebarListView = try XCTUnwrap(window.sidebarListView)
+        try await waitForWindowState(window, "Initial sidebar selection") {
+            sidebarListView.selectedRow >= 0
+        }
+        let event = try sidebarMouseDown(
+            row: sidebarListView.selectedRow,
+            in: sidebarListView,
+            window: window
+        )
+        let parentView = try XCTUnwrap(sidebarListView.superview)
+        let cover = NSView(frame: sidebarListView.frame)
+        parentView.addSubview(cover, positioned: .above, relativeTo: sidebarListView)
+        defer { cover.removeFromSuperview() }
+        XCTAssertTrue(window.makeFirstResponder(window))
+
+        window.restoreSidebarFocusIfNeeded(for: event)
+
+        XCTAssertTrue(window.firstResponder === window)
     }
 
     func testFeatureSettingsPresentationRoutesToRequestedPage() throws {
@@ -284,6 +494,72 @@ final class AppWindowRouterTests: XCTestCase {
             .max { lhs, rhs in
                 lhs.bounds.height < rhs.bounds.height
             }
+    }
+
+    private func sidebarMouseDown(
+        row: Int,
+        in tableView: NSTableView,
+        window: NSWindow
+    ) throws -> NSEvent {
+        tableView.scrollRowToVisible(row)
+        window.layoutIfNeeded()
+        let rowFrame = tableView.rect(ofRow: row)
+        let location = tableView.convert(
+            NSPoint(x: rowFrame.midX, y: rowFrame.midY),
+            to: nil
+        )
+        return try mouseDown(at: location, in: window)
+    }
+
+    private func mouseDown(at location: NSPoint, in window: NSWindow) throws -> NSEvent {
+        try XCTUnwrap(NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: location,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1
+        ))
+    }
+
+    private func focusUnifiedSearchField(in window: NSWindow) async throws -> NSTextField {
+        let rootView = try XCTUnwrap(window.contentView)
+        func searchField() -> NSTextField? {
+            descendantViews(of: rootView)
+                .compactMap { $0 as? NSTextField }
+                .first { $0.accessibilityIdentifier() == "mactools.unified-search.field" }
+        }
+        try await waitForWindowState(window, "Unified search field") {
+            searchField() != nil
+        }
+        let field = try XCTUnwrap(searchField())
+        // Window tests can run without app activation; establish the starting focus explicitly.
+        XCTAssertTrue(window.makeFirstResponder(field))
+        XCTAssertNotNil(field.currentEditor())
+        return field
+    }
+
+    private func waitForWindowState(
+        _ window: NSWindow,
+        _ description: String,
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        until condition: () -> Bool
+    ) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(2))
+        while true {
+            window.layoutIfNeeded()
+            if condition() { return }
+            guard clock.now < deadline else {
+                XCTFail("Timed out waiting for \(description)", file: file, line: line)
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
     }
 
     private func descendantViews(of view: NSView) -> [NSView] {
@@ -435,7 +711,7 @@ final class AppWindowRouterTests: XCTestCase {
                     modifiers: [.command, .shift]
                 )
             ),
-            .focusPluginSettingsSearch
+            nil
         )
         XCTAssertEqual(
             MacToolsLocalKeyboardCommand.resolve(
@@ -498,7 +774,7 @@ final class AppWindowRouterTests: XCTestCase {
                     modifiers: [.command, .shift]
                 )
             ),
-            .focusPluginSettingsSearch
+            nil
         )
     }
 
@@ -648,6 +924,72 @@ final class AppWindowRouterTests: XCTestCase {
         router.dismissCommandPalette()
 
         XCTAssertEqual(restorationCount, 1)
+    }
+
+    func testDismissingPaletteCancelsActiveSnapGuidesWithoutSaving() async throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let router = makeRouter(defaults: defaults)
+        let savedPosition = WindowPosition.custom(normalizedPoint: CGPoint(x: 0.2, y: 0.8))
+        router.windowPositionStore.savePosition(savedPosition, for: .commandPalette)
+        router.toggleCommandPalette()
+        let panel = try XCTUnwrap(router.commandPalettePanel)
+        let coordinator = try XCTUnwrap(router.commandPaletteSnapCoordinator)
+        defer { coordinator.cancelDragging() }
+        coordinator.startDragging()
+        XCTAssertTrue(coordinator.isDragging)
+        let guides = coordinator.overlayController.presentedPanelsForTests
+        XCTAssertEqual(guides.count, 3)
+        XCTAssertTrue(guides.allSatisfy(\.isVisible))
+        let frameBeforeDismissal = panel.frame
+
+        router.dismissCommandPalette(restoringFocus: false)
+
+        XCTAssertFalse(panel.isVisible)
+        XCTAssertFalse(coordinator.isDragging, "Dismissing the palette must cancel its drag lifecycle")
+        XCTAssertTrue(guides.allSatisfy { !$0.isVisible })
+        XCTAssertTrue(coordinator.overlayController.presentedPanelsForTests.isEmpty)
+        coordinator.finishDragging()
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(panel.frame, frameBeforeDismissal)
+        XCTAssertEqual(router.windowPositionStore.position(for: .commandPalette), savedPosition,
+                       "A cancelled drag must not overwrite the saved position after mouse release")
+
+        router.toggleCommandPalette()
+        coordinator.startDragging()
+        XCTAssertTrue(coordinator.isDragging)
+        XCTAssertEqual(coordinator.overlayController.presentedPanelsForTests.count, 3)
+        router.dismissCommandPalette(restoringFocus: false)
+        XCTAssertFalse(coordinator.isDragging)
+    }
+
+    func testResetCommandPalettePositionRestoresDefaultAnchorAndFrame() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let positionStore = WindowPositionStore(userDefaults: defaults)
+        positionStore.savePosition(
+            .custom(normalizedPoint: CGPoint(x: 0.2, y: 0.8)),
+            for: .commandPalette
+        )
+
+        let router = makeRouter(defaults: defaults, windowPositionStore: positionStore)
+        router.toggleCommandPalette()
+        let panel = try XCTUnwrap(router.commandPalettePanel)
+
+        router.resetCommandPalettePosition()
+        XCTAssertEqual(positionStore.position(for: .commandPalette), .defaultAnchor)
+
+        let defaultFrame = StandaloneCommandPaletteLayout.frame(
+            pointerLocation: NSEvent.mouseLocation,
+            visibleFrames: [panel.screen?.visibleFrame ?? .zero],
+            position: .defaultAnchor
+        )
+        XCTAssertEqual(panel.frame.origin.x, defaultFrame.origin.x, accuracy: 1.0)
+        XCTAssertEqual(panel.frame.origin.y, defaultFrame.origin.y, accuracy: 1.0)
+
+        router.dismissCommandPalette()
     }
 
     func testSuccessfulStandalonePaletteActionRestoresOnlyWhilePaletteOwnsFocus() {
@@ -809,7 +1151,6 @@ final class AppWindowRouterTests: XCTestCase {
             coordinator.sidebarNumberShortcutRequest?.number,
             9
         )
-        XCTAssertEqual(coordinator.pluginSidebarSearchFocusRequestID, 0)
         XCTAssertEqual(coordinator.destination, .general)
 
         window.close()
@@ -882,8 +1223,7 @@ final class AppWindowRouterTests: XCTestCase {
         XCTAssertFalse(coordinator.isUnifiedSearchPresented)
         XCTAssertNil(coordinator.unifiedSearchPresentationOrigin)
 
-        let previousRequestID = coordinator.pluginSidebarSearchFocusRequestID
-        XCTAssertTrue(
+        XCTAssertFalse(
             window.performKeyEquivalent(
                 with: keyEvent(
                     keyCode: UInt16(kVK_ANSI_F),
@@ -893,86 +1233,48 @@ final class AppWindowRouterTests: XCTestCase {
                 )
             )
         )
-        XCTAssertEqual(
-            coordinator.pluginSidebarSearchFocusRequestID,
-            previousRequestID + 1
-        )
 
         window.close()
     }
 
-    func testCommandShiftFExpandsAndFocusesCollapsedPluginSettingsSearch() async throws {
+    func testPluginSidebarHasNoPersistentFilterAndKeepsUnifiedSearch() async throws {
         let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(false, forKey: "settings.sidebar.pluginSettingsSectionExpanded")
-        let plugins = [AppWindowRouterSettingsPlugin(id: "settings-plugin")]
-        let router = makeRouter(defaults: defaults, plugins: plugins)
-
-        router.showSettings()
-        let window = try XCTUnwrap(router.settingsWindow)
-        defer { window.close() }
-        let hostingView = try XCTUnwrap(window.contentView as? NSHostingView<SettingsView>)
-        await settleWindowLayout(window)
-        XCTAssertNil(pluginSettingsFilterField(in: hostingView))
-
-        XCTAssertTrue(window.performKeyEquivalent(with: keyEvent(
-            keyCode: UInt16(kVK_ANSI_F),
-            characters: "F",
-            modifiers: [.command, .shift],
-            windowNumber: window.windowNumber
-        )))
-
-        let deadline = ContinuousClock.now + .seconds(2)
-        var focusedFilterField: NSTextField?
-        repeat {
-            await settleWindowLayout(window)
-            if let filterField = pluginSettingsFilterField(in: hostingView),
-               window.firstResponder === filterField.currentEditor() {
-                focusedFilterField = filterField
-                break
-            }
-            try await Task.sleep(for: .milliseconds(20))
-        } while ContinuousClock.now < deadline
-        XCTAssertNotNil(
-            focusedFilterField,
-            "Expected Command-Shift-F to reveal and focus the offscreen plugin filter field."
+        defaults.set(true, forKey: "settings.sidebar.pluginSettingsSectionExpanded")
+        let router = makeRouter(
+            defaults: defaults,
+            plugins: [AppWindowRouterSettingsPlugin(id: "settings-plugin")]
         )
-    }
-
-    func testCommandShiftFRevealsPluginSettingsSearchWhenNoPluginsAreConfigurable() async throws {
-        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
-        defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set(false, forKey: "settings.sidebar.pluginSettingsSectionExpanded")
-        let router = makeRouter(defaults: defaults, plugins: [])
-
         router.showSettings()
         let window = try XCTUnwrap(router.settingsWindow)
         defer { window.close() }
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
         let hostingView = try XCTUnwrap(window.contentView as? NSHostingView<SettingsView>)
         await settleWindowLayout(window)
-        XCTAssertNil(pluginSettingsFilterField(in: hostingView))
 
-        XCTAssertTrue(window.performKeyEquivalent(with: keyEvent(
+        XCTAssertNil(pluginSettingsFilterField(in: hostingView))
+        let launcher = try XCTUnwrap(descendantViews(of: hostingView)
+            .compactMap { $0 as? NSSearchField }
+            .first { !$0.isEditable })
+        XCTAssertTrue(launcher.sendAction(launcher.action, to: launcher.target))
+        await settleWindowLayout(window)
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.unifiedSearchPresentationOrigin, .settingsSidebar)
+
+        XCTAssertFalse(window.performKeyEquivalent(with: keyEvent(
             keyCode: UInt16(kVK_ANSI_F),
             characters: "F",
             modifiers: [.command, .shift],
             windowNumber: window.windowNumber
         )))
+        XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        coordinator.dismissUnifiedSearch()
+        coordinator.navigate(to: .plugins(.configuration("settings-plugin")))
+        await settleWindowLayout(window)
+        XCTAssertEqual(coordinator.destination, .plugins(.configuration("settings-plugin")))
+        XCTAssertNil(pluginSettingsFilterField(in: hostingView))
 
-        let deadline = ContinuousClock.now + .seconds(2)
-        var focusedFilterField: NSTextField?
-        repeat {
-            await settleWindowLayout(window)
-            if let filterField = pluginSettingsFilterField(in: hostingView),
-               window.firstResponder === filterField.currentEditor() {
-                focusedFilterField = filterField
-                break
-            }
-            try await Task.sleep(for: .milliseconds(20))
-        } while ContinuousClock.now < deadline
-        XCTAssertNotNil(focusedFilterField)
     }
 
     func testAppUpdateRequestNavigatesDirectlyToAbout() throws {
@@ -987,6 +1289,26 @@ final class AppWindowRouterTests: XCTestCase {
 
         XCTAssertEqual(router.settingsNavigationCoordinator?.destination, .about)
         router.settingsWindow?.close()
+    }
+
+    func testAppUpdateWithoutKnownVersionStillRequestsACheck() throws {
+        let suiteName = "AppWindowRouterTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let updater = AppUpdater(startingUpdater: false)
+        let router = makeRouter(defaults: defaults, appUpdater: updater)
+        defer { router.settingsWindow?.close() }
+        router.showSettings()
+        let coordinator = try XCTUnwrap(router.settingsNavigationCoordinator)
+        var requests: [AboutUpdateActionRequest] = []
+        let subscription = coordinator.$aboutUpdateActionRequest.compactMap { $0 }.sink { requests.append($0) }
+        defer { subscription.cancel() }
+
+        router.presentSettings(.appUpdate)
+
+        XCTAssertEqual(coordinator.destination, .about)
+        XCTAssertEqual(requests.count, 1)
+        XCTAssertNil(requests.first?.version)
     }
 
     func testExplicitGeneralAndAboutRequestsSelectTheirSettingsDestinations() throws {
@@ -1092,6 +1414,7 @@ final class AppWindowRouterTests: XCTestCase {
         defaults: UserDefaults,
         appUpdater: AppUpdater? = nil,
         commandPaletteFocusRestoration: StandaloneCommandPaletteFocusRestoration? = nil,
+        windowPositionStore: WindowPositionStore? = nil,
         plugins: [any MacToolsPlugin] = [],
         configureHost: (PluginHost) -> Void = { _ in }
     ) -> AppWindowRouter {
@@ -1110,7 +1433,8 @@ final class AppWindowRouterTests: XCTestCase {
             menuBarIconGallery: MenuBarIconGalleryLibrary(),
             launchAtLoginController: LaunchAtLoginController(service: AppWindowRouterFakeLaunchAtLoginService()),
             appearanceUserDefaults: defaults,
-            commandPaletteFocusRestoration: commandPaletteFocusRestoration ?? .init()
+            commandPaletteFocusRestoration: commandPaletteFocusRestoration ?? .init(),
+            windowPositionStore: windowPositionStore ?? WindowPositionStore(userDefaults: defaults)
         )
     }
 

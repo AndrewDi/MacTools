@@ -13,7 +13,7 @@ final class WindowLayoutsPluginTests: XCTestCase {
             plugin.actionDefinitions.map(\.key.actionID),
             WindowLayoutOperation.allCases.map(\.rawValue)
         )
-        XCTAssertEqual(plugin.actionDefinitions.count, 36)
+        XCTAssertEqual(plugin.actionDefinitions.count, 40)
         for definition in plugin.actionDefinitions {
             XCTAssertEqual(definition.risk, .safe)
             XCTAssertEqual(definition.externalInvocationPolicy, .allowed)
@@ -28,7 +28,7 @@ final class WindowLayoutsPluginTests: XCTestCase {
         XCTAssertTrue(plugin.shortcutDefinitions.isEmpty)
         XCTAssertEqual(
             plugin.actionShortcutSettingsConfiguration.actionIDs.count,
-            36
+            40
         )
     }
 
@@ -214,6 +214,58 @@ final class WindowLayoutsPluginTests: XCTestCase {
         XCTAssertEqual(plugin.actionShortcutAssignmentRevision, initialRevision + 1)
     }
 
+    func testCenteredGuidesShareSessionWithoutEnablingModifierDrag() {
+        let session = MockWindowModifierDragSession()
+        let plugin = makePlugin(modifierDragSession: session)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "window-layouts"))
+        XCTAssertEqual(session.startCount, 0)
+        plugin.handleSettingsAction(.setBoolean(controlID: "centered-guides.enabled", value: true))
+        XCTAssertTrue(session.isRunning)
+        XCTAssertTrue(session.centeredGuidesEnabled)
+        XCTAssertFalse(session.modifierDragEnabled)
+        XCTAssertTrue(plugin.activeInputGestureClaims.isEmpty)
+        plugin.setModifierDragEnabled(true)
+        XCTAssertTrue(session.centeredGuidesEnabled)
+        XCTAssertTrue(session.modifierDragEnabled)
+        plugin.setModifierDragEnabled(false)
+        XCTAssertTrue(session.isRunning)
+        XCTAssertTrue(session.centeredGuidesEnabled)
+        XCTAssertFalse(session.modifierDragEnabled)
+        plugin.handleSettingsAction(.setBoolean(controlID: "centered-guides.enabled", value: false))
+        XCTAssertFalse(session.isRunning)
+    }
+
+    func testCenteredGuidesReportMonitorStartupFailureInTheirSettingsRow() throws {
+        let session = MockWindowModifierDragSession()
+        session.startResult = .failure(.eventTapUnavailable)
+        let plugin = makePlugin(modifierDragSession: session)
+        plugin.handleSettingsAction(.setBoolean(controlID: "centered-guides.enabled", value: true))
+        XCTAssertFalse(session.isRunning)
+        guard case let .form(sections) = try XCTUnwrap(plugin.settingsPage).body else {
+            return XCTFail("Expected form settings")
+        }
+        let rows = sections.flatMap { section -> [PluginSettingsRow] in
+            if case let .rows(rows) = section.content { return rows }
+            return []
+        }
+        let row = try XCTUnwrap(rows.first(where: { $0.id == "centered-guides.enabled" }))
+        XCTAssertEqual(row.description, "无法启用窗口居中参考线，请检查辅助功能权限后重试。")
+    }
+
+    func testCenteredGuidesRemainOffWithoutPermissionAndStartAfterGrant() {
+        let session = MockWindowModifierDragSession()
+        let permission = WindowGuideTestPermission()
+        let plugin = makePlugin(modifierDragSession: session, accessibilityTrusted: { permission.granted })
+        plugin.handleSettingsAction(.setBoolean(controlID: "centered-guides.enabled", value: true))
+        XCTAssertFalse(session.isRunning)
+        permission.granted = true
+        plugin.refreshAccessibilityPermission()
+        XCTAssertTrue(session.isRunning)
+        permission.granted = false
+        plugin.refreshAccessibilityPermission()
+        XCTAssertFalse(session.isRunning)
+    }
+
     func testModifierDragIsOptInPublishesExactClaimAndPausesForConflict() {
         let session = MockWindowModifierDragSession()
         let plugin = makePlugin(modifierDragSession: session)
@@ -226,13 +278,18 @@ final class WindowLayoutsPluginTests: XCTestCase {
 
         XCTAssertEqual(session.startCount, 1)
         XCTAssertEqual(session.configuredModifiers, [.control, .option])
+        XCTAssertEqual(session.configuredShowsIndicator, true)
         XCTAssertEqual(
             plugin.activeInputGestureClaims.map(\.id),
             ["pointer.move.modifiers.6"]
         )
 
+        plugin.setShowsModifierDragIndicator(false)
+        XCTAssertEqual(session.configuredShowsIndicator, false)
+
         plugin.setModifierDragModifiers([.shift, .command])
         XCTAssertEqual(session.configuredModifiers, [.shift, .command])
+        XCTAssertEqual(session.configuredShowsIndicator, false)
         XCTAssertEqual(
             plugin.activeInputGestureClaims.map(\.id),
             ["pointer.move.modifiers.9"]
@@ -834,6 +891,51 @@ final class WindowLayoutsPluginTests: XCTestCase {
         )
     }
 
+    func testIncrementalResizeActionDefinitionsAndExecution() async throws {
+        let executor = MockWindowLayoutExecutor()
+        let plugin = makePlugin(executor: executor)
+
+        let incrementalOps: [WindowLayoutOperation] = [
+            .increaseWidth,
+            .decreaseWidth,
+            .increaseHeight,
+            .decreaseHeight,
+        ]
+
+        for op in incrementalOps {
+            let definition = try XCTUnwrap(
+                plugin.actionDefinitions.first(where: { $0.key.actionID == op.rawValue })
+            )
+            XCTAssertFalse(definition.title.isEmpty)
+            XCTAssertFalse(definition.description.isEmpty)
+            XCTAssertFalse(definition.systemImage.isEmpty)
+            XCTAssertEqual(definition.risk, .safe)
+            XCTAssertEqual(definition.externalInvocationPolicy, .allowed)
+            XCTAssertEqual(
+                plugin.permissionRequirementIDs(for: definition.key),
+                ["accessibility"]
+            )
+
+            let handle = try plugin.beginAction(ActionInvocation(
+                reference: ActionReference(key: definition.key),
+                source: .unifiedSearch,
+                mode: .foreground
+            ))
+            let result = await handle.result()
+            XCTAssertEqual(result, .succeeded())
+        }
+        XCTAssertEqual(executor.executions.map(\.operation), incrementalOps)
+
+        executor.executionError = .windowCannotResizeFurther
+        let failureHandle = try plugin.beginAction(ActionInvocation(
+            reference: ActionReference(key: ActionKey(providerID: "window-layouts", actionID: "increase-width")),
+            source: .unifiedSearch,
+            mode: .foreground
+        ))
+        let failureResult = await failureHandle.result()
+        XCTAssertEqual(failureResult, .failed(message: "窗口无法进一步调整大小。"))
+    }
+
     private func makePlugin(
         executor: MockWindowLayoutExecutor? = nil,
         storage: PluginStorage? = nil,
@@ -901,15 +1003,28 @@ private final class MockWindowModifierDragSession: WindowModifierDragSessionMana
     var onFailure: (WindowLayoutError) -> Void = { _ in }
     var onSuccess: () -> Void = {}
     private(set) var configuredModifiers: ShortcutModifiers?
+    private(set) var configuredShowsIndicator: Bool?
     private(set) var configureCount = 0
     private(set) var startCount = 0
     private(set) var stopCount = 0
     private(set) var isRunning = false
     var startResult: Result<Void, WindowModifierDragMonitorStartError> = .success(())
+    var centeredGuidesEnabled = false
+    var modifierDragEnabled = false
 
-    func configure(modifiers: ShortcutModifiers) {
+    func configureFeatures(modifierDragEnabled: Bool, centeredGuidesEnabled: Bool, respectsStageManager: Bool) {
+        self.modifierDragEnabled = modifierDragEnabled
+        self.centeredGuidesEnabled = centeredGuidesEnabled
+    }
+
+    func configure(modifiers: ShortcutModifiers, showsIndicator: Bool) {
         configureCount += 1
         configuredModifiers = modifiers
+        configuredShowsIndicator = showsIndicator
+    }
+
+    func configure(modifiers: ShortcutModifiers) {
+        configure(modifiers: modifiers, showsIndicator: true)
     }
 
     func start() -> Result<Void, WindowModifierDragMonitorStartError> {
@@ -1017,4 +1132,9 @@ private final class WindowLayoutsMemoryStorage: PluginStorage {
         values[key] = value
         values.removeValue(forKey: legacyKey)
     }
+}
+
+@MainActor
+private final class WindowGuideTestPermission {
+    var granted = false
 }
