@@ -137,6 +137,7 @@ final class StorageExplorerControllerTests: XCTestCase {
         scanner.finish(path: root.path)
         try await waitUntil { !controller.isScanning }
         XCTAssertEqual(controller.scanState, .completed)
+        XCTAssertTrue(controller.snapshotHasObservedChanges)
     }
 
     func testAllocatedSpaceIsTheDefaultMetricAndProgressTracksIt() async throws {
@@ -194,6 +195,97 @@ final class StorageExplorerControllerTests: XCTestCase {
         XCTAssertFalse(controller.isConfirmingTrash)
         XCTAssertTrue(controller.reviewItems.isEmpty)
         XCTAssertNotNil(controller.lastErrorMessage)
+    }
+
+    func testChangedDescendantRequiresRefreshBeforeReviewingFolder() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let folder = root.appendingPathComponent("selected")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data([1]).write(to: folder.appendingPathComponent("existing.bin"))
+        defer { try? FileManager.default.removeItem(at: root) }
+        let controller = StorageExplorerController(observeChanges: false)
+
+        controller.startScan(at: root)
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { controller.rows.contains(where: { $0.name == "selected" }) }
+        let selected = try XCTUnwrap(controller.rows.first(where: { $0.name == "selected" })?.item)
+        controller.toggleSelection(path: selected.path)
+        controller.handleObservedChanges([selected.path + "/new.bin"])
+        controller.confirmTrash()
+
+        XCTAssertTrue(controller.snapshotHasObservedChanges)
+        XCTAssertTrue(controller.reviewNeedsRefresh)
+        XCTAssertFalse(controller.isConfirmingTrash)
+        XCTAssertNotNil(controller.lastErrorMessage)
+    }
+
+    func testLargeObservedChangeBatchConservativelyRequiresFolderRefresh() async throws {
+        let scanner = ControlledStorageScanner()
+        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
+        let root = "/tmp/storage-many-events"
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        let snapshot = Self.fixture(root: root)
+        scanner.finish(path: root, snapshot: snapshot)
+        try await waitUntil { !controller.isScanning }
+        controller.toggleSelection(path: root + "/a")
+
+        controller.handleObservedChanges((0..<33).map { root + "/unrelated-\($0)" })
+
+        XCTAssertTrue(controller.reviewNeedsRefresh)
+        controller.confirmTrash()
+        XCTAssertFalse(controller.isConfirmingTrash)
+    }
+
+    func testSymlinkIsVisibleButCannotBeStaged() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let destination = root.appendingPathComponent("destination.bin")
+        let symbolicLink = root.appendingPathComponent("link.bin")
+        try Data([1]).write(to: destination)
+        try FileManager.default.createSymbolicLink(at: symbolicLink, withDestinationURL: destination)
+        let controller = StorageExplorerController(
+            scanner: StorageExplorerScanner(publishesItems: true),
+            observeChanges: false
+        )
+
+        controller.startScan(at: root)
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { controller.rows.contains(where: { $0.name == "link.bin" }) }
+        let item = try XCTUnwrap(controller.rows.first(where: { $0.name == "link.bin" })?.item)
+
+        XCTAssertTrue(item.isSymlink)
+        XCTAssertFalse(controller.canStage(item))
+        controller.toggleSelection(path: item.path)
+        XCTAssertTrue(controller.basket.isEmpty)
+    }
+
+    func testDeduplicatedHardLinkKeepsObservedSizeForReviewValidation() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = root.appendingPathComponent("original.bin")
+        let duplicate = root.appendingPathComponent("duplicate.bin")
+        try Data(repeating: 1, count: 64).write(to: original)
+        XCTAssertEqual(link(original.path, duplicate.path), 0)
+        let controller = StorageExplorerController(
+            scanner: StorageExplorerScanner(publishesItems: true),
+            observeChanges: false
+        )
+
+        controller.startScan(at: root)
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { controller.rows.count == 2 }
+        let hardLinks = controller.rows.map(\.item).filter(\.isHardLinked)
+        XCTAssertEqual(hardLinks.count, 2)
+        let deduplicated = try XCTUnwrap(hardLinks.first(where: { $0.size == 0 }))
+        XCTAssertEqual(deduplicated.observedFileSize, 64)
+        controller.toggleSelection(path: deduplicated.path)
+        controller.confirmTrash()
+
+        XCTAssertTrue(controller.isConfirmingTrash)
+        XCTAssertEqual(controller.reviewItems.map(\.path), [deduplicated.path])
     }
 
     func testPartialTrashResultRescansAndKeepsOnlyFailedItemForReview() async throws {
@@ -255,7 +347,8 @@ private final class PartialTrashRecycler: StorageExplorerTrashRecycling, @unchec
     init(successfulPath: String) { self.successfulPath = successfulPath }
 
     func recycle(urls: [URL]) async throws -> StorageExplorerRecycleResult {
-        guard let successful = urls.first(where: { $0.path == successfulPath }) else {
+        let successfulName = URL(fileURLWithPath: successfulPath).lastPathComponent
+        guard let successful = urls.first(where: { $0.lastPathComponent == successfulName }) else {
             return StorageExplorerRecycleResult(moved: [:], errorDescription: "No matching item")
         }
         try FileManager.default.removeItem(at: successful)

@@ -7,7 +7,6 @@ public struct StorageExplorerWorkspaceView: View {
     public let localization: PluginLocalization
     @State private var showsInspector = false
     @State private var showsSkippedDetails = false
-    @State private var sortOrder = [KeyPathComparator(\StorageExplorerRow.bytes, order: .reverse)]
 
     public init(controller: StorageExplorerController,
                 localization: PluginLocalization = PluginLocalization(bundle: .main)) {
@@ -30,15 +29,18 @@ public struct StorageExplorerWorkspaceView: View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             controls
             if controller.rootItem != nil {
-                StorageExplorerProgressView(
-                    status: controller.status,
-                    metric: controller.metric,
-                    localization: localization,
-                    showsDetails: $showsSkippedDetails
-                )
-                navigation(compact: width < 780)
+                navigation
+                if controller.snapshotHasObservedChanges {
+                    Label(
+                        text("folderChangedNotice", "扫描后文件夹发生了变化；移动已变化的文件夹前需要刷新。"),
+                        systemImage: "exclamationmark.arrow.triangle.2.circlepath"
+                    )
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.orange)
+                }
                 explorer(width: width)
-                reviewBar
+                    .layoutPriority(1)
+                reviewBar.layoutPriority(2)
             } else if controller.isScanning {
                 StorageExplorerScanningView(
                     status: controller.status,
@@ -61,13 +63,6 @@ public struct StorageExplorerWorkspaceView: View {
         .padding(PluginSettingsTheme.Spacing.section)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .sheet(isPresented: $controller.isConfirmingTrash) { confirmation }
-        .onChange(of: sortOrder) { _, order in
-            guard let first = order.first else { return }
-            let key: StorageExplorerSort = first.keyPath == \StorageExplorerRow.name ? .name
-                : first.keyPath == \StorageExplorerRow.kind ? .kind
-                : first.keyPath == \StorageExplorerRow.modified ? .modified : .size
-            controller.setSort(key, ascending: first.order == .forward)
-        }
     }
 
     private func explorer(width: CGFloat) -> some View {
@@ -79,11 +74,11 @@ public struct StorageExplorerWorkspaceView: View {
             otherName: text("other", "其他")
         )
         return Group {
-            if width >= 780 {
+            if width >= 680 {
                 GeometryReader { geometry in
                     HStack(spacing: 12) {
                         hierarchyTreemap(nodes: nodes)
-                            .frame(width: max(420, geometry.size.width * 0.72))
+                            .frame(width: max(440, geometry.size.width * 0.82))
                         compactList
                             .frame(maxWidth: .infinity)
                     }
@@ -91,11 +86,11 @@ public struct StorageExplorerWorkspaceView: View {
             } else {
                 VStack(spacing: 10) {
                     hierarchyTreemap(nodes: nodes)
-                    compactList.frame(maxHeight: 190)
+                    compactList.frame(maxHeight: 120)
                 }
             }
         }
-        .frame(minHeight: 410, maxHeight: .infinity)
+        .frame(minHeight: 280, maxHeight: .infinity)
         .clipped()
     }
 
@@ -105,8 +100,10 @@ public struct StorageExplorerWorkspaceView: View {
             selection: $controller.selectedPath,
             emptyLabel: text("noSizedItems", "尚无可显示的大小"),
             addReviewLabel: text("addToReview", "加入审阅"),
+            unavailableReviewLabel: text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。"),
             open: controller.drillDown,
-            toggleReview: { controller.toggleSelection(path: $0.path) }
+            toggleReview: { controller.toggleSelection(path: $0.path) },
+            canReview: controller.canStage
         )
         .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
     }
@@ -115,6 +112,10 @@ public struct StorageExplorerWorkspaceView: View {
         HStack {
             Button { controller.scanHomeFolder() } label: { Label(text("homeFolder", "个人目录"), systemImage: "house") }
             Button { controller.selectFolderAndScan() } label: { Label(text("selectFolder", "选择文件夹…"), systemImage: "folder.badge.plus") }
+            if controller.rootItem != nil {
+                Divider().frame(height: 18)
+                scanSummary
+            }
             Spacer()
             if controller.isScanning {
                 Button(text("cancel", "取消"), role: .cancel) { controller.cancelScan() }
@@ -129,52 +130,78 @@ public struct StorageExplorerWorkspaceView: View {
         .disabled(controller.isExecutingTrash)
     }
 
-    private func navigation(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 8) {
-                Button { controller.navigateUp() } label: {
-                    Image(systemName: "arrow.up")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(controller.navigationStack.count <= 1)
-                .help(text("goUp", "返回上一级"))
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(Array(controller.navigationStack.enumerated()), id: \.element.path) { index, item in
-                            if index > 0 { Image(systemName: "chevron.right").foregroundStyle(.tertiary) }
-                            Button(item.name.isEmpty ? "/" : item.name) { controller.navigateToBreadcrumb(at: index) }
-                                .buttonStyle(.borderless)
-                                .help(String(format: text("openPath", "打开 %@"), item.path))
-                        }
-                    }
-                    .font(PluginSettingsTheme.Typography.rowTitle)
-                }
+    private var navigation: some View {
+        HStack(spacing: 8) {
+            Button { controller.navigateUp() } label: {
+                Image(systemName: "arrow.up")
             }
-            HStack(spacing: 8) {
-                Picker(text("viewMode", "视图"), selection: $controller.mode) {
-                    Text(text("browseItems", "浏览项目")).tag(StorageExplorerMode.folders)
-                    Text(text("largestFiles", "大文件")).tag(StorageExplorerMode.largestFiles)
-                    Text(text("fileTypes", "文件类型")).tag(StorageExplorerMode.fileTypes)
-                }.pickerStyle(.menu).fixedSize()
-                Picker(text("sizeMetric", "大小"), selection: $controller.metric) {
-                    Text(text("logicalSize", "文件大小")).tag(StorageExplorerMetric.logical)
-                    Text(text("allocatedSize", "占用空间")).tag(StorageExplorerMetric.allocated)
-                }.labelsHidden().pickerStyle(.menu).fixedSize()
-                Spacer(minLength: 8)
-                Button { showsInspector.toggle() } label: { Image(systemName: "info.circle") }
-                    .help(text("details", "详细信息"))
-                    .popover(isPresented: $showsInspector) { inspector.frame(width: 300, height: 430).padding(12) }
-            }.controlSize(.small)
-            TextField(text("search", "搜索…"), text: $controller.searchQuery).textFieldStyle(.roundedBorder)
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(controller.navigationStack.count <= 1)
+            .help(text("goUp", "返回上一级"))
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(Array(controller.navigationStack.enumerated()), id: \.element.path) { index, item in
+                        if index > 0 { Image(systemName: "chevron.right").foregroundStyle(.tertiary) }
+                        Button(item.name.isEmpty ? "/" : item.name) { controller.navigateToBreadcrumb(at: index) }
+                            .buttonStyle(.borderless)
+                            .help(String(format: text("openPath", "打开 %@"), item.path))
+                    }
+                }
+                .font(PluginSettingsTheme.Typography.rowTitle)
+            }
+            Spacer(minLength: 6)
+            Text(text("allocatedSize", "占用空间"))
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .foregroundStyle(.secondary)
+            Button { showsInspector.toggle() } label: { Image(systemName: "info.circle") }
+                .buttonStyle(.borderless)
+                .help(text("details", "详细信息"))
+                .popover(isPresented: $showsInspector) { inspector.frame(width: 300, height: 430).padding(12) }
         }
+    }
+
+    private var scanSummary: some View {
+        HStack(spacing: 10) {
+            Text(ByteCountFormatter.string(fromByteCount: controller.status.progress.allocatedBytesScanned, countStyle: .file))
+                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+            Text(String(format: text("filesScannedFormat", "已扫描 %d 个项目"), controller.status.progress.filesScanned))
+            Text(String(format: "%.1f s", controller.status.progress.elapsed))
+            if controller.status.progress.skippedCount > 0 {
+                Button { showsSkippedDetails.toggle() } label: {
+                    Label(
+                        String(format: text("skippedCount", "跳过 %d 项"), controller.status.progress.skippedCount),
+                        systemImage: "exclamationmark.circle"
+                    )
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.orange)
+                .popover(isPresented: $showsSkippedDetails) { skippedDetails }
+            }
+        }
+        .font(PluginSettingsTheme.Typography.rowDescription)
+        .monospacedDigit()
+        .lineLimit(1)
+    }
+
+    private var skippedDetails: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(text("skippedDetailsTitle", "未扫描的项目")).font(.headline)
+            Text(String(format: text(
+                "skippedDetailsMessage",
+                "%d 个项目因权限、云端占位文件或文件系统边界而被跳过。显示的总大小可能偏低。"
+            ), controller.status.progress.skippedCount))
+            .font(.callout).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(14).frame(width: 330)
     }
 
     private var compactList: some View {
         ScrollView {
             LazyVStack(spacing: 1) {
-                ForEach(controller.rows.prefix(80)) { row in
+                ForEach(controller.rows.prefix(16)) { row in
                     HStack(spacing: 8) {
                         Button {
                             controller.toggleSelection(path: row.item.path)
@@ -184,11 +211,7 @@ public struct StorageExplorerWorkspaceView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(!controller.canStage(row.item))
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(localizedName(row)).lineLimit(1).truncationMode(.middle)
-                            Text(localizedKind(row))
-                                .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                        }
+                        Text(localizedName(row)).lineLimit(1).truncationMode(.middle)
                         Spacer(minLength: 4)
                         Text(row.sizeLabel)
                             .font(.caption).monospacedDigit().foregroundStyle(.secondary)
@@ -201,7 +224,7 @@ public struct StorageExplorerWorkspaceView: View {
                         }
                     }
                     .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 4)
                     .background(
                         controller.selectedPath == row.id ? Color.accentColor.opacity(0.12) : Color.clear,
                         in: RoundedRectangle(cornerRadius: 6)
@@ -214,7 +237,13 @@ public struct StorageExplorerWorkspaceView: View {
                             controller.selectedPath = row.id
                         }
                     }
-                    .draggable(row.item.path)
+                    .modifier(StorageExplorerListDragModifier(
+                        enabled: controller.canStage(row.item),
+                        path: row.item.path
+                    ))
+                    .help(row.item.isSymlink
+                        ? text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。")
+                        : row.item.path)
                 }
             }
         }
@@ -222,67 +251,8 @@ public struct StorageExplorerWorkspaceView: View {
         .accessibilityLabel(text("results", "扫描结果"))
     }
 
-    private func localizedKind(_ row: StorageExplorerRow) -> String {
-        if row.kind == "package" || row.item.isPackage {
-            return text("applicationsAndPackages", "应用与软件包")
-        }
-        if row.item.isDirectory { return text("folders", "文件夹") }
-        return row.kind.isEmpty ? text("other", "其他") : row.kind.uppercased()
-    }
-
     private func localizedName(_ row: StorageExplorerRow) -> String {
         row.id == "type:package" ? text("applicationsAndPackages", "应用与软件包") : row.name
-    }
-
-    private var fileTable: some View {
-        Table(controller.rows, selection: $controller.selectedPath, sortOrder: $sortOrder) {
-            TableColumn("") { row in
-                Button {
-                    controller.toggleSelection(path: row.item.path)
-                } label: {
-                    Image(systemName: controller.basket.contains(row.id) ? "checkmark.circle.fill" : "circle")
-                        .foregroundStyle(controller.basket.contains(row.id) ? Color.accentColor : Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .disabled(!controller.canStage(row.item))
-                .help(controller.basket.contains(row.id) ? text("removeFromReview", "移出审阅") : text("addToReview", "加入审阅"))
-            }
-            .width(24)
-            TableColumn(text("nameColumn", "名称"), value: \.name) { row in
-                HStack(spacing: 6) {
-                    Image(systemName: row.item.iconSystemName).foregroundStyle(.secondary)
-                    Text(localizedName(row)).lineLimit(1).truncationMode(.middle)
-                    if row.item.isIncomplete { Image(systemName: "exclamationmark.circle").foregroundStyle(.orange) }
-                    if controller.basket.contains(row.id) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint) }
-                }
-                .help(row.item.path)
-            }.width(min: 140, ideal: 220)
-            TableColumn(text("sizeColumn", "大小"), value: \.bytes) { row in
-                Text(row.sizeLabel).monospacedDigit()
-            }.width(min: 70, ideal: 90)
-            TableColumn(text("proportionColumn", "占比")) { row in Text(row.percentage).monospacedDigit() }
-                .width(min: 45, ideal: 55)
-            TableColumn(text("kind", "类型"), value: \.kind) { row in
-                Text(localizedKind(row))
-            }.width(min: 60, ideal: 80)
-            TableColumn(text("modified", "修改日期"), value: \.modified) { row in Text(row.dateLabel) }
-                .width(min: 80, ideal: 95)
-        }
-        .contextMenu(forSelectionType: String.self) { paths in
-            if let path = paths.first, let item = controller.rows.first(where: { $0.id == path })?.item {
-                Button(text("openFolder", "打开文件夹")) { controller.drillDown(to: item) }
-                    .disabled(!item.isDirectory || item.isPackage)
-                Button(text("revealInFinder", "在访达中显示")) { controller.revealInFinder(path: path) }
-                    .disabled(path.hasPrefix("type:"))
-                Button(text("addToReview", "加入审阅")) { controller.toggleSelection(path: path) }
-                    .disabled(!controller.canStage(item))
-            }
-        } primaryAction: { paths in
-            if let path = paths.first, let item = controller.rows.first(where: { $0.id == path })?.item {
-                controller.drillDown(to: item)
-            }
-        }
-        .accessibilityLabel(text("results", "扫描结果"))
     }
 
     private var inspector: some View {
@@ -301,6 +271,17 @@ public struct StorageExplorerWorkspaceView: View {
                     detail(text("allocatedSize", "占用空间"), ByteCountFormatter.string(fromByteCount: item.allocatedSize, countStyle: .file))
                     if item.isAccessDenied { Label(text("accessDenied", "无访问权限"), systemImage: "lock.fill").foregroundStyle(.orange) }
                     if item.isCloudPlaceholder { Label(text("cloudPlaceholder", "仅在云端"), systemImage: "icloud").foregroundStyle(.secondary) }
+                    if item.isSymlink {
+                        Label(text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。"), systemImage: "link")
+                            .foregroundStyle(.secondary)
+                    }
+                    if item.isHardLinked {
+                        Label(
+                            String(format: text("hardLinkNotice", "此文件有 %d 个硬链接；移除最后一个链接后才会释放空间。"), item.hardLinkCount),
+                            systemImage: "link.badge.plus"
+                        )
+                        .foregroundStyle(.secondary)
+                    }
                     if item.isIncomplete { Text(text("incomplete", "大小尚不完整" )).foregroundStyle(.orange) }
                     Text(text("spaceNote", "占用空间不等于可释放空间；共享数据和废纸篓会影响实际可用容量。"))
                         .font(PluginSettingsTheme.Typography.rowDescription).foregroundStyle(.secondary)
@@ -352,7 +333,7 @@ public struct StorageExplorerWorkspaceView: View {
             Button(text("clearSelection", "取消选择")) { controller.clearSelection() }.disabled(controller.basket.isEmpty)
             Button(text("review", "审阅…")) { controller.confirmTrash() }
                 .buttonStyle(.borderedProminent)
-                .disabled(controller.basket.isEmpty || controller.isScanning)
+                .disabled(controller.basket.isEmpty || controller.isScanning || controller.reviewNeedsRefresh)
         }
         .buttonStyle(.bordered).controlSize(.small)
         .padding(.horizontal, 12).padding(.vertical, 9)
@@ -394,49 +375,17 @@ public struct StorageExplorerWorkspaceView: View {
     }
 }
 
-private struct StorageExplorerProgressView: View {
-    @ObservedObject var status: StorageExplorerScanStatus
-    let metric: StorageExplorerMetric
-    let localization: PluginLocalization
-    @Binding var showsDetails: Bool
-    var body: some View {
-        HStack(spacing: 14) {
-            Text(ByteCountFormatter.string(
-                fromByteCount: metric == .logical
-                    ? status.progress.bytesScanned
-                    : status.progress.allocatedBytesScanned,
-                countStyle: .file
-            ))
-                .font(PluginSettingsTheme.Typography.emphasizedRowTitle).monospacedDigit()
-            Text(String(format: localization.string("storageExplorer.filesScannedFormat", defaultValue: "已扫描 %d 个项目"), status.progress.filesScanned))
-            Text(String(format: "%.1f s", status.progress.elapsed)).monospacedDigit()
-            if status.progress.skippedCount > 0 {
-                Button {
-                    showsDetails.toggle()
-                } label: {
-                    Label(String(format: localization.string("storageExplorer.skippedCount", defaultValue: "跳过 %d 项"), status.progress.skippedCount),
-                          systemImage: "exclamationmark.circle")
-                }
-                .buttonStyle(.plain).foregroundStyle(.orange)
-                .help(localization.string("storageExplorer.skippedDetailsHelp", defaultValue: "显示跳过项目的说明"))
-                .popover(isPresented: $showsDetails) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(localization.string("storageExplorer.skippedDetailsTitle", defaultValue: "未扫描的项目"))
-                            .font(.headline)
-                        Text(String(format: localization.string(
-                            "storageExplorer.skippedDetailsMessage",
-                            defaultValue: "%d 个项目因权限、云端占位文件或文件系统边界而被跳过。显示的总大小可能偏低。"
-                        ), status.progress.skippedCount))
-                        .font(.callout).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(14).frame(width: 330)
-                }
-            }
-            Spacer()
+private struct StorageExplorerListDragModifier: ViewModifier {
+    let enabled: Bool
+    let path: String
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.draggable(path)
+        } else {
+            content
         }
-        .font(PluginSettingsTheme.Typography.rowDescription)
-        .padding(.horizontal, 2)
     }
 }
 

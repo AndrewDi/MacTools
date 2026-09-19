@@ -35,6 +35,9 @@ public struct StorageItem: Identifiable, Sendable, Equatable {
     public var scannedCount: Int = 1
     public var skippedCount: Int = 0
     public let fileIdentity: StorageFileInode?
+    /// The file length observed on disk before hard-link accounting is deduplicated.
+    public let observedFileSize: Int64
+    public let hardLinkCount: UInt32
 
     public init(
         id: String? = nil,
@@ -51,7 +54,9 @@ public struct StorageItem: Identifiable, Sendable, Equatable {
         children: [StorageItem] = [],
         isAccessDenied: Bool = false,
         parentPath: String? = nil,
-        fileIdentity: StorageFileInode? = nil
+        fileIdentity: StorageFileInode? = nil,
+        observedFileSize: Int64? = nil,
+        hardLinkCount: UInt32 = 1
     ) {
         self.id = id ?? path
         self.name = name
@@ -68,6 +73,8 @@ public struct StorageItem: Identifiable, Sendable, Equatable {
         self.parentPath = parentPath
         self.isAccessDenied = isAccessDenied
         self.fileIdentity = fileIdentity
+        self.observedFileSize = observedFileSize ?? size
+        self.hardLinkCount = hardLinkCount
     }
 
     public var fileExtension: String {
@@ -108,6 +115,8 @@ public struct StorageItem: Identifiable, Sendable, Equatable {
         ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
     }
 
+    public var isHardLinked: Bool { hardLinkCount > 1 }
+
     public static func == (lhs: StorageItem, rhs: StorageItem) -> Bool {
         lhs.path == rhs.path && lhs.size == rhs.size && lhs.allocatedSize == rhs.allocatedSize
             && lhs.childCount == rhs.childCount && lhs.isIncomplete == rhs.isIncomplete
@@ -115,6 +124,8 @@ public struct StorageItem: Identifiable, Sendable, Equatable {
             && lhs.skippedCount == rhs.skippedCount && lhs.scannedCount == rhs.scannedCount
             && lhs.isCloudPlaceholder == rhs.isCloudPlaceholder
             && lhs.fileIdentity == rhs.fileIdentity
+            && lhs.observedFileSize == rhs.observedFileSize
+            && lhs.hardLinkCount == rhs.hardLinkCount
     }
 }
 

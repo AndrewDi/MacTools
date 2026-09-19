@@ -5,8 +5,10 @@ struct StorageExplorerHierarchyTreemapView: View {
     @Binding var selection: String?
     let emptyLabel: String
     let addReviewLabel: String
+    let unavailableReviewLabel: String
     let open: (StorageItem) -> Void
     let toggleReview: (StorageItem) -> Void
+    let canReview: (StorageItem) -> Bool
 
     @State private var hoveredID: String?
     @State private var rectangles: [StorageExplorerHierarchyRect] = []
@@ -33,6 +35,16 @@ struct StorageExplorerHierarchyTreemapView: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onContinuousHover { phase in
+                switch phase {
+                case let .active(location):
+                    // Parent and child rectangles overlap by design. Resolve hover once at the
+                    // container level so the deepest visible tile wins without competing events.
+                    hoveredID = rectangles.last(where: { $0.rect.contains(location) })?.id
+                case .ended:
+                    hoveredID = nil
+                }
+            }
             .onAppear { updateLayout(size: geometry.size) }
             .onChange(of: key) { _, _ in updateLayout(size: geometry.size) }
         }
@@ -40,17 +52,11 @@ struct StorageExplorerHierarchyTreemapView: View {
 
     private func interactiveRegion(_ entry: StorageExplorerHierarchyRect) -> some View {
         let inset = entry.rect.insetBy(dx: 2, dy: 2)
+        let reviewAvailable = !entry.node.isAggregate && canReview(entry.node.item)
         return Color.clear
             .contentShape(Rectangle())
             .frame(width: max(0, inset.width), height: max(0, inset.height))
             .position(x: inset.midX, y: inset.midY)
-            .onHover { hovering in
-                if hovering {
-                    hoveredID = entry.id
-                } else if hoveredID == entry.id {
-                    hoveredID = nil
-                }
-            }
             .onTapGesture {
                 guard !entry.node.isAggregate else { return }
                 if entry.node.item.isDirectory && !entry.node.item.isPackage {
@@ -61,23 +67,20 @@ struct StorageExplorerHierarchyTreemapView: View {
             }
             .contextMenu {
                 if !entry.node.isAggregate {
-                    Button(addReviewLabel) { toggleReview(entry.node.item) }
-                }
-            }
-            .draggable(entry.node.isAggregate ? "" : entry.node.item.path) {
-                HStack(spacing: 8) {
-                    Image(systemName: entry.node.item.iconSystemName)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(entry.node.item.name).lineLimit(1)
-                        Text(ByteCountFormatter.string(fromByteCount: entry.node.bytes, countStyle: .file))
-                            .font(.caption).foregroundStyle(.secondary)
+                    if reviewAvailable {
+                        Button(addReviewLabel) { toggleReview(entry.node.item) }
+                    } else {
+                        Label(unavailableReviewLabel, systemImage: "link")
                     }
                 }
-                .padding(10)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
             }
+            .modifier(StorageExplorerReviewDragModifier(
+                enabled: reviewAvailable,
+                item: entry.node.item,
+                bytes: entry.node.bytes
+            ))
             .overlay(alignment: .topTrailing) {
-                if hoveredID == entry.id, !entry.node.isAggregate, inset.width > 54, inset.height > 38 {
+                if hoveredID == entry.id, reviewAvailable, inset.width > 54, inset.height > 38 {
                     Button { toggleReview(entry.node.item) } label: {
                         Image(systemName: "plus.circle.fill")
                             .symbolRenderingMode(.palette)
@@ -88,7 +91,7 @@ struct StorageExplorerHierarchyTreemapView: View {
                     .padding(7)
                 }
             }
-            .help(helpText(for: entry.node))
+            .help(helpText(for: entry.node) + (entry.node.item.isSymlink ? "\n" + unavailableReviewLabel : ""))
     }
 
     private func draw(_ entry: StorageExplorerHierarchyRect, context: inout GraphicsContext) {
@@ -97,12 +100,20 @@ struct StorageExplorerHierarchyTreemapView: View {
         let shape = Path(roundedRect: inset, cornerRadius: entry.depth == 0 ? 6 : 4)
         let base = color(for: entry.node.colorKey)
         let brightness = max(0.5, 0.88 - Double(entry.depth) * 0.10)
-        context.fill(shape, with: .color(base.opacity(brightness)))
+        let isHovered = hoveredID == entry.id
+        let hasHover = hoveredID != nil
+        context.fill(shape, with: .color(base.opacity(brightness * (hasHover && !isHovered ? 0.62 : 1))))
+        if isHovered {
+            context.fill(shape, with: .color(.white.opacity(0.18)))
+        }
         context.stroke(
             shape,
-            with: .color(hoveredID == entry.id ? .white : .white.opacity(entry.depth == 0 ? 0.72 : 0.42)),
-            lineWidth: hoveredID == entry.id ? 2.5 : 1
+            with: .color(isHovered ? .white : .white.opacity(entry.depth == 0 ? 0.72 : 0.42)),
+            lineWidth: isHovered ? 4 : 1
         )
+        if isHovered {
+            context.stroke(shape, with: .color(.black.opacity(0.45)), lineWidth: 1)
+        }
         guard inset.width > 62, inset.height > 30 else { return }
         let name = Text(entry.node.item.name)
             .font(.system(size: entry.depth == 0 ? 13 : 11, weight: .semibold))
@@ -129,14 +140,43 @@ struct StorageExplorerHierarchyTreemapView: View {
     }
 
     private func color(for key: String) -> Color {
-        let palette: [Color] = [.blue, .teal, .green, .indigo, .purple, .pink, .orange, .mint]
-        let hash = key.utf8.reduce(UInt64(5381)) { ($0 &* 33) &+ UInt64($1) }
-        return palette[Int(hash % UInt64(palette.count))]
+        let palette: [Color] = [.red, .orange, .yellow, .green, .teal, .blue, .indigo, .purple]
+        if key.hasPrefix("size-rank:"),
+           let rank = Int(key.dropFirst("size-rank:".count).prefix { $0.isNumber }) {
+            return palette[min(rank, palette.count - 1)]
+        }
+        return .gray
     }
 
     private func helpText(for node: StorageExplorerHierarchyNode) -> String {
         let size = ByteCountFormatter.string(fromByteCount: node.bytes, countStyle: .file)
         return node.isAggregate ? "\(node.item.name) · \(size)" : "\(node.item.name) · \(size)\n\(node.item.path)"
+    }
+}
+
+private struct StorageExplorerReviewDragModifier: ViewModifier {
+    let enabled: Bool
+    let item: StorageItem
+    let bytes: Int64
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if enabled {
+            content.draggable(item.path) {
+                HStack(spacing: 8) {
+                    Image(systemName: item.iconSystemName)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name).lineLimit(1)
+                        Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                .padding(10)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            }
+        } else {
+            content
+        }
     }
 }
 

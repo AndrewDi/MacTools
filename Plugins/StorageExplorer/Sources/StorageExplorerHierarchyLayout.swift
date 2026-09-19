@@ -44,8 +44,10 @@ enum StorageExplorerHierarchyLayout {
                 }
             let limit = depth == 0 ? 48 : depth == 1 ? 18 : 10
             let visible = Array(children.prefix(limit))
-            var result = visible.map { item -> StorageExplorerHierarchyNode in
-                let key = colorKey ?? item.path
+            var result = visible.enumerated().map { index, item -> StorageExplorerHierarchyNode in
+                // The completed snapshot is sorted deterministically by size and path. Top-level
+                // rank drives a warm-to-cool palette, while descendants inherit their group color.
+                let key = colorKey ?? "size-rank:\(index):\(item.path)"
                 let nested = depth + 1 < maximumDepth && item.isDirectory && !item.isPackage
                     ? nodes(parentPath: item.path, depth: depth + 1, colorKey: key)
                     : []
@@ -72,7 +74,7 @@ enum StorageExplorerHierarchyLayout {
                     item: aggregate,
                     bytes: remainder,
                     children: [],
-                    colorKey: colorKey ?? parentPath
+                    colorKey: colorKey ?? "size-rank:7:other"
                 ))
             }
             return result

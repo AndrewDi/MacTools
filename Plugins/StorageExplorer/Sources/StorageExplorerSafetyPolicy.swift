@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 
 // MARK: - Safety Status & Errors
@@ -193,6 +194,7 @@ public struct StorageExplorerSafetyPolicy: Sendable {
         }
         let normalizedRoot = normalizePath(root)
         var descriptors = [try openVerified(path: normalizedRoot, identity: rootIdentity, isDirectory: true)]
+        var stagedItems: [StagedItem] = []
         do {
             for item in items {
                 descriptors.append(try openVerified(
@@ -200,18 +202,118 @@ public struct StorageExplorerSafetyPolicy: Sendable {
                     identity: item.fileIdentity,
                     isDirectory: item.isDirectory
                 ))
+                let staged = try stageVerified(item)
+                stagedItems.append(staged)
+                descriptors.append(try openVerified(
+                    path: staged.stagedURL.path,
+                    identity: item.fileIdentity,
+                    isDirectory: item.isDirectory
+                ))
             }
         } catch {
+            restore(stagedItems)
             descriptors.forEach { close($0) }
             throw error
         }
         defer { descriptors.forEach { close($0) } }
-        return try await trashRecycler.recycle(
-            urls: items.map { URL(fileURLWithPath: normalizePath($0.path)) }
-        )
+        do {
+            let result = try await trashRecycler.recycle(urls: stagedItems.map(\.stagedURL))
+            var moved: [URL: URL] = [:]
+            var recoveryFailures: [String] = []
+            for staged in stagedItems {
+                if let destination = result.moved[staged.stagedURL] {
+                    moved[staged.originalURL] = destination
+                } else if !restore(staged) {
+                    recoveryFailures.append(staged.originalURL.path)
+                }
+            }
+            cleanupStagingDirectories(stagedItems)
+            let recoveryMessage = recoveryFailures.isEmpty
+                ? nil
+                : "Some items could not be restored after Trash failed: \(recoveryFailures.joined(separator: ", "))"
+            return StorageExplorerRecycleResult(
+                moved: moved,
+                errorDescription: [result.errorDescription, recoveryMessage].compactMap { $0 }.joined(separator: "\n").nilIfEmpty
+            )
+        } catch {
+            restore(stagedItems)
+            cleanupStagingDirectories(stagedItems)
+            throw error
+        }
     }
 
     // MARK: - Internal Helpers
+
+    private struct StagedItem {
+        let originalURL: URL
+        let stagedURL: URL
+        let stagingDirectory: URL
+    }
+
+    /// Trash is path based, while verification is identity based. Move the verified object into
+    /// a private, unpredictable sibling directory, verify its identity again, and only then pass
+    /// the staged path to NSWorkspace. A path replacement is detected before it reaches Trash.
+    private func stageVerified(_ item: StorageItem) throws -> StagedItem {
+        let originalURL = URL(fileURLWithPath: normalizePath(item.path))
+        let parent = originalURL.deletingLastPathComponent()
+        let stagingDirectory = parent.appendingPathComponent(".mactools-trash-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: stagingDirectory,
+                withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            throw StorageExplorerSafetyError.recycleFailed(
+                path: originalURL.path,
+                underlying: "A private Trash staging directory could not be created"
+            )
+        }
+        let stagedURL = stagingDirectory.appendingPathComponent(originalURL.lastPathComponent)
+        guard renamex_np(originalURL.path, stagedURL.path, UInt32(RENAME_EXCL)) == 0 else {
+            try? FileManager.default.removeItem(at: stagingDirectory)
+            throw StorageExplorerSafetyError.recycleFailed(
+                path: originalURL.path,
+                underlying: String(cString: strerror(errno))
+            )
+        }
+        let staged = StagedItem(
+            originalURL: originalURL,
+            stagedURL: stagedURL,
+            stagingDirectory: stagingDirectory
+        )
+        var status = stat()
+        guard lstat(stagedURL.path, &status) == 0,
+              item.fileIdentity.map({ $0.device == status.st_dev && $0.inode == status.st_ino }) ?? true,
+              item.isDirectory == (status.st_mode & S_IFMT == S_IFDIR)
+        else {
+            _ = restore(staged)
+            cleanupStagingDirectories([staged])
+            throw StorageExplorerSafetyError.blocked(
+                reason: "The item path changed while it was being prepared for Trash"
+            )
+        }
+        return staged
+    }
+
+    @discardableResult
+    private func restore(_ staged: StagedItem) -> Bool {
+        guard FileManager.default.fileExists(atPath: staged.stagedURL.path) else { return true }
+        return renamex_np(staged.stagedURL.path, staged.originalURL.path, UInt32(RENAME_EXCL)) == 0
+    }
+
+    private func restore(_ items: [StagedItem]) {
+        for item in items.reversed() { _ = restore(item) }
+        cleanupStagingDirectories(items)
+    }
+
+    private func cleanupStagingDirectories(_ items: [StagedItem]) {
+        for directory in Set(items.map(\.stagingDirectory)) {
+            // rmdir only removes an empty directory. Never recursively delete a staged item
+            // when rollback could not safely reclaim its original name.
+            _ = rmdir(directory.path)
+        }
+    }
 
     private func normalizePath(_ path: String) -> String {
         // Whitespace is part of a filename and must never retarget a removal.
@@ -366,4 +468,8 @@ public struct StorageExplorerSafetyPolicy: Sendable {
         guard path.count > 1, path.hasSuffix("/") else { return path }
         return String(path.dropLast())
     }
+}
+
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

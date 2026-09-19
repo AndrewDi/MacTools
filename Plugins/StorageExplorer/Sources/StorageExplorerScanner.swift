@@ -66,7 +66,9 @@ public final class StorageExplorerScanner: StorageExplorerScanning, @unchecked S
                                             size: directory ? 0 : max(entry.dataLength ?? 0, 0),
                                             allocatedSize: directory ? 0 : max(entry.allocatedSize ?? 0, 0),
                                             modificationDate: entry.modificationDate, parentPath: job.path,
-                                            fileIdentity: ScanWork.identity(for: entry))
+                                            fileIdentity: ScanWork.identity(for: entry),
+                                            observedFileSize: directory ? 0 : max(entry.dataLength ?? 0, 0),
+                                            hardLinkCount: directory ? 1 : (entry.linkCount ?? 1))
                                         item.isCloudPlaceholder = dataless
                                         item.isIncomplete = directory
                                         return StorageExplorerScannedEntry(item: item, metadata: entry)
@@ -113,8 +115,13 @@ private final class StorageExplorerDirectoryCache: @unchecked Sendable {
         lock.withLock {
             epoch += 1
             guard let paths else { entries.removeAll(); count = 0; return }
+            let changedPaths = Set(paths)
+            // Large FSEvent batches are cheaper and safer to handle as a full cache reset.
+            // This bounds synchronous prefix matching when builds or archive extraction touch
+            // thousands of files at once.
+            guard changedPaths.count <= 32 else { entries.removeAll(); count = 0; return }
             let stale = entries.keys.filter { directory in
-                paths.contains { path in
+                changedPaths.contains { path in
                     path == directory || path.hasPrefix(directory + "/") || directory.hasPrefix(path + "/")
                 }
             }

@@ -51,6 +51,21 @@ final class StorageExplorerProgressTests: XCTestCase {
         XCTAssertEqual(full.progress.cachedDirectories, 0)
     }
 
+    func testLargeChangeBatchClearsCacheWithoutComparingEveryEntry() async throws {
+        let file = root.appendingPathComponent("file.bin")
+        try Data(repeating: 0, count: 10).write(to: file)
+        let scanner = StorageExplorerScanner()
+        let first = try await scanner.scanSnapshot(rootURL: root) { _ in }
+        XCTAssertEqual(first.items[first.rootPath]?.size, 10)
+
+        try Data(repeating: 1, count: 200).write(to: file)
+        scanner.invalidate(paths: (0..<33).map { root.appendingPathComponent("event-\($0)").path })
+        let refreshed = try await scanner.scanSnapshot(rootURL: root) { _ in }
+
+        XCTAssertEqual(refreshed.items[refreshed.rootPath]?.size, 200)
+        XCTAssertEqual(refreshed.progress.cachedDirectories, 0)
+    }
+
     func testPrecancelledTaskAlwaysThrows() async throws {
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }

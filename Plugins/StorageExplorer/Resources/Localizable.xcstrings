@@ -4331,6 +4331,219 @@
           }
         }
       }
+    },
+    "storageExplorer.folderChangedNotice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The folder changed after the scan. Refresh before moving changed folders to Trash."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "扫描后文件夹发生了变化；移动已变化的文件夹前需要刷新。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "掃描後檔案夾發生了變更；將已變更的檔案夾移到垃圾桶前需要重新整理。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner wurde nach dem Scan geändert. Aktualisieren Sie, bevor Sie geänderte Ordner in den Papierkorb bewegen."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La carpeta cambió después del análisis. Actualiza antes de mover carpetas modificadas a la Papelera."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le dossier a changé après l’analyse. Actualisez avant de placer les dossiers modifiés dans la corbeille."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スキャン後にフォルダが変更されました。変更されたフォルダをゴミ箱に移動する前に更新してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "스캔 후 폴더가 변경되었습니다. 변경된 폴더를 휴지통으로 이동하기 전에 새로 고치십시오."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A pasta mudou após a análise. Atualize antes de mover pastas alteradas para o Lixo."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка изменилась после сканирования. Обновите данные перед перемещением изменённых папок в Корзину."
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تغير المجلد بعد الفحص. حدّث النتائج قبل نقل المجلدات المتغيرة إلى سلة المهملات."
+          }
+        }
+      }
+    },
+    "storageExplorer.symlinkReviewUnsupported": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symbolic links cannot be added to review. Manage the link itself in Finder."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "符号链接不能加入审阅；请在访达中管理链接本身。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "符號連結無法加入審閱；請在 Finder 中管理連結本身。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Symbolische Links können nicht zur Prüfung hinzugefügt werden. Verwalten Sie den Link im Finder."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Los enlaces simbólicos no se pueden añadir a la revisión. Gestiona el enlace en Finder."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les liens symboliques ne peuvent pas être ajoutés à la vérification. Gérez le lien dans le Finder."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "シンボリックリンクは確認対象に追加できません。リンク自体はFinderで管理してください。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "심볼릭 링크는 검토에 추가할 수 없습니다. 링크 자체는 Finder에서 관리하십시오."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Não é possível adicionar ligações simbólicas à revisão. Faça a gestão da ligação no Finder."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Символические ссылки нельзя добавить на проверку. Управляйте самой ссылкой в Finder."
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لا يمكن إضافة الروابط الرمزية إلى المراجعة. أدِر الرابط نفسه في Finder."
+          }
+        }
+      }
+    },
+    "storageExplorer.hardLinkNotice": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This file has %d hard links. Space is released only after the final link is removed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此文件有 %d 个硬链接；移除最后一个链接后才会释放空间。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此檔案有 %d 個硬連結；移除最後一個連結後才會釋放空間。"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Datei hat %d feste Links. Speicherplatz wird erst nach Entfernen des letzten Links freigegeben."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este archivo tiene %d enlaces físicos. El espacio se libera al eliminar el último enlace."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce fichier possède %d liens physiques. L’espace n’est libéré qu’après la suppression du dernier lien."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このファイルには%d個のハードリンクがあります。最後のリンクを削除した後にのみ容量が解放されます。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "이 파일에는 %d개의 하드 링크가 있습니다. 마지막 링크를 제거한 후에만 공간이 확보됩니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este ficheiro tem %d ligações físicas. O espaço só é libertado depois de remover a última ligação."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У этого файла %d жёстких ссылок. Место освободится только после удаления последней ссылки."
+          }
+        },
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "لهذا الملف %d من الروابط الثابتة. لا تتحرر المساحة إلا بعد إزالة الرابط الأخير."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

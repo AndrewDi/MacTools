@@ -17,6 +17,27 @@ final class MockTrashRecycler: StorageExplorerTrashRecycling, @unchecked Sendabl
     }
 }
 
+private final class ReplacingTrashRecycler: StorageExplorerTrashRecycling, @unchecked Sendable {
+    let originalURL: URL
+    private(set) var recycledURLs: [URL] = []
+    private(set) var recycledContents: Data?
+
+    init(originalURL: URL) {
+        self.originalURL = originalURL
+    }
+
+    func recycle(urls: [URL]) async throws -> StorageExplorerRecycleResult {
+        recycledURLs = urls
+        let stagedURL = try XCTUnwrap(urls.first)
+        recycledContents = try Data(contentsOf: stagedURL)
+        try Data("replacement".utf8).write(to: originalURL)
+        try FileManager.default.removeItem(at: stagedURL)
+        return StorageExplorerRecycleResult(
+            moved: [stagedURL: URL(fileURLWithPath: "/Users/dummy/.Trash/" + stagedURL.lastPathComponent)]
+        )
+    }
+}
+
 final class StorageExplorerSafetyPolicyTests: XCTestCase {
     private var tempDirectory: URL!
     private var mockRecycler: MockTrashRecycler!
@@ -253,5 +274,36 @@ final class StorageExplorerSafetyPolicyTests: XCTestCase {
             XCTAssertTrue(error is StorageExplorerSafetyError)
         }
         XCTAssertTrue(mockRecycler.recycledURLs.isEmpty)
+    }
+
+    func testVerifiedItemIsPrivatelyStagedBeforePathBasedTrashHandoff() async throws {
+        let original = tempDirectory.appendingPathComponent("payload.bin")
+        let originalContents = Data("verified original".utf8)
+        try originalContents.write(to: original)
+        var status = stat()
+        XCTAssertEqual(lstat(original.path, &status), 0)
+        let item = StorageItem(
+            name: original.lastPathComponent,
+            path: original.path,
+            url: original,
+            isDirectory: false,
+            size: Int64(originalContents.count),
+            fileIdentity: StorageFileInode(device: status.st_dev, inode: status.st_ino)
+        )
+        let replacingRecycler = ReplacingTrashRecycler(originalURL: original)
+        let stagingPolicy = StorageExplorerSafetyPolicy(
+            trashRecycler: replacingRecycler,
+            homeDirectory: "/Users/testuser"
+        )
+
+        let result = try await stagingPolicy.recycleItems([item], withinRoot: tempDirectory.path)
+
+        let stagedURL = try XCTUnwrap(replacingRecycler.recycledURLs.first)
+        XCTAssertNotEqual(stagedURL, original)
+        XCTAssertTrue(stagedURL.deletingLastPathComponent().lastPathComponent.hasPrefix(".mactools-trash-"))
+        XCTAssertEqual(replacingRecycler.recycledContents, originalContents)
+        XCTAssertEqual(try Data(contentsOf: original), Data("replacement".utf8))
+        XCTAssertNotNil(result.moved[original])
+        XCTAssertNil(result.moved[stagedURL])
     }
 }

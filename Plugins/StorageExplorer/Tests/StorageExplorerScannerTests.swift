@@ -91,6 +91,13 @@ final class StorageExplorerScannerTests: XCTestCase {
 
         // Root size should count file1 only once (15000 bytes), not twice (30000 bytes)
         XCTAssertEqual(rootItem.size, 15000)
+        let links = rootItem.children.flatMap { item in
+            item.isDirectory ? item.children : [item]
+        }.filter(\.isHardLinked)
+        XCTAssertEqual(links.count, 2)
+        XCTAssertTrue(links.allSatisfy { $0.observedFileSize == 15000 && $0.hardLinkCount == 2 })
+        XCTAssertEqual(links.filter { $0.size == 0 }.count, 1)
+        XCTAssertFalse(rootItem.isHardLinked)
     }
 
     func testSymlinkNotTraversed() async throws {

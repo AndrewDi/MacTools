@@ -89,4 +89,35 @@ final class StorageExplorerPresentationTests: XCTestCase {
         XCTAssertEqual(reduced.first { $0.isAggregate }?.bytes, 20)
     }
 
+    func testHierarchyColorKeysFollowStableSizeRankAndDescendantsInheritGroup() throws {
+        let root = "/fixture"
+        var snapshot = StorageExplorerSnapshot(rootPath: root)
+        snapshot.apply([
+            StorageItem(name: "fixture", path: root, url: URL(fileURLWithPath: root),
+                        isDirectory: true, size: 175, allocatedSize: 175),
+            StorageItem(name: "largest", path: root + "/largest", url: URL(fileURLWithPath: root + "/largest"),
+                        isDirectory: true, size: 100, allocatedSize: 100, parentPath: root),
+            StorageItem(name: "child", path: root + "/largest/child", url: URL(fileURLWithPath: root + "/largest/child"),
+                        isDirectory: false, size: 100, allocatedSize: 100, parentPath: root + "/largest"),
+            StorageItem(name: "middle", path: root + "/middle", url: URL(fileURLWithPath: root + "/middle"),
+                        isDirectory: false, size: 50, allocatedSize: 50, parentPath: root),
+            StorageItem(name: "smallest", path: root + "/smallest", url: URL(fileURLWithPath: root + "/smallest"),
+                        isDirectory: false, size: 25, allocatedSize: 25, parentPath: root)
+        ])
+
+        let nodes = StorageExplorerHierarchyLayout.make(
+            snapshot: snapshot,
+            directory: root,
+            metric: .allocated,
+            excluding: [],
+            otherName: "Other"
+        )
+
+        XCTAssertTrue(try XCTUnwrap(nodes.first { $0.item.name == "largest" }).colorKey.hasPrefix("size-rank:0:"))
+        XCTAssertTrue(try XCTUnwrap(nodes.first { $0.item.name == "middle" }).colorKey.hasPrefix("size-rank:1:"))
+        XCTAssertTrue(try XCTUnwrap(nodes.first { $0.item.name == "smallest" }).colorKey.hasPrefix("size-rank:2:"))
+        let largest = try XCTUnwrap(nodes.first { $0.item.name == "largest" })
+        XCTAssertEqual(largest.children.first?.colorKey, largest.colorKey)
+    }
+
 }
