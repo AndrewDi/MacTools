@@ -1137,6 +1137,77 @@
         }
       }
     },
+    "storageExplorer.aggregateReviewUnsupported": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "تجمع هذه الكتلة عدة عناصر أصغر ولا يمكن إضافتها للمراجعة كعنصر واحد."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dies fasst mehrere kleinere Objekte zusammen und kann nicht als einzelnes Objekt zur Überprüfung hinzugefügt werden."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This combines several smaller items and cannot be added to review as one item."
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esto agrupa varios elementos pequeños y no se puede añadir a la revisión como un solo elemento."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce bloc regroupe plusieurs petits éléments et ne peut pas être ajouté à l’examen comme un seul élément."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "複数の小さな項目をまとめた表示のため、1つの項目としてレビューに追加できません。"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "여러 작은 항목을 묶어 표시하므로 하나의 항목으로 검토에 추가할 수 없습니다."
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este bloco agrupa vários itens menores e não pode ser adicionado à revisão como um único item."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Этот блок объединяет несколько небольших объектов и не может быть добавлен на проверку как один объект."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这是多个较小项目的合并视图，不能作为单个项目加入审阅。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "這是多個較小項目的合併檢視，不能作為單一項目加入審閱。"
+          }
+        }
+      }
+    },
     "storageExplorer.other": {
       "extractionState": "manual",
       "localizations": {

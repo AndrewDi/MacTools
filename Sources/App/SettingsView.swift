@@ -4413,7 +4413,7 @@ private struct PluginWorkspacePage: View {
     let item: PluginSettingsPageItem
 
     var body: some View {
-        SettingsPageScaffold {
+        SettingsPageScaffold(widthPolicy: workspaceWidthPolicy) {
             switch item.workspaceScrolling {
             case .host:
                 ScrollView {
@@ -4458,10 +4458,22 @@ private struct PluginWorkspacePage: View {
         }
     }
 
+    private var workspaceWidthPolicy: SettingsPageWidthPolicy {
+        switch item.workspaceScrolling {
+        case .host:
+            .standard
+        case .selfManaged:
+            .expansive
+        }
+    }
+
+    @ViewBuilder
     private var introduction: some View {
-        SettingsPageIntroduction(
-            configuration: item.introductionConfiguration
-        )
+        if !item.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            SettingsPageIntroduction(
+                configuration: item.introductionConfiguration
+            )
+        }
     }
 
     @ViewBuilder

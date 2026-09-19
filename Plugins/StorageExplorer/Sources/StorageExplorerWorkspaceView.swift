@@ -1,11 +1,13 @@
 import AppKit
 import MacToolsPluginKit
+import QuickLook
 import SwiftUI
 
 public struct StorageExplorerWorkspaceView: View {
     @ObservedObject public var controller: StorageExplorerController
     public let localization: PluginLocalization
     @State private var showsInspector = false
+    @State private var quickLookURL: URL?
 
     public init(controller: StorageExplorerController,
                 localization: PluginLocalization = PluginLocalization(bundle: .main)) {
@@ -22,6 +24,13 @@ public struct StorageExplorerWorkspaceView: View {
             workspace(width: geometry.size.width)
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
+        .focusable(true, interactions: .activate)
+        .focusEffectDisabled()
+        .onKeyPress(.space) {
+            guard let item = controller.inspectedItem else { return .ignored }
+            return showQuickLook(for: item) ? .handled : .ignored
+        }
+        .quickLookPreview($quickLookURL)
     }
 
     private func workspace(width: CGFloat) -> some View {
@@ -77,11 +86,19 @@ public struct StorageExplorerWorkspaceView: View {
         return Group {
             if width >= 680 {
                 GeometryReader { geometry in
-                    HStack(spacing: 12) {
+                    HSplitView {
                         hierarchyTreemap(nodes: nodes)
-                            .frame(width: max(440, geometry.size.width * 0.82))
+                            .frame(
+                                minWidth: max(420, geometry.size.width * 0.52),
+                                idealWidth: geometry.size.width * 0.72,
+                                maxWidth: .infinity
+                            )
                         compactList
-                            .frame(maxWidth: .infinity)
+                            .frame(
+                                minWidth: 220,
+                                idealWidth: geometry.size.width * 0.28,
+                                maxWidth: .infinity
+                            )
                     }
                 }
             } else {
@@ -102,7 +119,12 @@ public struct StorageExplorerWorkspaceView: View {
             emptyLabel: text("noSizedItems", "尚无可显示的大小"),
             addReviewLabel: text("addToReview", "加入审阅"),
             unavailableReviewLabel: text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。"),
+            aggregateReviewLabel: text(
+                "aggregateReviewUnsupported",
+                "这是多个较小项目的合并视图，不能作为单个项目加入审阅。"
+            ),
             open: controller.drillDown,
+            preview: showQuickLook,
             toggleReview: { controller.toggleSelection(path: $0.path) },
             canReview: controller.canStage
         )
@@ -137,7 +159,10 @@ public struct StorageExplorerWorkspaceView: View {
                     ForEach(Array(controller.navigationStack.enumerated()), id: \.element.path) { index, item in
                         if index > 0 { Image(systemName: "chevron.right").foregroundStyle(.tertiary) }
                         Button(item.name.isEmpty ? "/" : item.name) { controller.navigateToBreadcrumb(at: index) }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color.secondary.opacity(0.09), in: Capsule())
                             .help(String(format: text("openPath", "打开 %@"), item.path))
                     }
                 }
@@ -226,6 +251,11 @@ public struct StorageExplorerWorkspaceView: View {
                         enabled: controller.canStage(row.item),
                         path: row.item.path
                     ))
+                    .focusable(true, interactions: .activate)
+                    .focusEffectDisabled()
+                    .onKeyPress(.space) {
+                        showQuickLook(for: row.item) ? .handled : .ignored
+                    }
                     .help(row.item.isSymlink
                         ? text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。")
                         : row.item.path)
@@ -238,6 +268,18 @@ public struct StorageExplorerWorkspaceView: View {
 
     private func localizedName(_ row: StorageExplorerRow) -> String {
         row.id == "type:package" ? text("applicationsAndPackages", "应用与软件包") : row.name
+    }
+
+    private func showQuickLook(for item: StorageItem) -> Bool {
+        guard !item.isDirectory,
+              !item.isSymlink,
+              !item.isCloudPlaceholder,
+              !item.path.hasPrefix("type:") else {
+            return false
+        }
+        controller.selectedPath = item.path
+        quickLookURL = item.url
+        return true
     }
 
     private var inspector: some View {
