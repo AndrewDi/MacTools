@@ -1,13 +1,13 @@
 import AppKit
 import MacToolsPluginKit
-import QuickLook
+import Quartz
 import SwiftUI
 
 public struct StorageExplorerWorkspaceView: View {
     @ObservedObject public var controller: StorageExplorerController
     public let localization: PluginLocalization
     @State private var showsInspector = false
-    @State private var quickLookURL: URL?
+    @StateObject private var quickLookPresenter = StorageExplorerQuickLookPresenter()
 
     public init(controller: StorageExplorerController,
                 localization: PluginLocalization = PluginLocalization(bundle: .main)) {
@@ -30,7 +30,6 @@ public struct StorageExplorerWorkspaceView: View {
             guard let item = controller.inspectedItem else { return .ignored }
             return showQuickLook(for: item) ? .handled : .ignored
         }
-        .quickLookPreview($quickLookURL)
     }
 
     private func workspace(width: CGFloat) -> some View {
@@ -278,7 +277,7 @@ public struct StorageExplorerWorkspaceView: View {
             return false
         }
         controller.selectedPath = item.path
-        quickLookURL = item.url
+        quickLookPresenter.show(item.url)
         return true
     }
 
@@ -430,6 +429,28 @@ public struct StorageExplorerWorkspaceView: View {
             }
         }.padding(24).frame(width: 540)
             .interactiveDismissDisabled(controller.isExecutingTrash)
+    }
+}
+
+@MainActor
+private final class StorageExplorerQuickLookPresenter: NSObject, ObservableObject,
+    @preconcurrency QLPreviewPanelDataSource {
+    private var previewURL: URL?
+
+    func show(_ url: URL) {
+        previewURL = url
+        guard let panel = QLPreviewPanel.shared() else { return }
+        panel.dataSource = self
+        panel.reloadData()
+        panel.makeKeyAndOrderFront(nil)
+    }
+
+    func numberOfPreviewItems(in panel: QLPreviewPanel!) -> Int {
+        previewURL == nil ? 0 : 1
+    }
+
+    func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem! {
+        previewURL as NSURL?
     }
 }
 
