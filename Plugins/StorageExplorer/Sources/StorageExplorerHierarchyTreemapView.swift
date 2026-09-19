@@ -18,8 +18,11 @@ struct StorageExplorerHierarchyTreemapView: View {
             let key = LayoutKey(nodes: nodes, size: geometry.size)
             ZStack(alignment: .topLeading) {
                 Canvas { context, _ in
-                    for entry in rectangles {
+                    for entry in rectangles where entry.id != hoveredID {
                         draw(entry, context: &context)
+                    }
+                    if let hovered = rectangles.last(where: { $0.id == hoveredID }) {
+                        draw(hovered, context: &context)
                     }
                 }
                 .accessibilityHidden(true)
@@ -102,14 +105,14 @@ struct StorageExplorerHierarchyTreemapView: View {
         let brightness = max(0.5, 0.88 - Double(entry.depth) * 0.10)
         let isHovered = hoveredID == entry.id
         let hasHover = hoveredID != nil
-        context.fill(shape, with: .color(base.opacity(brightness * (hasHover && !isHovered ? 0.62 : 1))))
+        context.fill(shape, with: .color(base.opacity(brightness * (hasHover && !isHovered ? 0.48 : 1))))
         if isHovered {
-            context.fill(shape, with: .color(.white.opacity(0.18)))
+            context.fill(shape, with: .color(.white.opacity(0.12)))
         }
         context.stroke(
             shape,
             with: .color(isHovered ? .white : .white.opacity(entry.depth == 0 ? 0.72 : 0.42)),
-            lineWidth: isHovered ? 4 : 1
+            lineWidth: isHovered ? 3.5 : 1
         )
         if isHovered {
             context.stroke(shape, with: .color(.black.opacity(0.45)), lineWidth: 1)
@@ -140,7 +143,19 @@ struct StorageExplorerHierarchyTreemapView: View {
     }
 
     private func color(for key: String) -> Color {
-        let palette: [Color] = [.red, .orange, .yellow, .green, .teal, .blue, .indigo, .purple]
+        // A muted Morandi palette keeps neighboring branches distinct without the visual
+        // noise of fully saturated system colors. Rank remains meaningful: the largest
+        // branches start with dusty red and progress through warm, then cool hues.
+        let palette: [Color] = [
+            Color(red: 0.68, green: 0.34, blue: 0.38),
+            Color(red: 0.69, green: 0.46, blue: 0.37),
+            Color(red: 0.64, green: 0.54, blue: 0.36),
+            Color(red: 0.42, green: 0.54, blue: 0.40),
+            Color(red: 0.34, green: 0.52, blue: 0.51),
+            Color(red: 0.39, green: 0.48, blue: 0.61),
+            Color(red: 0.48, green: 0.43, blue: 0.61),
+            Color(red: 0.56, green: 0.41, blue: 0.51),
+        ]
         if key.hasPrefix("size-rank:"),
            let rank = Int(key.dropFirst("size-rank:".count).prefix { $0.isNumber }) {
             return palette[min(rank, palette.count - 1)]

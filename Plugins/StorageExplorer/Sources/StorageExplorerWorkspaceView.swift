@@ -6,7 +6,6 @@ public struct StorageExplorerWorkspaceView: View {
     @ObservedObject public var controller: StorageExplorerController
     public let localization: PluginLocalization
     @State private var showsInspector = false
-    @State private var showsSkippedDetails = false
 
     public init(controller: StorageExplorerController,
                 localization: PluginLocalization = PluginLocalization(bundle: .main)) {
@@ -27,7 +26,9 @@ public struct StorageExplorerWorkspaceView: View {
 
     private func workspace(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-            controls
+            if controller.rootItem == nil {
+                controls
+            }
             if controller.rootItem != nil {
                 navigation
                 if controller.snapshotHasObservedChanges {
@@ -112,18 +113,9 @@ public struct StorageExplorerWorkspaceView: View {
         HStack {
             Button { controller.scanHomeFolder() } label: { Label(text("homeFolder", "个人目录"), systemImage: "house") }
             Button { controller.selectFolderAndScan() } label: { Label(text("selectFolder", "选择文件夹…"), systemImage: "folder.badge.plus") }
-            if controller.rootItem != nil {
-                Divider().frame(height: 18)
-                scanSummary
-            }
             Spacer()
             if controller.isScanning {
                 Button(text("cancel", "取消"), role: .cancel) { controller.cancelScan() }
-            } else if let root = controller.scanRootURL {
-                Button { controller.startScan(at: root) } label: { Label(text("refresh", "刷新"), systemImage: "arrow.clockwise") }
-                    .contextMenu {
-                        Button(text("rescan", "重新扫描")) { controller.startScan(at: root, force: true) }
-                    }
             }
         }
         .buttonStyle(.bordered).controlSize(.small)
@@ -152,50 +144,43 @@ public struct StorageExplorerWorkspaceView: View {
                 .font(PluginSettingsTheme.Typography.rowTitle)
             }
             Spacer(minLength: 6)
-            Text(text("allocatedSize", "占用空间"))
-                .font(PluginSettingsTheme.Typography.rowDescription)
-                .foregroundStyle(.secondary)
             Button { showsInspector.toggle() } label: { Image(systemName: "info.circle") }
                 .buttonStyle(.borderless)
                 .help(text("details", "详细信息"))
                 .popover(isPresented: $showsInspector) { inspector.frame(width: 300, height: 430).padding(12) }
+            scanActions
         }
     }
 
-    private var scanSummary: some View {
-        HStack(spacing: 10) {
-            Text(ByteCountFormatter.string(fromByteCount: controller.status.progress.allocatedBytesScanned, countStyle: .file))
-                .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-            Text(String(format: text("filesScannedFormat", "已扫描 %d 个项目"), controller.status.progress.filesScanned))
-            Text(String(format: "%.1f s", controller.status.progress.elapsed))
-            if controller.status.progress.skippedCount > 0 {
-                Button { showsSkippedDetails.toggle() } label: {
-                    Label(
-                        String(format: text("skippedCount", "跳过 %d 项"), controller.status.progress.skippedCount),
-                        systemImage: "exclamationmark.circle"
-                    )
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.orange)
-                .popover(isPresented: $showsSkippedDetails) { skippedDetails }
+    private var scanActions: some View {
+        Menu {
+            Button { controller.scanHomeFolder() } label: {
+                Label(text("homeFolder", "个人目录"), systemImage: "house")
             }
+            Button { controller.selectFolderAndScan() } label: {
+                Label(text("selectFolder", "选择文件夹…"), systemImage: "folder.badge.plus")
+            }
+            if let root = controller.scanRootURL {
+                Divider()
+                if controller.isScanning {
+                    Button(text("cancel", "取消"), role: .cancel) { controller.cancelScan() }
+                } else {
+                    Button { controller.startScan(at: root) } label: {
+                        Label(text("refresh", "刷新"), systemImage: "arrow.clockwise")
+                    }
+                    Button { controller.startScan(at: root, force: true) } label: {
+                        Label(text("rescan", "重新扫描"), systemImage: "arrow.triangle.2.circlepath")
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
         }
-        .font(PluginSettingsTheme.Typography.rowDescription)
-        .monospacedDigit()
-        .lineLimit(1)
-    }
-
-    private var skippedDetails: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(text("skippedDetailsTitle", "未扫描的项目")).font(.headline)
-            Text(String(format: text(
-                "skippedDetailsMessage",
-                "%d 个项目因权限、云端占位文件或文件系统边界而被跳过。显示的总大小可能偏低。"
-            ), controller.status.progress.skippedCount))
-            .font(.callout).foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(14).frame(width: 330)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(text("selectFolder", "选择文件夹…"))
+        .disabled(controller.isExecutingTrash)
     }
 
     private var compactList: some View {
@@ -260,6 +245,8 @@ public struct StorageExplorerWorkspaceView: View {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
                 Label(text("details", "详细信息"), systemImage: "info.circle")
                     .font(PluginSettingsTheme.Typography.sectionTitle).foregroundStyle(.secondary)
+                scanDetails
+                Divider()
                 if let item = controller.inspectedItem {
                     Text(item.path == "type:package" ? text("applicationsAndPackages", "应用与软件包") : item.name)
                         .font(PluginSettingsTheme.Typography.emphasizedRowTitle).textSelection(.enabled)
@@ -301,6 +288,35 @@ public struct StorageExplorerWorkspaceView: View {
             }.padding(.leading, 12).padding(.trailing, 4)
         }
         .buttonStyle(.bordered).controlSize(.small)
+    }
+
+    private var scanDetails: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            detail(
+                text("allocatedSize", "占用空间"),
+                ByteCountFormatter.string(
+                    fromByteCount: controller.status.progress.allocatedBytesScanned,
+                    countStyle: .file
+                )
+            )
+            Text(String(format: text("filesScannedFormat", "已扫描 %d 个项目"), controller.status.progress.filesScanned))
+            Text(String(format: "%.1f s", controller.status.progress.elapsed))
+            if controller.status.progress.skippedCount > 0 {
+                Label(
+                    String(format: text("skippedCount", "跳过 %d 项"), controller.status.progress.skippedCount),
+                    systemImage: "exclamationmark.circle"
+                )
+                .foregroundStyle(.orange)
+                Text(String(format: text(
+                    "skippedDetailsMessage",
+                    "%d 个项目因权限、云端占位文件或文件系统边界而被跳过。显示的总大小可能偏低。"
+                ), controller.status.progress.skippedCount))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .font(PluginSettingsTheme.Typography.rowDescription)
+        .monospacedDigit()
     }
 
     private func detail(_ title: String, _ value: String) -> some View {
