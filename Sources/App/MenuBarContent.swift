@@ -595,7 +595,8 @@ struct MenuBarContent: View {
     @StateObject private var deferredActionDispatcher = DeferredPanelActionDispatcher()
     @Environment(\.menuBarPanelTheme) private var theme
 
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
+    @EnvironmentObject private var presentation: MenuBarPanelPresentationModel
     let contentBodyHeight: CGFloat
     let maximumFeatureListHeight: CGFloat
     let isPanelVisible: Bool
@@ -612,6 +613,7 @@ struct MenuBarContent: View {
     private var items: [PluginPanelItem] { suppliedItems ?? pluginHost.panelItems }
 
     var body: some View {
+        let _ = presentation.revision
         content
         .background(
             MenuWindowAccessor { window in

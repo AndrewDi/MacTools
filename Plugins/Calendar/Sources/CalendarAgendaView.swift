@@ -55,7 +55,7 @@ struct CalendarAgendaView: View {
                 ScrollView(.vertical) {
                     agendaContent
                 }
-                .scrollIndicators(.automatic)
+                .scrollIndicators(.never)
                 .onChange(of: dates) { _, _ in
                     if let firstDay = days.first { proxy.scrollTo(firstDay.id, anchor: .top) }
                 }

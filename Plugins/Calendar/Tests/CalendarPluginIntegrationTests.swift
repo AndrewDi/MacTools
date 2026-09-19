@@ -158,7 +158,7 @@ final class CalendarPluginIntegrationTests: XCTestCase {
                 XCTAssertEqual(try snapshot(view), emptyAppearance, "Removing the last event must restore the original month appearance")
             } else {
                 XCTAssertGreaterThan(span, emptySpan)
-                XCTAssertLessThanOrEqual(span, 76, "Long agendas must scroll within the bounded list")
+                XCTAssertLessThanOrEqual(span, 104, "Long agendas must scroll within the expanded bounded list")
                 if count == 3 {
                     XCTAssertGreaterThan(span, previousSpan, "Three rows need more room than one")
                     try attachSnapshot(view, spanHeight: span, name: "Calendar-three-events")

@@ -969,10 +969,10 @@ final class ClipboardHistoryPluginTests: XCTestCase {
             accessibilityTrusted: { true }
         )
         plugin.savedLibraryController.start()
-        for _ in 0..<100 where !plugin.savedLibraryController.isLoaded {
-            await Task.yield()
+        let didLoadSavedLibrary = await waitUntil {
+            plugin.savedLibraryController.isLoaded
         }
-        XCTAssertTrue(plugin.savedLibraryController.isLoaded)
+        XCTAssertTrue(didLoadSavedLibrary)
 
         plugin.setKeywordExpansionEnabledForTesting(true)
         let attemptsBeforeKeyword = plugin.keywordExpansionStartAttemptCountForTesting
@@ -1012,9 +1012,8 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         }
 
         plugin.handleShortcutAction(id: "private-copy")
-        for _ in 0..<100 where sender.sendCount == 0 {
-            await Task.yield()
-        }
+        let didSendCopy = await waitUntil { sender.sendCount == 1 }
+        XCTAssertTrue(didSendCopy)
         plugin.controller.processPasteboardChange()
 
         XCTAssertEqual(sender.sendCount, 1)
@@ -1053,11 +1052,9 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         await waitUntilLoaded(plugin.controller)
 
         plugin.handleShortcutAction(id: "private-copy")
-        for _ in 0..<100 where !permissionWasRequested {
-            await Task.yield()
-        }
+        let didRequestPermission = await waitUntil { permissionWasRequested }
 
-        XCTAssertTrue(permissionWasRequested)
+        XCTAssertTrue(didRequestPermission)
         XCTAssertEqual(guidancePermissionID, "accessibility")
         XCTAssertEqual(sender.sendCount, 0)
         XCTAssertFalse(plugin.controller.isIgnoringNextCopy)
@@ -1331,10 +1328,9 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         )
 
         plugin.handleShortcutAction(id: "paste-clipboard-as-plain-text")
-        for _ in 0..<100 where sender.sendCount == 0 {
-            await Task.yield()
-        }
+        let didSendPaste = await waitUntil { sender.sendCount == 1 }
 
+        XCTAssertTrue(didSendPaste)
         XCTAssertEqual(sender.sendCount, 1)
         XCTAssertEqual(sender.targetProcessIdentifiers, [1234])
         XCTAssertEqual(pasteboard.plainTextWriteCount, 1)
@@ -1412,10 +1408,9 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         )
 
         plugin.handleShortcutAction(id: "paste-clipboard-as-plain-text")
-        for _ in 0..<100 where hud.failures.isEmpty {
-            await Task.yield()
-        }
+        let didShowFailure = await waitUntil { !hud.failures.isEmpty }
 
+        XCTAssertTrue(didShowFailure)
         XCTAssertEqual(sender.sendCount, 0)
         XCTAssertEqual(pasteboard.plainTextWriteCount, 0)
         XCTAssertEqual(hud.failures, ["剪贴板中没有可粘贴的文本"])
@@ -1823,16 +1818,14 @@ final class ClipboardHistoryPluginTests: XCTestCase {
             privacyHUDPresenter: hud
         )
         plugin.controller.start()
-        for _ in 0..<100 where !persistence.loadStarted {
-            await Task.yield()
-        }
+        let didStartLoading = await waitUntil { persistence.loadStarted }
+        XCTAssertTrue(didStartLoading)
 
         plugin.handleShortcutAction(id: "ignore-next-copy")
         plugin.handleShortcutAction(id: "private-copy")
-        for _ in 0..<100 where hud.failures.count < 2 {
-            await Task.yield()
-        }
+        let didShowFailures = await waitUntil { hud.failures.count == 2 }
 
+        XCTAssertTrue(didShowFailures)
         XCTAssertEqual(sender.sendCount, 0)
         XCTAssertFalse(plugin.controller.isIgnoringNextCopy)
         XCTAssertEqual(hud.events, [])
@@ -1890,10 +1883,8 @@ final class ClipboardHistoryPluginTests: XCTestCase {
             result = await handle.result()
         }
 
-        for _ in 0..<100 where !persistence.saveStarted {
-            await Task.yield()
-        }
-        XCTAssertTrue(persistence.saveStarted)
+        let didStartSaving = await waitUntil { persistence.saveStarted }
+        XCTAssertTrue(didStartSaving)
         XCTAssertNil(result)
         XCTAssertTrue(plugin.controller.isClearingHistory)
 
@@ -1915,9 +1906,8 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         XCTAssertEqual(plugin.controller.items, [originalItem])
 
         plugin.handleShortcutAction(id: "private-copy")
-        for _ in 0..<100 where hud.failures.isEmpty {
-            await Task.yield()
-        }
+        let didShowFailure = await waitUntil { !hud.failures.isEmpty }
+        XCTAssertTrue(didShowFailure)
         XCTAssertEqual(sender.sendCount, 0)
         XCTAssertEqual(hud.failures, ["剪贴板历史尚未准备好"])
 
@@ -2084,14 +2074,9 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         )
     }
 
-    private func waitUntilLoaded(
-        _ controller: ClipboardHistoryController,
-        file: StaticString = #filePath,
-        line: UInt = #line
-    ) async {
-        // Yield counts do not bound how long the persistence worker takes to load.
-        let loaded = await waitUntil { controller.isLoaded }
-        XCTAssertTrue(loaded, "History did not finish loading", file: file, line: line)
+    private func waitUntilLoaded(_ controller: ClipboardHistoryController) async {
+        let didLoad = await waitUntil { controller.isLoaded }
+        XCTAssertTrue(didLoad)
     }
 
     private func waitUntil(
