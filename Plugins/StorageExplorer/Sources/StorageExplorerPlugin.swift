@@ -73,6 +73,7 @@ public final class StorageExplorerPlugin: MacToolsPlugin, PluginSettingsPresenti
 
     public var settingsPage: PluginSettingsPage? {
         .workspace(
+            description: "",
             scrolling: .selfManaged
         ) { [weak self] _ in
             if let self {
