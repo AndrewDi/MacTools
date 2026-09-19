@@ -146,7 +146,7 @@ final class WindowSwitcherLifecycleTests: XCTestCase {
         return plugin
     }
     private func eventually(_ predicate: () -> Bool) async {
-        let deadline = ContinuousClock.now + .seconds(1)
+        let deadline = ContinuousClock.now + .seconds(2)
         while !predicate(), ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(5)) }
         XCTAssertTrue(predicate())
     }

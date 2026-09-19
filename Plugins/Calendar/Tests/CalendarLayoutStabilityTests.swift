@@ -95,7 +95,7 @@ final class CalendarLayoutStabilityTests: XCTestCase {
     func testLongAgendaUsesScrollableViewportAndShortAgendaReturnsToIntrinsicHeight() async throws {
         let fixture = try makeFixture()
         defer { fixture.close() }
-        let window = NSWindow(contentRect: NSRect(x: 400, y: 100, width: 304, height: 608),
+        let window = NSWindow(contentRect: NSRect(x: 400, y: 100, width: 304, height: 824),
             styleMask: [.borderless], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = fixture.view
@@ -109,21 +109,40 @@ final class CalendarLayoutStabilityTests: XCTestCase {
             CalendarEventInput(id: "long-\(index)", title: "Event \(index)", startDate: start,
                 endDate: start.addingTimeInterval(3600), isAllDay: false, color: .accent)
         }
-        fixture.service.complete(0, with: .success(events))
+        fixture.service.complete(0, with: .success(Array(events.prefix(10))))
+        try await settle(fixture.view)
+        let tenEventHeight = try XCTUnwrap(fixture.heights.values.last)
+        XCTAssertTrue(descendants(fixture.view).compactMap { $0 as? NSScrollView }.isEmpty,
+            "Ten regular events should fit before the agenda needs to scroll")
+
+        fixture.model.refresh()
+        try await waitForRequests(2, in: fixture.service)
+        fixture.service.complete(1, with: .success(events))
         try await settle(fixture.view)
         window.displayIfNeeded()
         let longHeight = try XCTUnwrap(fixture.heights.values.last)
+        XCTAssertGreaterThan(longHeight, tenEventHeight)
         let scrollView = try XCTUnwrap(descendants(fixture.view).compactMap { $0 as? NSScrollView }.first)
         let document = try XCTUnwrap(scrollView.documentView)
         XCTAssertEqual(scrollView.contentSize.height, CalendarComponentLayout.maximumAgendaListHeight, accuracy: 1)
+        XCTAssertFalse(scrollView.hasVerticalScroller)
+        XCTAssertFalse(scrollView.hasHorizontalScroller)
+        scrollView.flashScrollers()
+        XCTAssertFalse(hasVisibleScroller(scrollView.verticalScroller), "Scrolling must not display a vertical scrollbar")
+        XCTAssertFalse(hasVisibleScroller(scrollView.horizontalScroller))
+        scrollView.scrollerStyle = .legacy
+        scrollView.flashScrollers()
+        XCTAssertFalse(hasVisibleScroller(scrollView.verticalScroller), "The scrollbar must also stay hidden with legacy scrollers")
+        XCTAssertEqual(scrollView.contentSize.width, scrollView.bounds.width, accuracy: 1,
+            "Hidden scrollbars must not reserve a gutter beside the events")
         XCTAssertGreaterThan(document.bounds.height, scrollView.contentSize.height)
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: document.bounds.maxY - scrollView.contentSize.height))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         XCTAssertGreaterThan(scrollView.documentVisibleRect.minY, 0, "Events below the cap must remain scrollable")
 
         fixture.model.refresh()
-        try await waitForRequests(2, in: fixture.service)
-        fixture.service.complete(1, with: .success(Array(fixture.events.prefix(1))))
+        try await waitForRequests(3, in: fixture.service)
+        fixture.service.complete(2, with: .success(Array(fixture.events.prefix(1))))
         try await settle(fixture.view)
         XCTAssertLessThan(try XCTUnwrap(fixture.heights.values.last), longHeight)
         XCTAssertTrue(descendants(fixture.view).compactMap { $0 as? NSScrollView }.isEmpty)
@@ -131,6 +150,11 @@ final class CalendarLayoutStabilityTests: XCTestCase {
 
     private func descendants(_ view: NSView) -> [NSView] {
         [view] + view.subviews.flatMap(descendants)
+    }
+
+    private func hasVisibleScroller(_ scroller: NSScroller?) -> Bool {
+        guard let scroller, scroller.window != nil else { return false }
+        return !scroller.isHiddenOrHasHiddenAncestor && scroller.alphaValue > 0
     }
 
     private func makeFixture() throws -> Fixture {

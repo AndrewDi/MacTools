@@ -11,7 +11,8 @@ enum CalendarComponentLayout {
     static let dayCellSize: CGFloat = 36
     static let cornerRadius: CGFloat = PluginComponentPanelLayoutMetrics.cardCornerRadius
 
-    static let maximumAgendaListHeight: CGFloat = 256
+    // Allow roughly ten regular event rows, including their date heading.
+    static let maximumAgendaListHeight: CGFloat = 480
 
     static func estimatedContentHeight(showsRecentAgenda: Bool, dayCount: Int, eventCount: Int) -> CGFloat {
         let monthHeight = contentPadding * 2 + headerHeight + weekdayHeight
@@ -272,6 +273,7 @@ struct CalendarDayCell: View {
     let onOpen: () -> Void
 
     @Environment(\.pluginComponentTheme) private var theme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         Button(action: onOpen) {
@@ -309,7 +311,7 @@ struct CalendarDayCell: View {
             }
             .overlay(alignment: .topTrailing) {
                 if let holidayKind = day.holidayKind {
-                    CalendarHolidayBadge(kind: holidayKind, localization: localization)
+                    CalendarHolidayBadge(kind: holidayKind, localization: localization, contrast: contrast)
                         .offset(x: 2, y: -2)
                 }
             }
@@ -371,17 +373,78 @@ struct CalendarTodayOutline: View {
     }
 }
 
-private struct CalendarHolidayBadge: View {
+struct CalendarHolidayBadge: View {
     let kind: CalendarHolidayKind
     let localization: PluginLocalization
-    @Environment(\.pluginComponentTheme) private var theme
+    let contrast: ColorSchemeContrast
+    @Environment(\.self) private var environment
 
     var body: some View {
+        let colors = CalendarHolidayBadgeColors(kind: kind, environment: environment, contrast: contrast)
         Text(kind.badgeText(localization: localization))
             .font(.system(size: 7, weight: .bold))
-            .foregroundStyle(theme.text.primary)
+            .foregroundStyle(colors.foreground)
             .frame(width: 12, height: 12)
-            .background(theme.surfaces.chip, in: Circle())
+            .background(colors.background, in: Circle())
+    }
+}
+
+struct CalendarHolidayBadgeColors {
+    let foreground: Color
+    let background: Color
+
+    init(kind: CalendarHolidayKind, environment: EnvironmentValues, contrast: ColorSchemeContrast) {
+        let theme = environment.pluginComponentTheme
+        let accent = (kind == .holiday ? theme.dataSeries.tertiary : theme.dataSeries.secondary)
+            .resolve(in: environment)
+        let panel = theme.surfaces.panel.resolve(in: environment)
+        let card = theme.surfaces.card.resolve(in: environment)
+        let surface = Self.mix(panel, card, amount: card.opacity)
+        var fill = Self.mix(surface, accent, amount: Float(theme.interaction.subtleTintOpacity))
+        let black = Color.Resolved(red: 0, green: 0, blue: 0)
+        let white = Color.Resolved(red: 1, green: 1, blue: 1)
+        let target = Self.contrast(black, fill) > Self.contrast(white, fill) ? black : white
+        let opposite = target == black ? white : black
+        let minimum: Float = contrast == .increased ? 7.1 : 4.6
+
+        // Leave contrast headroom so brighter text can retain its category hue.
+        // An opaque fill also keeps contrast stable while the date is hovered.
+        fill = Self.adjust(fill, toward: opposite, against: target, minimum: minimum * 1.4)
+        foreground = Color(Self.adjust(accent, toward: target, against: fill, minimum: minimum))
+        background = Color(fill)
+    }
+
+    private static func adjust(
+        _ color: Color.Resolved, toward target: Color.Resolved,
+        against background: Color.Resolved, minimum: Float
+    ) -> Color.Resolved {
+        guard contrast(color, background) < minimum else { return color }
+        var lower: Float = 0
+        var upper: Float = 1
+        for _ in 0..<12 {
+            let amount = (lower + upper) / 2
+            if contrast(mix(color, target, amount: amount), background) < minimum {
+                lower = amount
+            } else {
+                upper = amount
+            }
+        }
+        return mix(color, target, amount: upper)
+    }
+
+    private static func mix(_ base: Color.Resolved, _ tint: Color.Resolved, amount: Float) -> Color.Resolved {
+        Color.Resolved(red: base.red + (tint.red - base.red) * amount,
+                       green: base.green + (tint.green - base.green) * amount,
+                       blue: base.blue + (tint.blue - base.blue) * amount)
+    }
+
+    private static func contrast(_ first: Color.Resolved, _ second: Color.Resolved) -> Float {
+        func luminance(_ color: Color.Resolved) -> Float {
+            0.2126 * color.linearRed + 0.7152 * color.linearGreen + 0.0722 * color.linearBlue
+        }
+        let first = luminance(first)
+        let second = luminance(second)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
     }
 }
 

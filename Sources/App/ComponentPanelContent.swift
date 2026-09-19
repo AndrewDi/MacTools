@@ -685,7 +685,7 @@ private struct ComponentDetailPanelView: View {
 
             content
         }
-        .padding(MenuBarPanelLayout.outerPadding)
+        .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background { MenuBarPanelBackground() }
         .clipShape(

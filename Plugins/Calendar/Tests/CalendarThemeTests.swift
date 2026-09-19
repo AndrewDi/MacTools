@@ -53,16 +53,61 @@ final class CalendarThemeTests: XCTestCase {
         }
     }
 
-    func testHolidayBadgeTextKeepsThemeContrast() throws {
-        for fixture in themes {
+    func testHolidayBadgesRemainDistinctAndReadable() throws {
+        let systemThemes = [ColorScheme.light, .dark].flatMap { scheme in
+            [ColorSchemeContrast.standard, .increased].map { contrast in
+                ThemeFixture(name: "System-\(scheme)-\(contrast)",
+                    theme: .system(colorScheme: scheme, contrast: contrast), scheme: scheme, contrast: contrast)
+            }
+        }
+        for fixture in themes + systemThemes {
+            var environment = EnvironmentValues()
+            environment.pluginComponentTheme = fixture.theme
+            environment.colorScheme = fixture.scheme
             for kind in [CalendarHolidayKind.holiday, .workday] {
-                let bitmap = try render(CalendarDayCell(day: makeDay(isToday: false, holiday: kind),
-                    isHovered: false, localization: .init(bundle: .main), onOpen: {})
-                    .frame(width: 36, height: 36).padding(4),
-                    size: NSSize(width: 44, height: 44), fixture: fixture)
-                let background = try pixel(bitmap, at: NSPoint(x: 36, y: 3.5), width: 44)
-                XCTAssertGreaterThanOrEqual(try rgb(NSColor(fixture.theme.text.primary)).contrastRatio(with: rgb(background)),
-                    fixture.contrast == .increased ? 6.98 : 4.48, "\(fixture.name): \(kind) badge contrast")
+                let colors = CalendarHolidayBadgeColors(kind: kind, environment: environment, contrast: fixture.contrast)
+                XCTAssertGreaterThanOrEqual(
+                    try rgb(NSColor(colors.foreground)).contrastRatio(with: rgb(NSColor(colors.background))),
+                    fixture.contrast == .increased ? 6.98 : 4.48, "\(fixture.name): \(kind) text contrast")
+            }
+            for hovered in [false, true] {
+                let bitmap = try render(HStack(spacing: 0) {
+                    ForEach([CalendarHolidayKind.holiday, .workday], id: \.rawValue) { kind in
+                        CalendarDayCell(day: self.makeDay(isToday: false),
+                            isHovered: hovered, localization: .init(bundle: .main), onOpen: {})
+                            .frame(width: 36, height: 36)
+                            .overlay(alignment: .topTrailing) {
+                                // NSHostingView.appearance does not set SwiftUI's contrast environment.
+                                CalendarHolidayBadge(kind: kind, localization: .init(bundle: .main),
+                                    contrast: fixture.contrast)
+                                    .offset(x: 2, y: -2)
+                            }
+                            .padding(4)
+                    }
+                }, size: NSSize(width: 88, height: 44), fixture: fixture)
+                var fills: [NSColor] = []
+                var labels: [NSColor] = []
+                for offset in [CGFloat(0), 44] {
+                    let background = try pixel(bitmap, at: NSPoint(x: 36 + offset, y: 3.5), width: 88)
+                    let foreground = try strongestTextColor(bitmap, background: background,
+                        region: CGRect(x: 33 + offset, y: 5, width: 7, height: 7), width: 88)
+                    // Antialiasing blends the seven-point glyphs; test their intended contrast above.
+                    XCTAssertGreaterThan(try rgb(foreground).contrastRatio(with: rgb(background)), 3,
+                        "\(fixture.name), hovered: \(hovered): Badge text must remain visible")
+                    fills.append(background)
+                    labels.append(foreground)
+                }
+                XCTAssertGreaterThan(colorDistance(fills[0], fills[1]), 0.02,
+                    "\(fixture.name): Holiday and workday fills must remain distinct")
+                XCTAssertGreaterThan(colorDistance(labels[0], labels[1]), 0.08,
+                    "\(fixture.name): Holiday and workday labels must retain their category hues")
+
+                let attachment = XCTAttachment(
+                    data: try XCTUnwrap(bitmap.representation(using: .png, properties: [:])),
+                    uniformTypeIdentifier: "public.png")
+                attachment.name = "calendar-badges-\(fixture.name)-hover-\(hovered)"
+                attachment.lifetime = .keepAlways
+                add(attachment)
             }
         }
     }
@@ -142,6 +187,32 @@ final class CalendarThemeTests: XCTestCase {
         XCTAssertEqual(actual.redComponent, expected.redComponent, accuracy: 0.025, message)
         XCTAssertEqual(actual.greenComponent, expected.greenComponent, accuracy: 0.025, message)
         XCTAssertEqual(actual.blueComponent, expected.blueComponent, accuracy: 0.025, message)
+    }
+
+    private func strongestTextColor(
+        _ bitmap: NSBitmapImageRep, background: NSColor, region: CGRect, width: CGFloat
+    ) throws -> NSColor {
+        let scale = CGFloat(bitmap.pixelsWide) / width
+        let backgroundRGB = try rgb(background)
+        var strongest = background
+        var maximum: Double = 1
+        for y in Int(region.minY * scale)..<Int(region.maxY * scale) {
+            for x in Int(region.minX * scale)..<Int(region.maxX * scale) {
+                let color = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB))
+                let ratio = try rgb(color).contrastRatio(with: backgroundRGB)
+                if ratio > maximum {
+                    strongest = color
+                    maximum = ratio
+                }
+            }
+        }
+        return strongest
+    }
+
+    private func colorDistance(_ first: NSColor, _ second: NSColor) -> CGFloat {
+        abs(first.redComponent - second.redComponent)
+            + abs(first.greenComponent - second.greenComponent)
+            + abs(first.blueComponent - second.blueComponent)
     }
 
     private func rgb(_ color: NSColor) throws -> MenuBarPanelThemeColor {

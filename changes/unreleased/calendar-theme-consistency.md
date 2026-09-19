@@ -4,4 +4,4 @@ type: fixed
 area: Calendar
 ---
 
-Calendar hover states, today indicators, and holiday labels now follow the selected theme with readable text. Event colors stay faithful to their source calendar.
+Calendar highlights and hover states follow the theme, with distinct, readable tints for holiday and makeup-workday badges. Event colors stay faithful to their source calendar.
