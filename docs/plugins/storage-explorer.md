@@ -8,13 +8,13 @@ Storage Explorer is a metadata-only, user-initiated disk usage browser. It does 
 
 The scanner defaults to two workers, capped at four. Blocking calls stay outside Swift's cooperative executor. Progress is time-throttled to 150 ms with initial and final updates. Cancellation is checked between batches and jobs; a blocking filesystem syscall cannot be forcibly interrupted. Packages remain atomic in the results, with nested payload included. Hard links are deduplicated across all workers and package boundaries; the first encountered link receives the counted bytes.
 
-The UI uses a flat path index and background result projections. The treemap draws at most 160 items plus an Other group. The native table displays up to 5,000 matching rows and searches the complete selected scope. File-type totals and largest-file results span the scan root; folder mode shows immediate children. Logical and allocated sizes are separate, and neither is a promise of recoverable disk space.
+The app scanner retains every directory, the largest file in each directory, and the 50,000 largest files overall. Exact scan and file-type totals are stored separately, so omitted small files remain represented by aggregate tiles. Full-tree scanner clients can opt into publishing every file. The hierarchical treemap shows several directory levels and keeps colors tied to top-level items. Logical and allocated sizes are separate, and neither is a promise of recoverable disk space.
 
 ## Refresh and retention
 
-Scan snapshots remain in memory. Directory metadata is cached for at most 30 seconds and 100,000 entries. FSEvents invalidates affected ancestors/subtrees, and dropped or root-change events clear the cache. Refresh drains pending file events before cache reuse, re-enumerates invalidated directories and recomputes hard-link accounting. The Refresh context menu also offers a full rescan. If an event arrives during a scan, results remain marked stale until refreshed. No scan paths or results are persisted or sent over the network.
+Scan snapshots remain in memory. Directory metadata is cached for at most 30 seconds and 10,000 entries. FSEvents invalidates affected ancestors/subtrees, and dropped or root-change events clear the cache. Refresh drains pending file events before cache reuse, re-enumerates invalidated directories and recomputes hard-link accounting. During refresh, the previous complete visualization remains stable until the replacement snapshot is ready. No scan paths or results are persisted or sent over the network.
 
-Trash review is unavailable during scanning, for incomplete/stale results, and for protected paths. The review basket spans folders, normalizes ancestor/descendant overlap, and freezes its item list for confirmation. Trash operations revalidate paths through the existing safety policy. Successful removal starts a fresh scan instead of subtracting an assumed freed-byte count.
+Trash review is unavailable during scanning, for incomplete results, and for protected paths. Items can be added with the plus button or by dragging them from the treemap or list to the review basket. The basket normalizes ancestor/descendant overlap. Trash operations verify file identity and reject symbolic-link path changes immediately before recycling. Partial failures trigger a fresh scan, remove confirmed successes, and keep failed items selected for retry.
 
 ## Validation
 
@@ -23,7 +23,7 @@ Run the StorageExplorer scanner, progress, controller, presentation, and safety-
 The standalone benchmark creates and deletes only its own temporary fixture:
 
 ```sh
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer python3 scripts/benchmark-storage-explorer.py --files 20000 --baseline-ref f98fe198
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer python3 scripts/benchmark-storage-explorer.py --files 100000
 ```
 
-On a local 20,000-file fixture, the baseline took 1.09–1.16 seconds and the default two-worker scanner took about 0.116 seconds with an empty scanner cache. This is a warm-filesystem synthetic comparison, not a cold-disk or external-drive guarantee. The benchmark also reports callback counts, first useful update, cached directory count, and process peak resident memory.
+The benchmark reports duration, callback count, retained node count, cache reuse, and process peak resident memory. Its progress-only run enforces a 200 MiB peak-memory ceiling by default. This is a warm-filesystem synthetic check, not a cold-disk or external-drive guarantee.

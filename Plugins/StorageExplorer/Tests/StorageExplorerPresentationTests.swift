@@ -55,4 +55,38 @@ final class StorageExplorerPresentationTests: XCTestCase {
         XCTAssertEqual(result.rows.count, 250)
     }
 
+    func testReviewBasketReducesTopLevelAndNestedSmallerAggregates() throws {
+        let root = "/fixture"
+        var snapshot = StorageExplorerSnapshot(rootPath: root)
+        snapshot.apply([
+            StorageItem(name: "fixture", path: root, url: URL(fileURLWithPath: root), isDirectory: true, size: 100),
+            StorageItem(name: "folder", path: root + "/folder", url: URL(fileURLWithPath: root + "/folder"),
+                        isDirectory: true, size: 80, parentPath: root),
+            StorageItem(name: "visible", path: root + "/folder/visible", url: URL(fileURLWithPath: root + "/folder/visible"),
+                        isDirectory: false, size: 30, parentPath: root + "/folder")
+        ])
+        let initial = StorageExplorerHierarchyLayout.make(
+            snapshot: snapshot,
+            directory: root,
+            metric: .logical,
+            excluding: [],
+            otherName: "Other"
+        )
+        let folder = try XCTUnwrap(initial.first { $0.id == root + "/folder" })
+        XCTAssertEqual(folder.bytes, 80)
+        XCTAssertEqual(folder.children.first { $0.isAggregate }?.bytes, 50)
+
+        let reduced = StorageExplorerHierarchyLayout.make(
+            snapshot: snapshot,
+            directory: root,
+            metric: .logical,
+            excluding: [root + "/folder/visible"],
+            otherName: "Other"
+        )
+        let reducedFolder = try XCTUnwrap(reduced.first { $0.id == root + "/folder" })
+        XCTAssertEqual(reducedFolder.bytes, 50)
+        XCTAssertEqual(reducedFolder.children.first { $0.isAggregate }?.bytes, 50)
+        XCTAssertEqual(reduced.first { $0.isAggregate }?.bytes, 20)
+    }
+
 }

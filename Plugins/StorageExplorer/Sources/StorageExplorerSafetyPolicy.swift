@@ -37,22 +37,31 @@ public enum StorageExplorerSafetyError: LocalizedError, Sendable {
 
 // MARK: - Trash Recycling Protocol
 
+public struct StorageExplorerRecycleResult: Sendable, Equatable {
+    public let moved: [URL: URL]
+    public let errorDescription: String?
+
+    public init(moved: [URL: URL], errorDescription: String? = nil) {
+        self.moved = moved
+        self.errorDescription = errorDescription
+    }
+}
+
 public protocol StorageExplorerTrashRecycling: Sendable {
-    func recycle(urls: [URL]) async throws -> [URL: URL]
+    func recycle(urls: [URL]) async throws -> StorageExplorerRecycleResult
 }
 
 public final class WorkspaceTrashRecycler: StorageExplorerTrashRecycling {
     public init() {}
 
-    public func recycle(urls: [URL]) async throws -> [URL: URL] {
-        try await withCheckedThrowingContinuation { continuation in
+    public func recycle(urls: [URL]) async throws -> StorageExplorerRecycleResult {
+        await withCheckedContinuation { continuation in
             DispatchQueue.main.async {
                 NSWorkspace.shared.recycle(urls) { trashedURLs, error in
-                    if let error {
-                        continuation.resume(throwing: error)
-                    } else {
-                        continuation.resume(returning: trashedURLs)
-                    }
+                    continuation.resume(returning: StorageExplorerRecycleResult(
+                        moved: trashedURLs,
+                        errorDescription: error?.localizedDescription
+                    ))
                 }
             }
         }
@@ -141,12 +150,16 @@ public struct StorageExplorerSafetyPolicy: Sendable {
             throw StorageExplorerSafetyError.blocked(reason: validation.reason ?? "Safety policy violation")
         }
 
-        let url = URL(fileURLWithPath: normalizePath(path))
+        let normalizedRoot = normalizePath(root)
+        let normalizedPath = normalizePath(path)
+        let descriptors = try verifyPhysicalPaths(root: normalizedRoot, items: [(normalizedPath, nil, nil)])
+        defer { descriptors.forEach { close($0) } }
+        let url = URL(fileURLWithPath: normalizedPath)
         let result = try await trashRecycler.recycle(urls: [url])
-        return result[url] ?? url
+        return result.moved[url] ?? url
     }
 
-    public func recycleItems(at paths: [String], withinRoot root: String) async throws -> [URL: URL] {
+    public func recycleItems(at paths: [String], withinRoot root: String) async throws -> StorageExplorerRecycleResult {
         for path in paths {
             let validation = validatePathForRemoval(path, withinRoot: root)
             guard case .allowed = validation else {
@@ -154,8 +167,48 @@ public struct StorageExplorerSafetyPolicy: Sendable {
             }
         }
 
-        let urls = paths.map { URL(fileURLWithPath: normalizePath($0)) }
+        let normalizedRoot = normalizePath(root)
+        let normalizedPaths = paths.map(normalizePath)
+        let descriptors = try verifyPhysicalPaths(
+            root: normalizedRoot,
+            items: normalizedPaths.map { ($0, nil, nil) }
+        )
+        defer { descriptors.forEach { close($0) } }
+        let urls = normalizedPaths.map { URL(fileURLWithPath: $0) }
         return try await trashRecycler.recycle(urls: urls)
+    }
+
+    public func recycleItems(
+        _ items: [StorageItem],
+        withinRoot root: String,
+        rootIdentity: StorageFileInode? = nil
+    ) async throws -> StorageExplorerRecycleResult {
+        for item in items {
+            let validation = validatePathForRemoval(item.path, withinRoot: root)
+            guard case .allowed = validation else {
+                throw StorageExplorerSafetyError.blocked(
+                    reason: "Item \(item.path) blocked: \(validation.reason ?? "")"
+                )
+            }
+        }
+        let normalizedRoot = normalizePath(root)
+        var descriptors = [try openVerified(path: normalizedRoot, identity: rootIdentity, isDirectory: true)]
+        do {
+            for item in items {
+                descriptors.append(try openVerified(
+                    path: normalizePath(item.path),
+                    identity: item.fileIdentity,
+                    isDirectory: item.isDirectory
+                ))
+            }
+        } catch {
+            descriptors.forEach { close($0) }
+            throw error
+        }
+        defer { descriptors.forEach { close($0) } }
+        return try await trashRecycler.recycle(
+            urls: items.map { URL(fileURLWithPath: normalizePath($0.path)) }
+        )
     }
 
     // MARK: - Internal Helpers
@@ -163,6 +216,57 @@ public struct StorageExplorerSafetyPolicy: Sendable {
     private func normalizePath(_ path: String) -> String {
         // Whitespace is part of a filename and must never retarget a removal.
         return Self.stripTrailingSlash(Self.normalizeSlashes(path))
+    }
+
+    private func verifyPhysicalPaths(
+        root: String,
+        items: [(path: String, identity: StorageFileInode?, isDirectory: Bool?)]
+    ) throws -> [Int32] {
+        var descriptors: [Int32] = []
+        do {
+            descriptors.append(try openVerified(path: root, identity: nil, isDirectory: true))
+            for item in items {
+                descriptors.append(try openVerified(
+                    path: item.path,
+                    identity: item.identity,
+                    isDirectory: item.isDirectory
+                ))
+            }
+            return descriptors
+        } catch {
+            descriptors.forEach { close($0) }
+            throw error
+        }
+    }
+
+    private func openVerified(
+        path: String,
+        identity: StorageFileInode?,
+        isDirectory: Bool?
+    ) throws -> Int32 {
+        let descriptor = open(path, O_EVTONLY | O_NOFOLLOW_ANY | O_CLOEXEC)
+        guard descriptor >= 0 else {
+            if errno == ENOENT { throw StorageExplorerSafetyError.notFound(path: path) }
+            throw StorageExplorerSafetyError.blocked(reason: "The item changed or contains a symbolic link")
+        }
+        var status = stat()
+        guard fstat(descriptor, &status) == 0 else {
+            close(descriptor)
+            throw StorageExplorerSafetyError.blocked(reason: "The item could not be verified")
+        }
+        if let isDirectory {
+            let actualDirectory = status.st_mode & S_IFMT == S_IFDIR
+            guard actualDirectory == isDirectory else {
+                close(descriptor)
+                throw StorageExplorerSafetyError.blocked(reason: "The item type changed")
+            }
+        }
+        if let identity,
+           identity.device != status.st_dev || identity.inode != status.st_ino {
+            close(descriptor)
+            throw StorageExplorerSafetyError.blocked(reason: "The item changed after it was scanned")
+        }
+        return descriptor
     }
 
     private func sensitiveProtectionReason(for path: String) -> String? {

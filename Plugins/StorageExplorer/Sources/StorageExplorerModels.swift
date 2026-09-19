@@ -34,6 +34,7 @@ public struct StorageItem: Identifiable, Sendable, Equatable {
     public var isCloudPlaceholder: Bool = false
     public var scannedCount: Int = 1
     public var skippedCount: Int = 0
+    public let fileIdentity: StorageFileInode?
 
     public init(
         id: String? = nil,
@@ -49,7 +50,8 @@ public struct StorageItem: Identifiable, Sendable, Equatable {
         childCount: Int = 0,
         children: [StorageItem] = [],
         isAccessDenied: Bool = false,
-        parentPath: String? = nil
+        parentPath: String? = nil,
+        fileIdentity: StorageFileInode? = nil
     ) {
         self.id = id ?? path
         self.name = name
@@ -65,6 +67,7 @@ public struct StorageItem: Identifiable, Sendable, Equatable {
         self.children = children
         self.parentPath = parentPath
         self.isAccessDenied = isAccessDenied
+        self.fileIdentity = fileIdentity
     }
 
     public var fileExtension: String {
@@ -111,6 +114,28 @@ public struct StorageItem: Identifiable, Sendable, Equatable {
             && lhs.isAccessDenied == rhs.isAccessDenied && lhs.modificationDate == rhs.modificationDate
             && lhs.skippedCount == rhs.skippedCount && lhs.scannedCount == rhs.scannedCount
             && lhs.isCloudPlaceholder == rhs.isCloudPlaceholder
+            && lhs.fileIdentity == rhs.fileIdentity
+    }
+}
+
+public struct StorageExplorerSizeTotals: Sendable, Equatable {
+    public var size: Int64 = 0
+    public var allocatedSize: Int64 = 0
+    public var count: Int = 0
+    public var isIncomplete = false
+
+    public mutating func add(_ item: StorageItem) {
+        size += item.size
+        allocatedSize += item.allocatedSize
+        count += 1
+        isIncomplete = isIncomplete || item.isIncomplete
+    }
+
+    public mutating func add(_ other: Self) {
+        size += other.size
+        allocatedSize += other.allocatedSize
+        count += other.count
+        isIncomplete = isIncomplete || other.isIncomplete
     }
 }
 

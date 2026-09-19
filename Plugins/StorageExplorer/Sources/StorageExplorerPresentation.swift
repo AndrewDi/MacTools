@@ -22,6 +22,7 @@ public struct StorageExplorerRow: Identifiable, Sendable, Equatable {
 struct StorageExplorerPresentation: Sendable {
     var rows: [StorageExplorerRow] = []
     var chart: [StorageExplorerRow] = []
+    var mapRootItems: [StorageItem] = []
     var matchingCount = 0
     var total: Int64 = 0
 
@@ -33,18 +34,25 @@ struct StorageExplorerPresentation: Sendable {
         case .folders: candidates = snapshot.children(of: directory)
         case .largestFiles: candidates = snapshot.items.values.filter { !$0.isDirectory || $0.isPackage }
         case .fileTypes:
-            var groups: [String: StorageItem] = [:]
-            for item in snapshot.items.values where !item.isDirectory || item.isPackage {
-                let kind = item.isPackage ? "app/package" : (item.fileExtension.isEmpty ? "—" : item.fileExtension)
-                var group = groups[kind] ?? StorageItem(name: kind, path: "type:" + kind,
-                    url: URL(fileURLWithPath: "/"), isDirectory: false)
-                group.size += item.size
-                group.allocatedSize += item.allocatedSize
-                group.childCount += 1
-                group.isIncomplete = group.isIncomplete || item.isIncomplete
-                groups[kind] = group
+            var exact = snapshot.fileTypeTotalsByDirectory[directory] ?? snapshot.fileTypeTotals
+            if exact.isEmpty {
+                for item in snapshot.items.values where !item.isDirectory || item.isPackage {
+                    let kind = item.isPackage ? "package" : (item.fileExtension.isEmpty ? "—" : item.fileExtension)
+                    exact[kind, default: StorageExplorerSizeTotals()].add(item)
+                }
             }
-            candidates = Array(groups.values)
+            candidates = exact.map { kind, totals in
+                StorageItem(
+                    name: kind,
+                    path: "type:" + kind,
+                    url: URL(fileURLWithPath: "/"),
+                    isDirectory: false,
+                    size: totals.size,
+                    allocatedSize: totals.allocatedSize,
+                    childCount: totals.count,
+                    isAccessDenied: false
+                )
+            }
         }
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         if !query.isEmpty {
@@ -62,7 +70,7 @@ struct StorageExplorerPresentation: Sendable {
             return StorageExplorerRow(item: item, name: item.name, bytes: bytes,
                 sizeLabel: formatter.string(fromByteCount: bytes),
                 percentage: total > 0 ? String(format: "%.1f%%", Double(bytes) * 100 / Double(total)) : "—",
-                kind: item.isPackage ? "app/package" : item.isDirectory ? "folder" : item.fileExtension,
+                kind: item.isPackage ? "package" : item.isDirectory ? "folder" : item.fileExtension,
                 modified: item.modificationDate ?? .distantPast,
                 dateLabel: item.modificationDate.map { dates.string(from: $0) } ?? "—")
         }
@@ -92,7 +100,7 @@ struct StorageExplorerPresentation: Sendable {
             if comparison == .orderedSame { return lhs.path < rhs.path }
             return comparison == (ascending ? .orderedAscending : .orderedDescending)
         }
-        return Self(rows: candidates.prefix(5_000).map(row), chart: chart,
+        return Self(rows: candidates.prefix(5_000).map(row), chart: chart, mapRootItems: bySize,
                     matchingCount: candidates.count, total: total)
     }
 }

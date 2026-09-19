@@ -6,12 +6,14 @@ final class MockTrashRecycler: StorageExplorerTrashRecycling, @unchecked Sendabl
     var recycledURLs: [URL] = []
     var shouldFail: Bool = false
 
-    func recycle(urls: [URL]) async throws -> [URL: URL] {
+    func recycle(urls: [URL]) async throws -> StorageExplorerRecycleResult {
         if shouldFail {
             throw NSError(domain: "MockTrashRecycler", code: 1, userInfo: [NSLocalizedDescriptionKey: "Recycle failed"])
         }
         recycledURLs.append(contentsOf: urls)
-        return Dictionary(uniqueKeysWithValues: urls.map { ($0, URL(fileURLWithPath: "/Users/dummy/.Trash/\($0.lastPathComponent)")) })
+        return StorageExplorerRecycleResult(moved: Dictionary(
+            uniqueKeysWithValues: urls.map { ($0, URL(fileURLWithPath: "/Users/dummy/.Trash/\($0.lastPathComponent)")) }
+        ))
     }
 }
 
@@ -24,6 +26,10 @@ final class StorageExplorerSafetyPolicyTests: XCTestCase {
         super.setUp()
         tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        if let physical = realpath(tempDirectory.path, nil) {
+            tempDirectory = URL(fileURLWithPath: String(cString: physical))
+            free(physical)
+        }
         mockRecycler = MockTrashRecycler()
         policy = StorageExplorerSafetyPolicy(trashRecycler: mockRecycler, homeDirectory: "/Users/testuser")
     }
@@ -216,5 +222,36 @@ final class StorageExplorerSafetyPolicyTests: XCTestCase {
         } catch {
             XCTAssertTrue(error is StorageExplorerSafetyError)
         }
+    }
+
+    func testIdentityValidationRejectsAncestorReplacedBySymlink() async throws {
+        let root = tempDirectory.resolvingSymlinksInPath()
+        let folder = root.appendingPathComponent("folder")
+        let outside = root.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let file = folder.appendingPathComponent("payload")
+        try Data([1, 2, 3]).write(to: file)
+        var status = stat()
+        XCTAssertEqual(lstat(file.path, &status), 0)
+        let item = StorageItem(
+            name: file.lastPathComponent,
+            path: file.path,
+            url: file,
+            isDirectory: false,
+            size: 3,
+            fileIdentity: StorageFileInode(device: status.st_dev, inode: status.st_ino)
+        )
+        try FileManager.default.removeItem(at: folder)
+        try FileManager.default.createSymbolicLink(at: folder, withDestinationURL: outside)
+        try Data([4, 5, 6]).write(to: outside.appendingPathComponent("payload"))
+
+        do {
+            _ = try await policy.recycleItems([item], withinRoot: root.path)
+            XCTFail("A swapped ancestor symlink must be rejected")
+        } catch {
+            XCTAssertTrue(error is StorageExplorerSafetyError)
+        }
+        XCTAssertTrue(mockRecycler.recycledURLs.isEmpty)
     }
 }

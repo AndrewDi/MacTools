@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import XCTest
 @testable import StorageExplorerPlugin
@@ -195,6 +196,38 @@ final class StorageExplorerControllerTests: XCTestCase {
         XCTAssertNotNil(controller.lastErrorMessage)
     }
 
+    func testPartialTrashResultRescansAndKeepsOnlyFailedItemForReview() async throws {
+        var root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        if let physical = realpath(root.path, nil) {
+            root = URL(fileURLWithPath: String(cString: physical))
+            free(physical)
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let first = root.appendingPathComponent("first.bin")
+        let second = root.appendingPathComponent("second.bin")
+        try Data(repeating: 1, count: 10).write(to: first)
+        try Data(repeating: 2, count: 20).write(to: second)
+        let recycler = PartialTrashRecycler(successfulPath: first.path)
+        let controller = StorageExplorerController(
+            safetyPolicy: StorageExplorerSafetyPolicy(trashRecycler: recycler),
+            observeChanges: false
+        )
+        controller.startScan(at: root)
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { controller.rows.count == 2 }
+        controller.toggleSelection(path: first.path)
+        controller.toggleSelection(path: second.path)
+        controller.confirmTrash()
+        await controller.executeTrash()
+        try await waitUntil { !controller.isScanning }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: first.path))
+        XCTAssertEqual(controller.basket, [second.path])
+        XCTAssertEqual(controller.reviewItems.map(\.path), [second.path])
+        XCTAssertNotNil(controller.lastErrorMessage)
+    }
+
     static func fixture(root: String) -> StorageExplorerSnapshot {
         func item(_ suffix: String, _ parent: String?, _ size: Int64, _ directory: Bool) -> StorageItem {
             let path = root + suffix
@@ -214,6 +247,22 @@ final class StorageExplorerControllerTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(10))
         }
         XCTFail("Timed out waiting for controlled scan")
+    }
+}
+
+private final class PartialTrashRecycler: StorageExplorerTrashRecycling, @unchecked Sendable {
+    let successfulPath: String
+    init(successfulPath: String) { self.successfulPath = successfulPath }
+
+    func recycle(urls: [URL]) async throws -> StorageExplorerRecycleResult {
+        guard let successful = urls.first(where: { $0.path == successfulPath }) else {
+            return StorageExplorerRecycleResult(moved: [:], errorDescription: "No matching item")
+        }
+        try FileManager.default.removeItem(at: successful)
+        return StorageExplorerRecycleResult(
+            moved: [successful: URL(fileURLWithPath: "/Users/dummy/.Trash/" + successful.lastPathComponent)],
+            errorDescription: "One item failed"
+        )
     }
 }
 

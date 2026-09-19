@@ -4,9 +4,19 @@ import MacToolsFileSystem
 
 public final class StorageExplorerScanner: StorageExplorerScanning, @unchecked Sendable {
     public let workerCount: Int
+    public let publishesItems: Bool
+    public let maximumRetainedFiles: Int
     private let cache = StorageExplorerDirectoryCache()
 
-    public init(workerCount: Int = 2) { self.workerCount = min(max(workerCount, 1), 4) }
+    public init(
+        workerCount: Int = 2,
+        publishesItems: Bool = true,
+        maximumRetainedFiles: Int = 50_000
+    ) {
+        self.workerCount = min(max(workerCount, 1), 4)
+        self.publishesItems = publishesItems
+        self.maximumRetainedFiles = max(1, maximumRetainedFiles)
+    }
 
     public func invalidate(paths: [String]) { cache.invalidate(paths: paths) }
     public func clearCache() { cache.invalidate(paths: nil) }
@@ -31,7 +41,13 @@ public final class StorageExplorerScanner: StorageExplorerScanning, @unchecked S
                 // Blocking filesystem calls run on bounded GCD workers, outside the cooperative executor.
                 DispatchQueue.global(qos: .userInitiated).async { [self] in
                     do {
-                        let state = try ScanWork(rootURL: rootURL, cancellation: cancellation, update: update)
+                        let state = try ScanWork(
+                            rootURL: rootURL,
+                            cancellation: cancellation,
+                            update: update,
+                            publishesItems: publishesItems,
+                            maximumRetainedFiles: maximumRetainedFiles
+                        )
                         DispatchQueue.concurrentPerform(iterations: workerCount) { _ in
                             while let job = state.next() {
                                 do {
@@ -49,7 +65,8 @@ public final class StorageExplorerScanner: StorageExplorerScanning, @unchecked S
                                             isPackage: package, isSymlink: entry.fileType == .symlink,
                                             size: directory ? 0 : max(entry.dataLength ?? 0, 0),
                                             allocatedSize: directory ? 0 : max(entry.allocatedSize ?? 0, 0),
-                                            modificationDate: entry.modificationDate, parentPath: job.path)
+                                            modificationDate: entry.modificationDate, parentPath: job.path,
+                                            fileIdentity: ScanWork.identity(for: entry))
                                         item.isCloudPlaceholder = dataless
                                         item.isIncomplete = directory
                                         return StorageExplorerScannedEntry(item: item, metadata: entry)
@@ -116,8 +133,8 @@ private final class StorageExplorerDirectoryCache: @unchecked Sendable {
         lock.withLock {
             guard epoch == version else { return }
             count -= entries.removeValue(forKey: path)?.listing.entries.count ?? 0
-            if count + listing.entries.count > 100_000 { entries.removeAll(); count = 0 }
-            if listing.entries.count <= 100_000 {
+            if count + listing.entries.count > 10_000 { entries.removeAll(); count = 0 }
+            if listing.entries.count <= 10_000 {
                 entries[path] = Entry(listing: listing, date: Date())
                 count += listing.entries.count
             }
@@ -140,9 +157,15 @@ private final class ScanWork: @unchecked Sendable {
     private let started = Date()
     private var lastReport = Date.distantPast
     private let device: UInt64
+    private let publishesItems: Bool
+    private let retainedFiles: StorageExplorerLargestFileHeap
+    private var largestFileByDirectory: [String: StorageItem] = [:]
+    private var directFileTypeTotals: [String: [String: StorageExplorerSizeTotals]] = [:]
 
     init(rootURL: URL, cancellation: StorageExplorerCancellation,
-         update: @escaping @Sendable (StorageExplorerScanUpdate) -> Void) throws {
+         update: @escaping @Sendable (StorageExplorerScanUpdate) -> Void,
+         publishesItems: Bool,
+         maximumRetainedFiles: Int) throws {
         // Expand /tmp and /var once, then require physical paths for every directory open.
         guard let resolved = realpath(rootURL.path, nil) else { throw CocoaError(.fileNoSuchFile) }
         let path = String(cString: resolved)
@@ -151,12 +174,21 @@ private final class ScanWork: @unchecked Sendable {
         guard lstat(path, &status) == 0, status.st_mode & S_IFMT == S_IFDIR else { throw CocoaError(.fileReadUnsupportedScheme) }
         self.cancellation = cancellation
         self.update = update
+        self.publishesItems = publishesItems
+        self.retainedFiles = StorageExplorerLargestFileHeap(limit: maximumRetainedFiles)
         self.device = UInt64(UInt32(bitPattern: status.st_dev))
         self.snapshot = StorageExplorerSnapshot(rootPath: path)
         let url = URL(fileURLWithPath: path)
         let dataless = status.st_flags & UInt32(SF_DATALESS) != 0
         let package = !dataless && ((try? url.resourceValues(forKeys: [.isPackageKey]).isPackage) == true)
-        var root = StorageItem(name: url.lastPathComponent, path: path, url: url, isDirectory: true, isPackage: package)
+        var root = StorageItem(
+            name: url.lastPathComponent,
+            path: path,
+            url: url,
+            isDirectory: true,
+            isPackage: package,
+            fileIdentity: StorageFileInode(device: status.st_dev, inode: status.st_ino)
+        )
         root.isIncomplete = true
         root.isCloudPlaceholder = dataless
         root.skippedCount = dataless ? 1 : 0
@@ -226,9 +258,11 @@ private final class ScanWork: @unchecked Sendable {
             }
             bytes += item.size
             allocated += item.allocatedSize
-            if job.packageOwner == nil {
+            if job.packageOwner == nil, item.isDirectory {
                 snapshot.apply([item])
                 changed.insert(item.path)
+            } else if job.packageOwner == nil {
+                recordFile(item, parentPath: job.path)
             }
         }
         if job.packageOwner == nil { snapshot.items[job.path]?.childCount = entries.count }
@@ -265,6 +299,11 @@ private final class ScanWork: @unchecked Sendable {
     }
 
     func result() -> StorageExplorerSnapshot {
+        if !publishesItems {
+            let retained = retainedFiles.items + Array(largestFileByDirectory.values)
+            let unique = Dictionary(grouping: retained, by: \StorageItem.path).compactMap(\.value.first)
+            snapshot.apply(unique)
+        }
         // Each directory records only the entries read directly from it while scanning. Folding
         // completed directories into their parents once avoids walking every ancestor while the
         // filesystem workers are contending for the shared scan-state lock.
@@ -291,8 +330,94 @@ private final class ScanWork: @unchecked Sendable {
             snapshot.items[path]?.isIncomplete = incomplete
             changed.insert(path)
         }
+        foldFileTypeTotals()
         publish(force: true)
         snapshot.progress = progress
         return snapshot
+    }
+
+    private func recordFile(_ item: StorageItem, parentPath: String) {
+        let kind = item.isPackage ? "package" : (item.fileExtension.isEmpty ? "—" : item.fileExtension)
+        var totals = directFileTypeTotals[parentPath, default: [:]][kind, default: StorageExplorerSizeTotals()]
+        totals.add(item)
+        directFileTypeTotals[parentPath, default: [:]][kind] = totals
+        if publishesItems {
+            snapshot.apply([item])
+            changed.insert(item.path)
+        } else {
+            retainedFiles.insert(item)
+            if let existing = largestFileByDirectory[parentPath] {
+                if retainedFiles.value(of: item) > retainedFiles.value(of: existing) {
+                    largestFileByDirectory[parentPath] = item
+                }
+            } else {
+                largestFileByDirectory[parentPath] = item
+            }
+        }
+    }
+
+    private func foldFileTypeTotals() {
+        var totals = directFileTypeTotals
+        let directories = snapshot.items.values
+            .filter(\.isDirectory)
+            .sorted { $0.path.split(separator: "/").count > $1.path.split(separator: "/").count }
+        for directory in directories {
+            guard let parentPath = directory.parentPath else { continue }
+            for (kind, value) in totals[directory.path] ?? [:] {
+                totals[parentPath, default: [:]][kind, default: StorageExplorerSizeTotals()].add(value)
+            }
+            if directory.isPackage {
+                totals[parentPath, default: [:]]["package", default: StorageExplorerSizeTotals()].add(directory)
+            }
+        }
+        snapshot.fileTypeTotalsByDirectory = totals
+        snapshot.fileTypeTotals = totals[snapshot.rootPath] ?? [:]
+    }
+
+    static func identity(for entry: FileSystemBulkAttributeEntry) -> StorageFileInode? {
+        guard let device = entry.devid, let inode = entry.fileID else { return nil }
+        return StorageFileInode(device: dev_t(truncatingIfNeeded: device), inode: ino_t(inode))
+    }
+}
+
+private final class StorageExplorerLargestFileHeap {
+    private let limit: Int
+    private var heap: [StorageItem] = []
+
+    init(limit: Int) { self.limit = limit }
+    var items: [StorageItem] { heap }
+    func value(of item: StorageItem) -> Int64 { max(item.size, item.allocatedSize) }
+
+    func insert(_ item: StorageItem) {
+        if heap.count < limit {
+            heap.append(item)
+            siftUp(from: heap.count - 1)
+        } else if let first = heap.first, value(of: item) > value(of: first) {
+            heap[0] = item
+            siftDown(from: 0)
+        }
+    }
+
+    private func siftUp(from index: Int) {
+        var child = index
+        while child > 0 {
+            let parent = (child - 1) / 2
+            guard value(of: heap[child]) < value(of: heap[parent]) else { return }
+            heap.swapAt(child, parent)
+            child = parent
+        }
+    }
+
+    private func siftDown(from index: Int) {
+        var parent = index
+        while true {
+            let left = parent * 2 + 1
+            guard left < heap.count else { return }
+            let right = left + 1
+            let child = right < heap.count && value(of: heap[right]) < value(of: heap[left]) ? right : left
+            guard value(of: heap[child]) < value(of: heap[parent]) else { return }
+            heap.swapAt(parent, child)
+            parent = child
+        }
     }
 }

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 import MacToolsPluginKit
 import SwiftUI
@@ -28,9 +29,11 @@ public final class StorageExplorerController: ObservableObject {
     @Published public private(set) var chartRows: [StorageExplorerRow] = []
     @Published public private(set) var matchingCount = 0
     @Published public private(set) var displayedBytes: Int64 = 0
+    @Published public private(set) var mapRootItems: [StorageItem] = []
     public let status = StorageExplorerScanStatus()
     public let scanner: any StorageExplorerScanning
     public let safetyPolicy: StorageExplorerSafetyPolicy
+    public let copy: StorageExplorerControllerCopy
 
     private(set) var snapshot = StorageExplorerSnapshot(rootPath: "")
     private var activeScanTask: Task<Void, Never>?
@@ -43,11 +46,13 @@ public final class StorageExplorerController: ObservableObject {
     private var observer: StorageExplorerFileObserver?
     private let observeChanges: Bool
 
-    public init(scanner: any StorageExplorerScanning = StorageExplorerScanner(),
+    public init(scanner: any StorageExplorerScanning = StorageExplorerScanner(publishesItems: false),
                 safetyPolicy: StorageExplorerSafetyPolicy = StorageExplorerSafetyPolicy(),
+                copy: StorageExplorerControllerCopy = .fallback,
                 observeChanges: Bool = true) {
         self.scanner = scanner
         self.safetyPolicy = safetyPolicy
+        self.copy = copy
         self.observeChanges = observeChanges
     }
 
@@ -61,7 +66,12 @@ public final class StorageExplorerController: ObservableObject {
         return snapshot.items[selectedPath] ?? rows.first { $0.id == selectedPath }?.item
     }
 
-    public func startScan(at url: URL, force: Bool = false) {
+    public func startScan(
+        at url: URL,
+        force: Bool = false,
+        restoringBasket: Set<String> = [],
+        completionError: String? = nil
+    ) {
         guard !isExecutingTrash else { return }
         cancelScan()
         let id = UUID()
@@ -112,6 +122,9 @@ public final class StorageExplorerController: ObservableObject {
                 // cache invalidation for every later filesystem change.
                 self.installObserver(for: url)
                 self.scanState = .completed
+                self.basket = Set(restoringBasket.filter { result.items[$0] != nil })
+                self.reviewItems = self.basket.sorted().compactMap { result.items[$0] }
+                self.lastErrorMessage = completionError
                 self.rebuildNavigation()
                 self.refreshPresentation()
             } catch {
@@ -212,6 +225,7 @@ public final class StorageExplorerController: ObservableObject {
                 && metric == self.metric && query == self.searchQuery && sort == self.sort && ascending == self.ascending {
                 self.rows = result.rows
                 self.chartRows = result.chart
+                self.mapRootItems = result.mapRootItems
                 self.matchingCount = result.matchingCount
                 self.displayedBytes = result.total
             }
@@ -225,15 +239,16 @@ public final class StorageExplorerController: ObservableObject {
             && safetyPolicy.validatePathForRemoval(item.path, withinRoot: snapshot.rootPath).isAllowed
     }
     public func toggleSelection(path: String) {
-        if basket.contains(path) { basket.remove(path); return }
+        if basket.contains(path) { basket.remove(path); refreshPresentation(); return }
         guard let item = snapshot.items[path], canStage(item) else { return }
         // A selected ancestor already includes this item; selecting an ancestor replaces descendants.
         guard !basket.contains(where: { path.hasPrefix($0 + "/") }) else { return }
         basket = basket.filter { !$0.hasPrefix(path + "/") }
         basket.insert(path)
+        refreshPresentation()
     }
     public func selectAllVisible(items: [StorageItem]) { for item in items { if !basket.contains(item.path) { toggleSelection(path: item.path) } } }
-    public func clearSelection() { basket.removeAll() }
+    public func clearSelection() { basket.removeAll(); refreshPresentation() }
     public var selectedItemsForReview: [StorageItem] { basket.sorted().compactMap { snapshot.items[$0] } }
     public var totalSelectedBytes: Int64 { selectedItemsForReview.reduce(0) { $0 + metric.bytes($1) } }
 
@@ -245,7 +260,7 @@ public final class StorageExplorerController: ObservableObject {
         let items = selectedItemsForReview
         guard !items.isEmpty, items.allSatisfy(canStage) else { return }
         guard items.allSatisfy(itemStillMatchesSnapshot) else {
-            lastErrorMessage = "所选项目已在磁盘上发生更改。请刷新后重新选择。"
+            lastErrorMessage = copy.itemChanged
             return
         }
         reviewItems = items
@@ -255,28 +270,56 @@ public final class StorageExplorerController: ObservableObject {
         guard !reviewItems.isEmpty, reviewItems.allSatisfy(canStage) else { isConfirmingTrash = false; return }
         guard reviewItems.allSatisfy(itemStillMatchesSnapshot) else {
             isConfirmingTrash = false
-            lastErrorMessage = "所选项目已在磁盘上发生更改。请刷新后重新选择。"
+            lastErrorMessage = copy.itemChanged
             return
         }
-        let paths = reviewItems.map(\.path)
+        let attemptedItems = reviewItems
         let root = snapshot.rootPath
         isExecutingTrash = true
         do {
-            _ = try await safetyPolicy.recycleItems(at: paths, withinRoot: root)
+            let result = try await safetyPolicy.recycleItems(
+                attemptedItems,
+                withinRoot: root,
+                rootIdentity: rootItem?.fileIdentity
+            )
+            let movedPaths = Set(result.moved.keys.map { $0.standardizedFileURL.path })
+            let failedItems = attemptedItems.filter { !movedPaths.contains($0.url.standardizedFileURL.path) }
             isExecutingTrash = false
             isConfirmingTrash = false
+            let message: String?
+            if failedItems.isEmpty {
+                message = nil
+            } else {
+                let names = failedItems.prefix(3).map(\.name).joined(separator: ", ")
+                message = String(format: copy.trashPartialFailure, failedItems.count, names)
+            }
             // Recompute accounting, including surviving hard links; never infer freed space from the basket.
-            startScan(at: URL(fileURLWithPath: root), force: true)
-            lastSuccessMessage = "已移至废纸篓"
+            startScan(
+                at: URL(fileURLWithPath: root),
+                force: true,
+                restoringBasket: Set(failedItems.map(\.path)),
+                completionError: message
+            )
+            if failedItems.isEmpty { lastSuccessMessage = copy.movedToTrash }
         } catch {
             isExecutingTrash = false
             isConfirmingTrash = false
-            scanner.clearCache()
-            lastErrorMessage = error.localizedDescription
+            startScan(
+                at: URL(fileURLWithPath: root),
+                force: true,
+                restoringBasket: Set(attemptedItems.map(\.path)),
+                completionError: copy.trashOperationFailed
+            )
         }
     }
 
     private func itemStillMatchesSnapshot(_ item: StorageItem) -> Bool {
+        var status = stat()
+        guard lstat(item.path, &status) == 0 else { return false }
+        if let identity = item.fileIdentity,
+           identity.device != status.st_dev || identity.inode != status.st_ino {
+            return false
+        }
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: item.path),
               let type = attributes[.type] as? FileAttributeType
         else {
@@ -296,4 +339,18 @@ public final class StorageExplorerController: ObservableObject {
         }
         return true
     }
+}
+
+public struct StorageExplorerControllerCopy: Sendable {
+    public let itemChanged: String
+    public let movedToTrash: String
+    public let trashOperationFailed: String
+    public let trashPartialFailure: String
+
+    public static let fallback = StorageExplorerControllerCopy(
+        itemChanged: "所选项目已在磁盘上发生更改。请刷新后重新选择。",
+        movedToTrash: "已移至废纸篓",
+        trashOperationFailed: "无法将所选项目移至废纸篓。请刷新后重试。",
+        trashPartialFailure: "%d 个项目未能移至废纸篓：%@"
+    )
 }

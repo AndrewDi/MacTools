@@ -102,6 +102,26 @@ final class StorageExplorerProgressTests: XCTestCase {
         XCTAssertTrue(result.items[result.rootPath]?.isIncomplete ?? false)
         XCTAssertTrue(result.items.values.contains { $0.name == "blocked" && $0.isAccessDenied })
     }
+
+    func testProgressOnlySnapshotBoundsRetainedFilesAndKeepsExactTotals() async throws {
+        for directory in 0..<3 {
+            let folder = root.appendingPathComponent("folder-\(directory)")
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for file in 0..<100 {
+                try Data([UInt8(file % 255)]).write(to: folder.appendingPathComponent("file-\(file).bin"))
+            }
+        }
+        let snapshot = try await StorageExplorerScanner(
+            workerCount: 4,
+            publishesItems: false,
+            maximumRetainedFiles: 20
+        ).scanSnapshot(rootURL: root) { _ in }
+
+        XCTAssertEqual(snapshot.items[snapshot.rootPath]?.size, 300)
+        XCTAssertEqual(snapshot.fileTypeTotals["bin"]?.size, 300)
+        XCTAssertEqual(snapshot.fileTypeTotals["bin"]?.count, 300)
+        XCTAssertLessThanOrEqual(snapshot.items.values.filter { !$0.isDirectory }.count, 23)
+    }
 }
 
 private final class EventBox: @unchecked Sendable {

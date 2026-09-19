@@ -6,6 +6,8 @@ public struct StorageExplorerSnapshot: Sendable {
     public var rootPath: String
     public var items: [String: StorageItem] = [:]
     public var children: [String: [String]] = [:]
+    public var fileTypeTotals: [String: StorageExplorerSizeTotals] = [:]
+    public var fileTypeTotalsByDirectory: [String: [String: StorageExplorerSizeTotals]] = [:]
 
     public init(rootPath: String) { self.rootPath = rootPath }
 

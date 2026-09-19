@@ -6,6 +6,7 @@ public struct StorageExplorerWorkspaceView: View {
     @ObservedObject public var controller: StorageExplorerController
     public let localization: PluginLocalization
     @State private var showsInspector = false
+    @State private var showsSkippedDetails = false
     @State private var sortOrder = [KeyPathComparator(\StorageExplorerRow.bytes, order: .reverse)]
 
     public init(controller: StorageExplorerController,
@@ -28,7 +29,17 @@ public struct StorageExplorerWorkspaceView: View {
     private func workspace(width: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
             controls
-            if controller.isScanning {
+            if controller.rootItem != nil {
+                StorageExplorerProgressView(
+                    status: controller.status,
+                    metric: controller.metric,
+                    localization: localization,
+                    showsDetails: $showsSkippedDetails
+                )
+                navigation(compact: width < 780)
+                explorer(width: width)
+                reviewBar
+            } else if controller.isScanning {
                 StorageExplorerScanningView(
                     status: controller.status,
                     metric: controller.metric,
@@ -36,23 +47,6 @@ public struct StorageExplorerWorkspaceView: View {
                     filesScannedFormat: text("filesScannedFormat", "已扫描 %d 个项目"),
                     skippedCountFormat: text("skippedCount", "跳过 %d 项")
                 )
-            } else if controller.rootItem != nil {
-                StorageExplorerProgressView(
-                    status: controller.status,
-                    metric: controller.metric,
-                    localization: localization
-                )
-                navigation(compact: width < 780)
-                if width >= 780 {
-                    HSplitView {
-                        explorer.frame(minWidth: 400)
-                        inspector.frame(minWidth: 190, idealWidth: 220, maxWidth: 280,
-                                        maxHeight: .infinity, alignment: .topLeading)
-                    }
-                } else {
-                    explorer
-                }
-                reviewBar
             } else {
                 ContentUnavailableView(text("emptyStateTitle", "选择要分析的文件夹"), systemImage: "internaldrive",
                     description: Text(text("exploreDescription", "查看空间分布、查找大文件，审阅后移至废纸篓。")))
@@ -76,35 +70,45 @@ public struct StorageExplorerWorkspaceView: View {
         }
     }
 
-    private var explorer: some View {
-        VSplitView {
-            StorageExplorerTreemapView(
-                rows: controller.chartRows,
-                selection: $controller.selectedPath,
-                basket: controller.basket,
-                otherLabel: text("other", "其他"),
-                emptyLabel: text("noSizedItems", "尚无可显示的大小"),
-                addReviewLabel: text("addToReview", "加入审阅"),
-                removeReviewLabel: text("removeFromReview", "移出审阅"),
-                open: { controller.drillDown(to: $0.item) },
-                toggleReview: { controller.toggleSelection(path: $0.item.path) }
-            )
-            .frame(minHeight: 240, maxHeight: .infinity)
-            .layoutPriority(1)
-            .clipped()
-
-            VStack(spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                fileTable.frame(minHeight: 120)
-                if controller.matchingCount > controller.rows.count {
-                    Text(String(format: text("limitedRows", "显示前 %d 项，共 %d 项；搜索可缩小范围。"),
-                                controller.rows.count, controller.matchingCount))
-                        .font(PluginSettingsTheme.Typography.rowDescription).foregroundStyle(.secondary)
+    private func explorer(width: CGFloat) -> some View {
+        let nodes = StorageExplorerHierarchyLayout.make(
+            snapshot: controller.snapshot,
+            directory: controller.currentPath ?? controller.snapshot.rootPath,
+            metric: controller.metric,
+            excluding: controller.basket,
+            otherName: text("other", "其他")
+        )
+        return Group {
+            if width >= 780 {
+                GeometryReader { geometry in
+                    HStack(spacing: 12) {
+                        hierarchyTreemap(nodes: nodes)
+                            .frame(width: max(420, geometry.size.width * 0.72))
+                        compactList
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            } else {
+                VStack(spacing: 10) {
+                    hierarchyTreemap(nodes: nodes)
+                    compactList.frame(maxHeight: 190)
                 }
             }
-            .frame(minHeight: 140, maxHeight: 280)
         }
-        .frame(minHeight: 400, maxHeight: .infinity)
+        .frame(minHeight: 410, maxHeight: .infinity)
         .clipped()
+    }
+
+    private func hierarchyTreemap(nodes: [StorageExplorerHierarchyNode]) -> some View {
+        StorageExplorerHierarchyTreemapView(
+            nodes: nodes,
+            selection: $controller.selectedPath,
+            emptyLabel: text("noSizedItems", "尚无可显示的大小"),
+            addReviewLabel: text("addToReview", "加入审阅"),
+            open: controller.drillDown,
+            toggleReview: { controller.toggleSelection(path: $0.path) }
+        )
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var controls: some View {
@@ -126,10 +130,10 @@ public struct StorageExplorerWorkspaceView: View {
     }
 
     private func navigation(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
                 Button { controller.navigateUp() } label: {
-                    Label(text("goUp", "返回上一级"), systemImage: "arrow.up")
+                    Image(systemName: "arrow.up")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
@@ -141,36 +145,93 @@ public struct StorageExplorerWorkspaceView: View {
                         ForEach(Array(controller.navigationStack.enumerated()), id: \.element.path) { index, item in
                             if index > 0 { Image(systemName: "chevron.right").foregroundStyle(.tertiary) }
                             Button(item.name.isEmpty ? "/" : item.name) { controller.navigateToBreadcrumb(at: index) }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.borderless)
+                                .help(String(format: text("openPath", "打开 %@"), item.path))
                         }
                     }
                     .font(PluginSettingsTheme.Typography.rowTitle)
                 }
             }
-            HStack {
+            HStack(spacing: 8) {
                 Picker(text("viewMode", "视图"), selection: $controller.mode) {
-                    Text(text("folders", "文件夹")).tag(StorageExplorerMode.folders)
+                    Text(text("browseItems", "浏览项目")).tag(StorageExplorerMode.folders)
                     Text(text("largestFiles", "大文件")).tag(StorageExplorerMode.largestFiles)
                     Text(text("fileTypes", "文件类型")).tag(StorageExplorerMode.fileTypes)
-                }.pickerStyle(.segmented).frame(minWidth: 200, idealWidth: 260, maxWidth: 300)
+                }.pickerStyle(.menu).fixedSize()
                 Picker(text("sizeMetric", "大小"), selection: $controller.metric) {
                     Text(text("logicalSize", "文件大小")).tag(StorageExplorerMetric.logical)
                     Text(text("allocatedSize", "占用空间")).tag(StorageExplorerMetric.allocated)
-                }.labelsHidden().frame(width: 120)
+                }.labelsHidden().pickerStyle(.menu).fixedSize()
                 Spacer(minLength: 8)
-                if compact {
-                    Button { showsInspector.toggle() } label: { Image(systemName: "info.circle") }
-                        .help(text("details", "详细信息"))
-                        .popover(isPresented: $showsInspector) { inspector.frame(width: 280, height: 420).padding(12) }
-                } else {
-                    TextField(text("search", "搜索…"), text: $controller.searchQuery)
-                        .textFieldStyle(.roundedBorder).frame(minWidth: 100, idealWidth: 150, maxWidth: 200)
-                }
+                Button { showsInspector.toggle() } label: { Image(systemName: "info.circle") }
+                    .help(text("details", "详细信息"))
+                    .popover(isPresented: $showsInspector) { inspector.frame(width: 300, height: 430).padding(12) }
             }.controlSize(.small)
-            if compact {
-                TextField(text("search", "搜索…"), text: $controller.searchQuery).textFieldStyle(.roundedBorder)
+            TextField(text("search", "搜索…"), text: $controller.searchQuery).textFieldStyle(.roundedBorder)
+        }
+    }
+
+    private var compactList: some View {
+        ScrollView {
+            LazyVStack(spacing: 1) {
+                ForEach(controller.rows.prefix(80)) { row in
+                    HStack(spacing: 8) {
+                        Button {
+                            controller.toggleSelection(path: row.item.path)
+                        } label: {
+                            Image(systemName: controller.basket.contains(row.id) ? "checkmark.circle.fill" : "plus.circle")
+                                .foregroundStyle(controller.basket.contains(row.id) ? Color.accentColor : Color.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!controller.canStage(row.item))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(localizedName(row)).lineLimit(1).truncationMode(.middle)
+                            Text(localizedKind(row))
+                                .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        Spacer(minLength: 4)
+                        Text(row.sizeLabel)
+                            .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                        if row.item.isDirectory && !row.item.isPackage {
+                            Button { controller.drillDown(to: row.item) } label: {
+                                Image(systemName: "chevron.right")
+                            }
+                            .buttonStyle(.plain)
+                            .help(text("openFolder", "打开文件夹"))
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(
+                        controller.selectedPath == row.id ? Color.accentColor.opacity(0.12) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 6)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if row.item.isDirectory && !row.item.isPackage {
+                            controller.drillDown(to: row.item)
+                        } else {
+                            controller.selectedPath = row.id
+                        }
+                    }
+                    .draggable(row.item.path)
+                }
             }
         }
+        .background(Color.secondary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        .accessibilityLabel(text("results", "扫描结果"))
+    }
+
+    private func localizedKind(_ row: StorageExplorerRow) -> String {
+        if row.kind == "package" || row.item.isPackage {
+            return text("applicationsAndPackages", "应用与软件包")
+        }
+        if row.item.isDirectory { return text("folders", "文件夹") }
+        return row.kind.isEmpty ? text("other", "其他") : row.kind.uppercased()
+    }
+
+    private func localizedName(_ row: StorageExplorerRow) -> String {
+        row.id == "type:package" ? text("applicationsAndPackages", "应用与软件包") : row.name
     }
 
     private var fileTable: some View {
@@ -190,7 +251,7 @@ public struct StorageExplorerWorkspaceView: View {
             TableColumn(text("nameColumn", "名称"), value: \.name) { row in
                 HStack(spacing: 6) {
                     Image(systemName: row.item.iconSystemName).foregroundStyle(.secondary)
-                    Text(row.name).lineLimit(1).truncationMode(.middle)
+                    Text(localizedName(row)).lineLimit(1).truncationMode(.middle)
                     if row.item.isIncomplete { Image(systemName: "exclamationmark.circle").foregroundStyle(.orange) }
                     if controller.basket.contains(row.id) { Image(systemName: "checkmark.circle.fill").foregroundStyle(.tint) }
                 }
@@ -202,7 +263,7 @@ public struct StorageExplorerWorkspaceView: View {
             TableColumn(text("proportionColumn", "占比")) { row in Text(row.percentage).monospacedDigit() }
                 .width(min: 45, ideal: 55)
             TableColumn(text("kind", "类型"), value: \.kind) { row in
-                Text(row.item.isDirectory && !row.item.isPackage ? text("folders", "文件夹") : row.kind)
+                Text(localizedKind(row))
             }.width(min: 60, ideal: 80)
             TableColumn(text("modified", "修改日期"), value: \.modified) { row in Text(row.dateLabel) }
                 .width(min: 80, ideal: 95)
@@ -230,7 +291,8 @@ public struct StorageExplorerWorkspaceView: View {
                 Label(text("details", "详细信息"), systemImage: "info.circle")
                     .font(PluginSettingsTheme.Typography.sectionTitle).foregroundStyle(.secondary)
                 if let item = controller.inspectedItem {
-                    Text(item.name).font(PluginSettingsTheme.Typography.emphasizedRowTitle).textSelection(.enabled)
+                    Text(item.path == "type:package" ? text("applicationsAndPackages", "应用与软件包") : item.name)
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle).textSelection(.enabled)
                     if !item.path.hasPrefix("type:") {
                         Text(item.path).font(PluginSettingsTheme.Typography.rowDescription)
                             .foregroundStyle(.secondary).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
@@ -268,18 +330,44 @@ public struct StorageExplorerWorkspaceView: View {
     }
 
     private var reviewBar: some View {
-        HStack {
-            Button(text("selectVisible", "选择列表项目")) { controller.selectAllVisible(items: controller.rows.map(\.item)) }
-                .disabled(controller.isScanning || controller.mode == .fileTypes)
+        HStack(spacing: 10) {
+            Image(systemName: controller.basket.isEmpty ? "tray.and.arrow.down" : "checkmark.circle.fill")
+                .foregroundStyle(controller.basket.isEmpty ? Color.secondary : Color.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                if controller.basket.isEmpty {
+                    Text(text("dropToReview", "拖到这里以加入审阅"))
+                        .font(PluginSettingsTheme.Typography.rowTitle)
+                    Text(text("dropToReviewDescription", "也可以点按项目旁的加号。"))
+                        .font(PluginSettingsTheme.Typography.rowDescription).foregroundStyle(.secondary)
+                } else {
+                    Text(String(format: text("selectedItemsFormat", "已选 %d 个项目（共 %@）"), controller.basket.count,
+                        ByteCountFormatter.string(fromByteCount: controller.totalSelectedBytes, countStyle: .file)))
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle).monospacedDigit()
+                    Text(controller.selectedItemsForReview.prefix(3).map(\.name).joined(separator: " · "))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
             Spacer()
-            Text(String(format: text("selectedItemsFormat", "已选 %d 个项目（共 %@）"), controller.basket.count,
-                ByteCountFormatter.string(fromByteCount: controller.totalSelectedBytes, countStyle: .file)))
-                .font(PluginSettingsTheme.Typography.rowDescription).monospacedDigit()
             Button(text("clearSelection", "取消选择")) { controller.clearSelection() }.disabled(controller.basket.isEmpty)
             Button(text("review", "审阅…")) { controller.confirmTrash() }
                 .buttonStyle(.borderedProminent)
                 .disabled(controller.basket.isEmpty || controller.isScanning)
-        }.buttonStyle(.bordered).controlSize(.small)
+        }
+        .buttonStyle(.bordered).controlSize(.small)
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(Color.accentColor.opacity(controller.basket.isEmpty ? 0.04 : 0.08), in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.accentColor.opacity(0.65), lineWidth: 1.5))
+        .dropDestination(for: String.self) { paths, _ in
+            var accepted = false
+            for path in paths where controller.snapshot.items[path] != nil {
+                if !controller.basket.contains(path) {
+                    controller.toggleSelection(path: path)
+                    accepted = true
+                }
+            }
+            return accepted
+        } isTargeted: { _ in }
     }
 
     private var confirmation: some View {
@@ -310,8 +398,9 @@ private struct StorageExplorerProgressView: View {
     @ObservedObject var status: StorageExplorerScanStatus
     let metric: StorageExplorerMetric
     let localization: PluginLocalization
+    @Binding var showsDetails: Bool
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 14) {
             Text(ByteCountFormatter.string(
                 fromByteCount: metric == .logical
                     ? status.progress.bytesScanned
@@ -322,13 +411,32 @@ private struct StorageExplorerProgressView: View {
             Text(String(format: localization.string("storageExplorer.filesScannedFormat", defaultValue: "已扫描 %d 个项目"), status.progress.filesScanned))
             Text(String(format: "%.1f s", status.progress.elapsed)).monospacedDigit()
             if status.progress.skippedCount > 0 {
-                Label(String(format: localization.string("storageExplorer.skippedCount", defaultValue: "跳过 %d 项"), status.progress.skippedCount),
-                      systemImage: "exclamationmark.circle").foregroundStyle(.orange)
+                Button {
+                    showsDetails.toggle()
+                } label: {
+                    Label(String(format: localization.string("storageExplorer.skippedCount", defaultValue: "跳过 %d 项"), status.progress.skippedCount),
+                          systemImage: "exclamationmark.circle")
+                }
+                .buttonStyle(.plain).foregroundStyle(.orange)
+                .help(localization.string("storageExplorer.skippedDetailsHelp", defaultValue: "显示跳过项目的说明"))
+                .popover(isPresented: $showsDetails) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(localization.string("storageExplorer.skippedDetailsTitle", defaultValue: "未扫描的项目"))
+                            .font(.headline)
+                        Text(String(format: localization.string(
+                            "storageExplorer.skippedDetailsMessage",
+                            defaultValue: "%d 个项目因权限、云端占位文件或文件系统边界而被跳过。显示的总大小可能偏低。"
+                        ), status.progress.skippedCount))
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(14).frame(width: 330)
+                }
             }
             Spacer()
         }
         .font(PluginSettingsTheme.Typography.rowDescription)
-        .padding(12).pluginSettingsCardBackground(.standard)
+        .padding(.horizontal, 2)
     }
 }
 

@@ -14,7 +14,27 @@ private struct StorageExplorerPluginProvider: PluginProvider {
 
     func makePlugins() -> [any MacToolsPlugin] {
         let localization = PluginLocalization(bundle: context.resourceBundle)
-        let controller = StorageExplorerController()
+        let controller = StorageExplorerController(
+            scanner: StorageExplorerScanner(publishesItems: false),
+            copy: StorageExplorerControllerCopy(
+                itemChanged: localization.string(
+                    "storageExplorer.itemChanged",
+                    defaultValue: "所选项目已在磁盘上发生更改。请刷新后重新选择。"
+                ),
+                movedToTrash: localization.string(
+                    "storageExplorer.movedToTrash",
+                    defaultValue: "已移至废纸篓"
+                ),
+                trashOperationFailed: localization.string(
+                    "storageExplorer.trashOperationFailed",
+                    defaultValue: "无法将所选项目移至废纸篓。请刷新后重试。"
+                ),
+                trashPartialFailure: localization.string(
+                    "storageExplorer.trashPartialFailure",
+                    defaultValue: "%d 个项目未能移至废纸篓：%@"
+                )
+            )
+        )
         return [
             StorageExplorerPlugin(
                 controller: controller,

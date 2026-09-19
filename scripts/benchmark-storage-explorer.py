@@ -12,6 +12,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--files", type=int, default=20_000)
     parser.add_argument("--baseline-ref", help="Optional existing git revision to compare against")
+    parser.add_argument(
+        "--max-peak-rss-mb",
+        type=float,
+        default=200,
+        help="Fail when the progress-only scanner exceeds this peak resident memory (default: 200)",
+    )
     args = parser.parse_args()
     if not 1 <= args.files <= 1_000_000:
         parser.error("--files must be between 1 and 1000000")
@@ -27,8 +33,15 @@ def main():
             folder.mkdir(exist_ok=True)
             (folder / f"file-{i:07}.bin").write_bytes(b"x")
         common = ["xcrun", "swiftc", "-O", "-target", platform.machine() + "-apple-macosx14.0", "-module-cache-path", str(work / "modules")]
-        def run(arguments):
-            subprocess.run(arguments, cwd=repo, env=env, check=True)
+        def run(arguments, capture=False):
+            return subprocess.run(
+                arguments,
+                cwd=repo,
+                env=env,
+                check=True,
+                capture_output=capture,
+                text=capture,
+            )
         if args.baseline_ref:
             baseline = work / "baseline"
             baseline.mkdir()
@@ -55,7 +68,22 @@ def main():
                    ["StorageExplorerModels.swift", "StorageExplorerSnapshot.swift", "StorageExplorerScanner.swift"]]
         run(common + ["-swift-version", "6", "-I", str(work), "-L", str(work), "-lMacToolsFileSystem"]
             + [str(path) for path in sources] + [str(repo / "scripts/benchmarks/storage-explorer.swift"), "-o", str(work / "scan")])
-        run([str(work / "scan"), str(fixture)])
+        completed = run([str(work / "scan"), str(fixture)], capture=True)
+        print(completed.stdout, end="")
+        peaks = []
+        for line in completed.stdout.splitlines():
+            for field in line.split():
+                if field.startswith("peakRSS="):
+                    peaks.append(int(field.split("=", 1)[1]))
+        if not peaks:
+            raise SystemExit("benchmark did not report peakRSS")
+        limit = int(args.max_peak_rss_mb * 1024 * 1024)
+        peak = max(peaks)
+        if peak > limit:
+            raise SystemExit(
+                f"peak RSS {peak / 1024 / 1024:.1f} MiB exceeded "
+                f"{args.max_peak_rss_mb:.1f} MiB"
+            )
 
 
 if __name__ == "__main__":
