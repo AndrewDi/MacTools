@@ -716,6 +716,7 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var storageError: ClipboardHistoryStoreError?
     @Published private(set) var isLoaded = false
+    private(set) var didLoadItemsSuccessfully = false
     @Published private(set) var isIgnoringNextCopy = false
     @Published private var itemMutation: ItemMutation?
     @Published private(set) var isCaptureBlockedByProtectedItems = false
@@ -943,6 +944,7 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
             startMonitoringIfPossible()
             return
         }
+        didLoadItemsSuccessfully = false
 
         seedSourceApplicationAttribution()
         if !isIgnoringNextCopy {
@@ -1004,6 +1006,7 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
         flushPendingImageIndexPersistence()
         storageGeneration &+= 1
         isLoaded = false
+        didLoadItemsSuccessfully = false
         currentHistoryItemPasteboardState = nil
         clearCaptureSuppression(notifyCancellation: false, clearsPrivateCopyLease: false)
         discardSourceApplicationAttribution()
@@ -1080,6 +1083,7 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
         errorMessage = nil
         storageError = nil
         isLoaded = false
+        didLoadItemsSuccessfully = false
         notifyChanged()
         start()
     }
@@ -1986,6 +1990,7 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
     ) {
         loadTask = nil
         isLoaded = true
+        didLoadItemsSuccessfully = true
         submittedItems = loadedItems
         pendingMutations = []
         items = retainedItems
@@ -2008,6 +2013,7 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
     private func finishLoading(with error: Error) {
         loadTask = nil
         isLoaded = true
+        didLoadItemsSuccessfully = false
         errorMessage = errorMessageProvider(error)
         storageError = error as? ClipboardHistoryStoreError
         discardSourceApplicationAttribution()
@@ -2321,6 +2327,7 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
             errorMessage = nil
             storageError = nil
             isLoaded = true
+            didLoadItemsSuccessfully = true
             lastSeenChangeCount = pasteboard.changeCount
             itemMutation = nil
             notifyChanged()

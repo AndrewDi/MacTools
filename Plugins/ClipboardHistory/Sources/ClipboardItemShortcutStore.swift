@@ -146,10 +146,23 @@ final class ClipboardItemShortcutStore: ObservableObject {
     }
 
     func removeMissingItems(historyIDs: Set<UUID>, savedIDs: Set<UUID>) {
+        removeMissingItems(
+            historyIDs: historyIDs,
+            savedIDs: savedIDs,
+            snippetIDs: savedIDs
+        )
+    }
+
+    func removeMissingItems(
+        historyIDs: Set<UUID>?,
+        savedIDs: Set<UUID>?,
+        snippetIDs: Set<UUID>?
+    ) {
         removeWhere { assignment in
             switch assignment.source {
-            case .history: !historyIDs.contains(assignment.itemID)
-            case .saved, .snippet: !savedIDs.contains(assignment.itemID)
+            case .history: historyIDs.map { !$0.contains(assignment.itemID) } ?? false
+            case .saved: savedIDs.map { !$0.contains(assignment.itemID) } ?? false
+            case .snippet: snippetIDs.map { !$0.contains(assignment.itemID) } ?? false
             }
         }
     }

@@ -239,6 +239,7 @@ final class ClipboardHistoryPlugin:
     private var itemShortcutRequestGeneration: [ItemShortcutRequestKey: UInt64] = [:]
     private var activeItemShortcutAssignments: Set<UUID> = []
     private var waitingItemShortcutAssignments: [UUID: [CheckedContinuation<Void, Never>]] = [:]
+    private var cachedItemShortcutDefinitions: [PluginShortcutDefinition] = []
     private var itemShortcutLifecycleGeneration: UInt64 = 0
     private var activeProvisionalShortcutSaves: [UUID: ClipboardHistorySavedMetadata] = [:]
     private var pendingShortcutSaveRollbacks: [UUID: ClipboardHistorySavedMetadata] = [:]
@@ -558,7 +559,8 @@ final class ClipboardHistoryPlugin:
         }
         itemShortcutStore.onAssignmentsChanged = { [weak self] in
             guard let self else { return }
-            self.controller.updateShortcutRetainedItemIDs(self.itemShortcutStore.activeHistoryItemIDs)
+            self.refreshItemShortcutDefinitions()
+            self.synchronizeItemShortcutRetention()
         }
 
         settingsStore.onChange = { [weak self] in
@@ -569,11 +571,13 @@ final class ClipboardHistoryPlugin:
             self?.preparePanelWhenReady()
             self?.retryPendingShortcutSaveRollbacksWhenReady()
             self?.pruneItemShortcutsWhenReady()
+            self?.refreshItemShortcutDefinitions()
             self?.onStateChange?()
         }
         savedLibraryController.onChange = { [weak self] in
             self?.preparePanelWhenReady()
             self?.pruneItemShortcutsWhenReady()
+            self?.refreshItemShortcutDefinitions()
             self?.synchronizeKeywordExpansion()
             self?.onStateChange?()
         }
@@ -639,6 +643,7 @@ final class ClipboardHistoryPlugin:
         controller.updateSequentialPasteProtectedItemIDs(
             sequentialPasteCoordinator.protectedItemIDs()
         )
+        refreshItemShortcutDefinitions()
     }
 
     var settingsPage: PluginSettingsPage? {
@@ -989,56 +994,7 @@ final class ClipboardHistoryPlugin:
                 systemImage: "arrow.right.doc.on.clipboard"
             ),
         ]
-        return fixed + itemShortcutStore.assignments.map { assignment in
-            let name = itemShortcutTitle(id: assignment.itemID)
-            let isTextOnly = assignment.source == .snippet
-                || controller.items.first(where: { $0.id == assignment.itemID })?.isPlainTextOnly == true
-            let isLegacyDuplicate = isTextOnly && assignment.pasteFormat == .plainText
-                && itemShortcutStore.assignment(for: assignment.itemID, pasteFormat: .original) != nil
-            let formatName: String
-            if isTextOnly && !isLegacyDuplicate {
-                formatName = localization.string("itemShortcut.format.textOnly", defaultValue: "Paste Text")
-            } else if assignment.pasteFormat == .plainText {
-                formatName = localization.string("itemShortcut.format.plainText", defaultValue: "Paste as Plain Text")
-            } else {
-                formatName = localization.string("itemShortcut.format.original", defaultValue: "Paste Original")
-            }
-            let formatDescription: String
-            if isTextOnly {
-                formatDescription = isLegacyDuplicate
-                    ? localization.string(
-                        "itemShortcut.textOnly.existingPlain",
-                        defaultValue: "This existing shortcut pastes the same text. You can keep or remove it."
-                    )
-                    : localization.string(
-                        "itemShortcut.textOnly.description",
-                        defaultValue: "This item contains only plain text, so one shortcut covers both paste styles."
-                    )
-            } else if assignment.pasteFormat == .plainText {
-                formatDescription = localization.string(
-                    "itemShortcut.format.plainText.description",
-                    defaultValue: "Pastes text only, without formatting or other data. Images use recognized text; files use paths."
-                )
-            } else {
-                formatDescription = localization.string(
-                    "itemShortcut.format.original.description",
-                    defaultValue: "Preserves formatting and other original clipboard data."
-                )
-            }
-            return PluginShortcutDefinition(
-                id: assignment.definitionID,
-                title: "\(name) — \(formatName)",
-                description: formatDescription,
-                actionID: assignment.definitionID,
-                scope: .global,
-                defaultBinding: nil,
-                isRequired: false,
-                settingsGroupID: ShortcutID.primaryGroup,
-                settingsGroupTitle: localization.string("settings.shortcuts.primary.title", defaultValue: "Main Shortcuts"),
-                settingsControlTitle: "\(name) — \(formatName)",
-                settingsControlSystemImage: "pin"
-            )
-        }
+        return fixed + cachedItemShortcutDefinitions
     }
 
     private func panelShortcut(
@@ -1902,12 +1858,14 @@ final class ClipboardHistoryPlugin:
     }
 
     private func pruneItemShortcutsWhenReady() {
-        guard controller.isLoaded, savedLibraryController.isLoaded else { return }
         itemShortcutStore.expireIfNeeded()
+        let didLoadHistory = controller.isLoaded && controller.didLoadItemsSuccessfully
+        let didLoadSnippets = savedLibraryController.isLoaded
+            && savedLibraryController.fatalErrorMessage == nil
         itemShortcutStore.removeMissingItems(
-            historyIDs: Set(controller.items.map(\.id)),
-            savedIDs: Set(controller.savedItems.map(\.id))
-                .union(savedLibraryController.items.map(\.id))
+            historyIDs: didLoadHistory ? Set(controller.items.map(\.id)) : nil,
+            savedIDs: didLoadHistory ? Set(controller.savedItems.map(\.id)) : nil,
+            snippetIDs: didLoadSnippets ? Set(savedLibraryController.items.map(\.id)) : nil
         )
     }
 
@@ -2109,7 +2067,10 @@ final class ClipboardHistoryPlugin:
     }
 
     private func waitForItemShortcutAssignmentSlot(itemID: UUID) async {
-        if activeItemShortcutAssignments.insert(itemID).inserted { return }
+        if activeItemShortcutAssignments.insert(itemID).inserted {
+            synchronizeItemShortcutRetention()
+            return
+        }
         await withCheckedContinuation { continuation in
             waitingItemShortcutAssignments[itemID, default: []].append(continuation)
         }
@@ -2126,7 +2087,14 @@ final class ClipboardHistoryPlugin:
             next.resume()
         } else {
             activeItemShortcutAssignments.remove(itemID)
+            synchronizeItemShortcutRetention()
         }
+    }
+
+    private func synchronizeItemShortcutRetention() {
+        controller.updateShortcutRetainedItemIDs(
+            itemShortcutStore.activeHistoryItemIDs.union(activeItemShortcutAssignments)
+        )
     }
 
     private func enqueueItemShortcutPaste(
@@ -2281,6 +2249,10 @@ final class ClipboardHistoryPlugin:
         if let cursorAccess, let cursorContext {
             await cursorContext.apply(access: cursorAccess)
         }
+        // Sending Command-V only dispatches the key event. Keep the serialized clipboard-write
+        // lane occupied long enough for the destination to consume this payload before the next
+        // item shortcut replaces it.
+        try? await Task.sleep(for: sequentialPasteStabilizationDelay)
     }
 
     private func performSequentialPaste(
@@ -2687,18 +2659,95 @@ final class ClipboardHistoryPlugin:
         return String(title.prefix(100))
     }
 
-    private func itemShortcutTitle(id: UUID) -> String {
-        if let snippet = savedLibraryController.items.first(where: { $0.id == id }) {
+    private func refreshItemShortcutDefinitions() {
+        var historyItemsByID: [UUID: ClipboardHistoryItem] = [:]
+        historyItemsByID.reserveCapacity(controller.items.count)
+        for item in controller.items {
+            historyItemsByID[item.id] = item
+        }
+        var snippetsByID: [UUID: ClipboardSavedItem] = [:]
+        snippetsByID.reserveCapacity(savedLibraryController.items.count)
+        for item in savedLibraryController.items {
+            snippetsByID[item.id] = item
+        }
+        let originalAssignmentItemIDs = Set(itemShortcutStore.assignments.lazy
+            .filter { $0.pasteFormat == .original }
+            .map(\.itemID))
+
+        cachedItemShortcutDefinitions = itemShortcutStore.assignments.map { assignment in
+            let item = historyItemsByID[assignment.itemID]
+            let name = itemShortcutTitle(item: item, snippet: snippetsByID[assignment.itemID])
+            let isTextOnly = assignment.source == .snippet || item?.isPlainTextOnly == true
+            let isLegacyDuplicate = isTextOnly && assignment.pasteFormat == .plainText
+                && originalAssignmentItemIDs.contains(assignment.itemID)
+            let formatName: String
+            if isTextOnly && !isLegacyDuplicate {
+                formatName = localization.string("itemShortcut.format.textOnly", defaultValue: "Paste Text")
+            } else if assignment.pasteFormat == .plainText {
+                formatName = localization.string("itemShortcut.format.plainText", defaultValue: "Paste as Plain Text")
+            } else {
+                formatName = localization.string("itemShortcut.format.original", defaultValue: "Paste Original")
+            }
+            let formatDescription: String
+            if isTextOnly {
+                formatDescription = isLegacyDuplicate
+                    ? localization.string(
+                        "itemShortcut.textOnly.existingPlain",
+                        defaultValue: "This existing shortcut pastes the same text. You can keep or remove it."
+                    )
+                    : localization.string(
+                        "itemShortcut.textOnly.description",
+                        defaultValue: "This item contains only plain text, so one shortcut covers both paste styles."
+                    )
+            } else if assignment.pasteFormat == .plainText {
+                formatDescription = localization.string(
+                    "itemShortcut.format.plainText.description",
+                    defaultValue: "Pastes text only, without formatting or other data. Images use recognized text; files use paths."
+                )
+            } else {
+                formatDescription = localization.string(
+                    "itemShortcut.format.original.description",
+                    defaultValue: "Preserves formatting and other original clipboard data."
+                )
+            }
+            return PluginShortcutDefinition(
+                id: assignment.definitionID,
+                title: "\(name) — \(formatName)",
+                description: formatDescription,
+                actionID: assignment.definitionID,
+                scope: .global,
+                defaultBinding: nil,
+                isRequired: false,
+                settingsGroupID: ShortcutID.primaryGroup,
+                settingsGroupTitle: localization.string("settings.shortcuts.primary.title", defaultValue: "Main Shortcuts"),
+                settingsControlTitle: "\(name) — \(formatName)",
+                settingsControlSystemImage: "pin"
+            )
+        }
+    }
+
+    private func itemShortcutTitle(
+        item: ClipboardHistoryItem?,
+        snippet: ClipboardSavedItem?
+    ) -> String {
+        if let snippet {
             return String(snippet.title.prefix(80))
         }
-        guard let item = controller.items.first(where: { $0.id == id }) else {
+        guard let item else {
             return localization.string("quickPaste.historyItem", defaultValue: "History item")
         }
         if let savedTitle = item.savedMetadata?.title, !savedTitle.isEmpty {
             return String(savedTitle.prefix(80))
         }
-        let preview = itemTitle(id: id)
-            ?? localization.string("quickPaste.historyItem", defaultValue: "History item")
+        let rawTitle = item.text.isEmpty
+            ? Self.localizedContentKindTitle(item.kind, localization: localization)
+            : item.text
+        let normalizedTitle = rawTitle
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let preview = normalizedTitle.isEmpty
+            ? localization.string("quickPaste.historyItem", defaultValue: "History item")
+            : normalizedTitle
         return "\(String(preview.prefix(60))) · \(item.capturedAt.formatted(date: .abbreviated, time: .standard))"
     }
 
