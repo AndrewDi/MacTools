@@ -22,7 +22,7 @@ private enum SettingsSplitViewLayout {
 
 private func settingsNavigationTitle(
     for destination: SettingsNavigationDestination,
-    configurationItems: [PluginSettingsPageItem]
+    configurationItems: [SettingsPluginNavigationItem]
 ) -> String {
     switch destination {
     case .general:
@@ -47,14 +47,15 @@ private func settingsNavigationTitle(
 
 struct SettingsView: View {
     @Environment(\.accessibilityReduceTransparency) private var accessibilityReduceTransparency
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
+    @ObservedObject var presentation: SettingsNavigationPresentationModel
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
-    @ObservedObject var appUpdater: AppUpdater
-    @ObservedObject var menuBarIconSettings: MenuBarIconSettings
-    @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
-    @ObservedObject var launchAtLoginController: LaunchAtLoginController
-    @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
+    let appUpdater: AppUpdater
+    let menuBarIconSettings: MenuBarIconSettings
+    let menuBarIconGallery: MenuBarIconGalleryLibrary
+    let launchAtLoginController: LaunchAtLoginController
+    let menuBarPanelThemeStore: MenuBarPanelThemeStore
     @ObservedObject var sidebarPreferences: SettingsSidebarPreferencesStore
     let appearanceUserDefaults: UserDefaults
     let commandPaletteRecentStore: CommandPaletteRecentStore
@@ -63,7 +64,7 @@ struct SettingsView: View {
     var body: some View {
         // Recreate native AppKit-backed controls when the shared locale changes.
         let _ = runtimeLocale.revision
-        let configurationItems = pluginHost.pluginSettingsItems
+        let configurationItems = presentation.configurationItems
         let orderItems = configurationItems.map {
             SettingsSidebarPluginOrderItem(
                 id: $0.id,
@@ -77,7 +78,7 @@ struct SettingsView: View {
         )
         let detailTitle = settingsNavigationTitle(
             for: navigationCoordinator.destination,
-            configurationItems: pluginHost.pluginSettingsItems
+            configurationItems: presentation.configurationItems
         )
 
         return NavigationSplitView {
@@ -157,10 +158,10 @@ struct SettingsView: View {
             }
         }
         .navigationSplitViewStyle(.balanced)
-        .onChange(of: pluginHost.pluginSettingsItems.map(\.id)) {
+        .onChange(of: presentation.configurationItems.map(\.id)) {
             navigationCoordinator.reconcileCurrentDestinationAvailability()
         }
-        .onChange(of: pluginHost.pluginManagementItems) {
+        .onChange(of: presentation.marketplaceItems) {
             navigationCoordinator.reconcileCurrentDestinationAvailability()
         }
         .blur(
@@ -581,7 +582,7 @@ private func permissionActionTitle(for item: PermissionCenterItem) -> String {
 }
 
 struct GeneralSettingsView: View {
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     @ObservedObject var menuBarIconSettings: MenuBarIconSettings
     @ObservedObject var menuBarIconGallery: MenuBarIconGalleryLibrary
@@ -2899,7 +2900,7 @@ private struct SettingsSidebar: View {
         static let searchSectionSpacing = PluginSettingsTheme.Spacing.sectionHeaderContent
     }
 
-    let configurationItems: [PluginSettingsPageItem]
+    let configurationItems: [SettingsPluginNavigationItem]
     let orderedDestinations: [SettingsNavigationDestination]
     @ObservedObject var sidebarPreferences: SettingsSidebarPreferencesStore
     @Binding var selection: SettingsNavigationDestination
@@ -2914,7 +2915,11 @@ private struct SettingsSidebar: View {
     @FocusState private var isListFocused: Bool
 
     var body: some View {
-        VStack(spacing: 0) {
+        let configurationItemsByID = Dictionary(uniqueKeysWithValues: configurationItems.map { ($0.id, $0) })
+        let shortcutNumbers = Dictionary(uniqueKeysWithValues: effectiveNumberTargets.enumerated().map {
+            ($0.element, $0.offset + 1)
+        })
+        return VStack(spacing: 0) {
             SettingsSidebarSearchLauncher(
                 prompt: AppL10n.search("search.title", defaultValue: "搜索 MacTools"),
                 onActivate: onSearch
@@ -2934,7 +2939,11 @@ private struct SettingsSidebar: View {
                     Section {
                         if sidebarPreferences.isAppSectionExpanded {
                             ForEach(appDestinations, id: \.self) { destination in
-                                sidebarRow(for: destination)
+                                sidebarRow(
+                                    for: destination,
+                                    configurationItemsByID: configurationItemsByID,
+                                    shortcutNumbers: shortcutNumbers
+                                )
                             }
                         }
                     } header: {
@@ -2947,7 +2956,11 @@ private struct SettingsSidebar: View {
                     Section {
                         if sidebarPreferences.isCustomizeSectionExpanded {
                             ForEach(primaryPluginDestinations, id: \.self) { destination in
-                                sidebarRow(for: destination)
+                                sidebarRow(
+                                    for: destination,
+                                    configurationItemsByID: configurationItemsByID,
+                                    shortcutNumbers: shortcutNumbers
+                                )
                             }
                         }
                     } header: {
@@ -2965,7 +2978,11 @@ private struct SettingsSidebar: View {
                                     .foregroundStyle(.secondary)
                             } else {
                                 ForEach(configurationDestinations, id: \.self) { destination in
-                                    sidebarRow(for: destination)
+                                    sidebarRow(
+                                        for: destination,
+                                        configurationItemsByID: configurationItemsByID,
+                                        shortcutNumbers: shortcutNumbers
+                                    )
                                 }
                                 .onMove(perform: moveConfigurations)
                             }
@@ -3078,83 +3095,49 @@ private struct SettingsSidebar: View {
         }
     }
 
-    @ViewBuilder
-    private func sidebarRow(for destination: SettingsNavigationDestination) -> some View {
-        let title = settingsNavigationTitle(
-            for: destination,
-            configurationItems: configurationItems
-        )
-        let shortcutNumber = shortcutNumber(for: destination)
-
-        switch destination {
-        case .general:
-            SettingsSidebarRow(
-                title: title,
-                systemImage: "gearshape",
-                iconTint: .gray,
-                shortcutNumber: shortcutNumber
-            )
-            .tag(destination)
-            .id(destination)
-        case .permissions:
-            SettingsSidebarRow(
-                title: title,
-                systemImage: "lock.shield",
-                iconTint: .teal,
-                shortcutNumber: shortcutNumber
-            )
-            .tag(destination)
-            .id(destination)
-        case .about:
-            SettingsSidebarRow(
-                title: title,
-                systemImage: "info.circle",
-                iconTint: .blue,
-                shortcutNumber: shortcutNumber
-            )
-            .tag(destination)
-            .id(destination)
-        case .plugins(.actionsAndShortcuts):
-            SettingsSidebarRow(
-                title: title,
-                systemImage: "command",
-                iconTint: .orange,
-                shortcutNumber: shortcutNumber
-            )
-            .tag(destination)
-            .id(destination)
-        case .plugins(.automation):
-            SettingsSidebarRow(
-                title: title,
-                systemImage: "bolt.horizontal.circle",
-                iconTint: .indigo,
-                shortcutNumber: shortcutNumber
-            )
-            .tag(destination)
-            .id(destination)
-        case .plugins(.marketplace):
-            SettingsSidebarRow(
-                title: title,
-                systemImage: "shippingbox",
-                iconTint: .blue,
-                shortcutNumber: shortcutNumber
-            )
-            .tag(destination)
-            .id(destination)
-        case let .plugins(.configuration(pluginID)):
-            if let item = configurationItems.first(where: { $0.id == pluginID }) {
-                SettingsSidebarRow(
-                    title: title,
-                    systemImage: item.iconName,
-                    iconTint: item.iconTint,
-                    shortcutNumber: shortcutNumber
-                )
-                .tag(destination)
-                .id(destination)
-            }
-        case .marketplaceDetail:
-            EmptyView()
+    private func sidebarRow(
+        for destination: SettingsNavigationDestination,
+        configurationItemsByID: [String: SettingsPluginNavigationItem],
+        shortcutNumbers: [SettingsSidebarNumberTarget: Int]
+    ) -> some View {
+        let item: SettingsPluginNavigationItem? = if case let .plugins(.configuration(pluginID)) = destination {
+            configurationItemsByID[pluginID]
+        } else {
+            nil
         }
+        let title = item?.title ?? settingsNavigationTitle(for: destination, configurationItems: [])
+        let shortcutNumber = shortcutNumbers[.destination(destination)]
+
+        // Keep one explicit row per destination so List can collect IDs without building every label.
+        return HStack(spacing: 0) {
+            switch destination {
+            case .general:
+                SettingsSidebarRow(title: title, systemImage: "gearshape", iconTint: .gray, shortcutNumber: shortcutNumber)
+            case .permissions:
+                SettingsSidebarRow(title: title, systemImage: "lock.shield", iconTint: .teal, shortcutNumber: shortcutNumber)
+            case .about:
+                SettingsSidebarRow(title: title, systemImage: "info.circle", iconTint: .blue, shortcutNumber: shortcutNumber)
+            case .plugins(.actionsAndShortcuts):
+                SettingsSidebarRow(title: title, systemImage: "command", iconTint: .orange, shortcutNumber: shortcutNumber)
+            case .plugins(.automation):
+                SettingsSidebarRow(title: title, systemImage: "bolt.horizontal.circle", iconTint: .indigo, shortcutNumber: shortcutNumber)
+            case .plugins(.marketplace):
+                SettingsSidebarRow(title: title, systemImage: "shippingbox", iconTint: .blue, shortcutNumber: shortcutNumber)
+            case .plugins(.configuration):
+                if let item {
+                    SettingsSidebarRow(
+                        title: title,
+                        systemImage: item.iconName,
+                        iconTint: item.iconTint,
+                        shortcutNumber: shortcutNumber
+                    )
+                }
+            case .marketplaceDetail:
+                EmptyView()
+            }
+        }
+        .tag(destination)
+        .id(destination)
     }
 
     private var configurationSectionHeader: some View {
@@ -3256,15 +3239,6 @@ private struct SettingsSidebar: View {
     private func sortOption(_ sortMode: SettingsSidebarPluginSortMode) -> some View {
         Text(sortMode.localizedTitle)
             .tag(sortMode)
-    }
-
-    private func shortcutNumber(for destination: SettingsNavigationDestination) -> Int? {
-        guard
-            let index = effectiveNumberTargets.firstIndex(of: .destination(destination))
-        else {
-            return nil
-        }
-        return index + 1
     }
 
     private var configurationSectionTitle: String {
@@ -3719,7 +3693,7 @@ private extension SettingsSidebarPluginSortMode {
 }
 
 private struct SettingsDetailPane: View {
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let destination: SettingsNavigationDestination
     @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
@@ -3770,7 +3744,7 @@ private struct SettingsDetailPane: View {
 }
 
 private struct PluginSettingsDestinationPane: View {
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
     let selectedPane: FeatureSettingsPane
     @ObservedObject var uninstallConfirmationSession: PluginUninstallConfirmationSession
@@ -3802,14 +3776,11 @@ private struct PluginSettingsDestinationPane: View {
             PluginSettingsDetailPane(
                 pluginHost: pluginHost,
                 navigationCoordinator: navigationCoordinator,
-                item: configurationItem(for: pluginID)
+                pluginID: pluginID
             )
         }
     }
 
-    private func configurationItem(for pluginID: String) -> PluginSettingsPageItem? {
-        pluginHost.pluginSettingsItems.first { $0.id == pluginID }
-    }
 }
 
 struct PluginSettingsPageVisibilityTransition {
@@ -3830,7 +3801,10 @@ struct PluginSettingsPageVisibilityTransition {
 private struct PluginSettingsDetailPane: View {
     @ObservedObject var pluginHost: PluginHost
     @ObservedObject var navigationCoordinator: SettingsNavigationCoordinator
-    let item: PluginSettingsPageItem?
+    let pluginID: String
+    private var item: PluginSettingsPageItem? {
+        pluginHost.pluginSettingsItems.first { $0.id == pluginID }
+    }
     @State private var activeSearchTarget: PluginSettingsSearchTarget?
     @State private var clearSearchTargetTask: Task<Void, Never>?
     @State private var visiblePluginID: String?

@@ -312,7 +312,9 @@ final class PanelLayoutEditorTests: XCTestCase {
             model.update(selectedTab: tab, contentHeight: 400, maximumFeatureListHeight: 400, isPanelVisible: true)
         }
         model.beginLayoutEditing(visibleItemCount: 1)
-        let window = mount(MenuBarUnifiedPanelContent(pluginHost: host, appUpdater: AppUpdater(startingUpdater: false),
+        let window = mount(MenuBarUnifiedPanelContent(pluginHost: host,
+            presentation: MenuBarPanelPresentationModel(host: host, isVisible: true),
+            appUpdater: AppUpdater(startingUpdater: false),
             menuBarPanelThemeStore: MenuBarPanelThemeStore(userDefaults: defaults), model: model,
             onDismiss: { XCTFail("Dragging cannot dismiss editing") }, onOpenUpdate: {}, onOpenSettings: {},
             onPresentDiskCleanConfiguration: {}, onPresentLaunchControlConfiguration: {}))
@@ -401,6 +403,7 @@ final class PanelLayoutEditorTests: XCTestCase {
         var dismissCount = 0
         let normal = ComponentPanelContent(pluginHost: host, contentBodyHeight: 480,
                                            isPanelVisible: true, onDismiss: { dismissCount += 1 })
+            .environmentObject(MenuBarPanelPresentationModel(host: host, isVisible: true))
         let window = mount(normal)
         defer { window.close() }
         let view = try XCTUnwrap(window.contentView as? NSHostingView<AnyView>)

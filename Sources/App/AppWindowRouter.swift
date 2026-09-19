@@ -733,6 +733,7 @@ final class AppWindowRouter: NSObject, NSWindowDelegate {
         let hostingView = NSHostingView(
             rootView: SettingsView(
                 pluginHost: pluginHost,
+                presentation: SettingsNavigationPresentationModel(host: pluginHost),
                 navigationCoordinator: navigationCoordinator,
                 appUpdater: appUpdater,
                 menuBarIconSettings: menuBarIconSettings,

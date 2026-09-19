@@ -275,6 +275,7 @@ final class MenuBarPanelPresenter: NSObject {
     private let popover = NSPopover()
     private let panelModel: MenuBarUnifiedPanelModel
     private let hostingController: MenuBarPanelHostingController<MenuBarUnifiedPanelContent>
+    private let contentPresentation: MenuBarPanelPresentationModel
     private let containerController: MenuBarPanelContainerController<MenuBarUnifiedPanelContent>
     private var appearanceObserver: NSObjectProtocol?
     private var themeObserver: NSObjectProtocol?
@@ -320,9 +321,12 @@ final class MenuBarPanelPresenter: NSObject {
             isPanelVisible: false
         )
         self.panelModel = panelModel
+        let contentPresentation = MenuBarPanelPresentationModel(host: pluginHost)
+        self.contentPresentation = contentPresentation
         let hostingController = MenuBarPanelHostingController(
             rootView: MenuBarUnifiedPanelContent(
                 pluginHost: pluginHost,
+                presentation: contentPresentation,
                 appUpdater: appUpdater,
                 menuBarPanelThemeStore: menuBarPanelThemeStore,
                 model: panelModel,
@@ -390,6 +394,7 @@ final class MenuBarPanelPresenter: NSObject {
     private func refreshLocalization() {
         hostingController.rootView = MenuBarUnifiedPanelContent(
             pluginHost: pluginHost,
+            presentation: contentPresentation,
             appUpdater: appUpdater,
             menuBarPanelThemeStore: menuBarPanelThemeStore,
             model: panelModel,
@@ -816,6 +821,7 @@ final class MenuBarPanelPresenter: NSObject {
         let panels = pluginHost.visibleMenuBarPanels
         guard let selected = panels.first(where: { $0.id == selectedPanel.id }) ?? panels.first else { return }
         selectedPanel = MenuBarPanelTab(id: selected.id)
+        guard popover.isShown else { return }
         updateContent(selectedTab: selectedPanel,
                       screen: popover.contentViewController?.view.window?.screen ?? NSScreen.main,
                       isPanelVisible: popover.isShown)
@@ -894,6 +900,7 @@ final class MenuBarPanelPresenter: NSObject {
     private func panelKind(for tab: MenuBarPanelTab) -> PanelKind { tab }
 
     private func updatePanelSurfaceVisibility(for tab: MenuBarPanelTab, isPanelVisible: Bool) {
+        contentPresentation.setVisible(isPanelVisible)
         pluginHost.setVisibleMenuBarPanel(isPanelVisible ? tab.id : nil)
     }
 
@@ -1043,7 +1050,8 @@ final class MenuBarUnifiedPanelModel: ObservableObject {
 }
 
 struct MenuBarUnifiedPanelContent: View {
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
+    @ObservedObject var presentation: MenuBarPanelPresentationModel
     @ObservedObject var appUpdater: AppUpdater
     @ObservedObject var menuBarPanelThemeStore: MenuBarPanelThemeStore
     @ObservedObject private var runtimeLocale = PluginRuntimeLocalization.source
@@ -1062,6 +1070,7 @@ struct MenuBarUnifiedPanelContent: View {
 
     var body: some View {
         let _ = runtimeLocale.revision
+        let _ = presentation.revision
         let appearance = MenuBarPanelThemeResolver.appearance(for: colorScheme)
         let theme = MenuBarPanelThemeResolver.resolve(
             definition: menuBarPanelThemeStore.selectedDefinition(for: appearance),
@@ -1143,6 +1152,7 @@ struct MenuBarUnifiedPanelContent: View {
         .foregroundStyle(theme.text.primary)
         .tint(theme.accent)
         .id(runtimeLocale.revision)
+        .environmentObject(presentation)
         .environment(\.menuBarPanelTheme, theme)
         .environment(\.pluginComponentTheme, theme.componentTheme)
         .environment(\.locale, PluginRuntimeLocalization.locale)

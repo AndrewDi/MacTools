@@ -244,7 +244,8 @@ struct ComponentPanelContent: View {
     @State private var detailAnchors = ComponentDetailAnchorRegistry()
     @StateObject private var layoutCache = ComponentGridLayoutCache()
     @StateObject private var secondaryPanelController = SecondaryPanelController()
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
+    @EnvironmentObject private var presentation: MenuBarPanelPresentationModel
     let contentBodyHeight: CGFloat
     let isPanelVisible: Bool
     let onDismiss: () -> Void
@@ -264,6 +265,7 @@ struct ComponentPanelContent: View {
     }
 
     var body: some View {
+        let _ = presentation.revision
         ZStack(alignment: .topLeading) {
             dashboardContent
                 .opacity(secondaryPanelController.isPresentingInline ? 0 : 1)
@@ -427,7 +429,8 @@ struct ComponentPanelContent: View {
 }
 
 private struct ComponentGridView: View {
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
+    @EnvironmentObject private var presentation: MenuBarPanelPresentationModel
     let items: [PluginComponentItem]
     let entries: [MenuBarPanelEntry]?
     let placements: [ComponentGridPlacement]
@@ -446,6 +449,7 @@ private struct ComponentGridView: View {
     }
 
     var body: some View {
+        let _ = presentation.revision
         let itemLookup = itemsByID
 
         let frames = placements.map { placement in

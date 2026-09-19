@@ -754,11 +754,12 @@ final class PluginHost: ObservableObject {
             } else {
                 dynamicPluginManager.prepareInstalledPluginsWithoutLoading()
             }
-            self.dynamicPluginCapabilitiesByID = dynamicPluginManager.installedCapabilitiesByID()
-            self.dynamicPluginCategoriesByID = dynamicPluginManager.installedCategoriesByID()
-            self.dynamicPluginReleaseChannelsByID = dynamicPluginManager.installedReleaseChannelsByID()
-            self.dynamicPluginManifestsByID = dynamicPluginManager.installedManifestsByID()
-            self.dynamicPluginInstalledAtByID = dynamicPluginManager.installedAtByID()
+            let installedMetadata = dynamicPluginManager.installedMetadata()
+            self.dynamicPluginCapabilitiesByID = installedMetadata.capabilitiesByID
+            self.dynamicPluginCategoriesByID = installedMetadata.categoriesByID
+            self.dynamicPluginReleaseChannelsByID = installedMetadata.releaseChannelsByID
+            self.dynamicPluginManifestsByID = installedMetadata.manifestsByID
+            self.dynamicPluginInstalledAtByID = installedMetadata.installedAtByID
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
@@ -2724,8 +2725,8 @@ final class PluginHost: ObservableObject {
     }
 
     func refreshPluginCatalog() async {
-        await pluginCatalogManager?.refreshCatalog()
-        syncPluginManagementState()
+        let installedMetadata = await pluginCatalogManager?.refreshCatalog()
+        syncPluginManagementState(installedMetadata: installedMetadata)
     }
 
     private func startCloudPreferencesSyncIfReady() {
@@ -3549,12 +3550,13 @@ final class PluginHost: ObservableObject {
         syncGlobalShortcuts()
     }
 
-    private func syncPluginManagementState() {
-        dynamicPluginCapabilitiesByID = dynamicPluginManager?.installedCapabilitiesByID() ?? [:]
-        dynamicPluginCategoriesByID = dynamicPluginManager?.installedCategoriesByID() ?? [:]
-        dynamicPluginReleaseChannelsByID = dynamicPluginManager?.installedReleaseChannelsByID() ?? [:]
-        dynamicPluginManifestsByID = dynamicPluginManager?.installedManifestsByID() ?? [:]
-        dynamicPluginInstalledAtByID = dynamicPluginManager?.installedAtByID() ?? [:]
+    private func syncPluginManagementState(installedMetadata: InstalledPluginMetadata? = nil) {
+        let metadata = installedMetadata ?? dynamicPluginManager?.installedMetadata()
+        dynamicPluginCapabilitiesByID = metadata?.capabilitiesByID ?? [:]
+        dynamicPluginCategoriesByID = metadata?.categoriesByID ?? [:]
+        dynamicPluginReleaseChannelsByID = metadata?.releaseChannelsByID ?? [:]
+        dynamicPluginManifestsByID = metadata?.manifestsByID ?? [:]
+        dynamicPluginInstalledAtByID = metadata?.installedAtByID ?? [:]
         pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
@@ -5046,13 +5048,15 @@ final class PluginHost: ObservableObject {
         missingPermissionCardIDs: Set<String>,
         shortcutItems: [ShortcutSettingsItem]
     ) -> [PluginSettingsPageItem] {
-        orderedPluginDescriptors().compactMap { descriptor in
+        let permissionCardsByPluginID = Dictionary(grouping: permissionCards, by: \.pluginID)
+        let shortcutItemsByPluginID = Dictionary(grouping: shortcutItems, by: \.pluginID)
+        return orderedPluginDescriptors().compactMap { descriptor in
             let pluginID = descriptor.metadata.id
-            let matchingPermissionCards = permissionCards.filter { $0.pluginID == pluginID }
+            let matchingPermissionCards = permissionCardsByPluginID[pluginID] ?? []
             let matchingMissingPermissionCardIDs = missingPermissionCardIDs.intersection(
                 matchingPermissionCards.map(\.id)
             )
-            let matchingShortcutItems = shortcutItems.filter { $0.pluginID == pluginID }
+            let matchingShortcutItems = shortcutItemsByPluginID[pluginID] ?? []
             let shortcutSettingsGroups: [PluginShortcutSettingsGroupConfiguration]
             if descriptor.hasSettings,
                let provider = descriptor.plugin as? any PluginGroupedShortcutSettingsProviding,

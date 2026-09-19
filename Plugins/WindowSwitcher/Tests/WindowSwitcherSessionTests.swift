@@ -311,8 +311,14 @@ final class WindowSwitcherSessionTests: XCTestCase {
         func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
         let content = try XCTUnwrap(panel.contentView)
         let screen = try XCTUnwrap(panel.screen)
-        XCTAssertEqual(compact, WindowSwitcherSession.panelFrame(visibleFrame: screen.visibleFrame,
-            preview: false, count: 9), "Automatic sizing must use this display, not the developer's display")
+        let expected = WindowSwitcherSession.panelFrame(visibleFrame: screen.visibleFrame,
+            preview: false, count: 9)
+        XCTAssertEqual(compact.size, expected.size,
+                       "Automatic sizing must use this display, not the developer's display")
+        // AppKit can align the window origin to the display's backing pixels.
+        let pixel = 1 / screen.backingScaleFactor
+        XCTAssertEqual(compact.minX, expected.minX, accuracy: pixel)
+        XCTAssertEqual(compact.minY, expected.minY, accuracy: pixel)
         for (name, suffix) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
             panel.appearance = NSAppearance(named: name)
             content.layoutSubtreeIfNeeded()

@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 import MacToolsPluginKit
@@ -23,6 +24,90 @@ final class PluginCatalogManagerTests: XCTestCase {
         defaults.removePersistentDomain(forName: suiteName)
         defaults = nil
         temporaryRoot = nil
+    }
+
+    func testHostCatalogRefreshScansInstalledPackagesOnceAndPublishesMarketplaceChanges() async throws {
+        let fileManager = InstalledDirectoryCountingFileManager()
+        let store = PluginPackageStore(
+            rootDirectory: temporaryRoot,
+            fileManager: fileManager,
+            userDefaults: defaults,
+            hostVersion: "1.0.0"
+        )
+        let dynamicManager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+        let snapshot = makeCatalogSnapshot(entries: [
+            makeCatalogEntry(id: "com.example.demo", version: "2.0.0"),
+        ])
+        let catalogManager = PluginCatalogManager(
+            catalogProvider: StubPluginCatalogProvider(snapshot: snapshot),
+            packageResolver: StubPluginPackageResolver(packagesByID: [:]),
+            dynamicPluginManager: dynamicManager,
+            source: .production(snapshot.sourceURL)
+        )
+        let host = PluginHost(
+            plugins: [],
+            dynamicPluginManager: dynamicManager,
+            pluginCatalogManager: catalogManager,
+            shortcutStore: ShortcutStore(userDefaults: defaults),
+            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: GlobalShortcutManager(),
+            loadDynamicPluginsOnInit: false
+        )
+        defer { host.deactivateAllPlugins() }
+        let marketplace = PluginMarketplacePresentationModel(host: host)
+        let navigation = SettingsNavigationPresentationModel(host: host)
+        var marketplaceUpdates = 0
+        let subscription = marketplace.objectWillChange.sink { marketplaceUpdates += 1 }
+        let initialScans = fileManager.scanCount
+
+        await host.refreshPluginCatalog()
+
+        XCTAssertEqual(fileManager.scanCount - initialScans, 1)
+        XCTAssertEqual(marketplace.items, host.pluginManagementItems)
+        XCTAssertEqual(navigation.marketplaceItems, host.pluginManagementItems)
+        XCTAssertEqual(marketplace.items.first?.state, .available)
+        XCTAssertEqual(marketplace.catalogStatus.lastUpdatedAt, snapshot.loadedAt)
+        XCTAssertGreaterThan(marketplaceUpdates, 0)
+
+        marketplaceUpdates = 0
+        await host.refreshPluginCatalog()
+        XCTAssertEqual(marketplaceUpdates, 0, "An unchanged refresh must not invalidate the marketplace")
+
+        // External package changes must be picked up on the next refresh.
+        _ = try store.installPackage(from: makePackage(id: "com.example.demo", version: "1.0.0"))
+        let scansBeforeInstallRefresh = fileManager.scanCount
+        await host.refreshPluginCatalog()
+        XCTAssertEqual(fileManager.scanCount - scansBeforeInstallRefresh, 1)
+        XCTAssertEqual(marketplace.items, host.pluginManagementItems)
+        XCTAssertEqual(marketplace.items.first?.state, .updateAvailable(installedVersion: "1.0.0", catalogVersion: "2.0.0"))
+        XCTAssertGreaterThan(marketplaceUpdates, 0)
+        withExtendedLifetime(subscription) {}
+    }
+
+    func testFailedCatalogRefreshStillReturnsFreshInstalledMetadata() async throws {
+        let store = makeStore()
+        let dynamicManager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+        let manager = PluginCatalogManager(
+            catalogProvider: FailingPluginCatalogProvider(),
+            packageResolver: StubPluginPackageResolver(packagesByID: [:]),
+            dynamicPluginManager: dynamicManager,
+            source: .production(URL(string: "https://example.com/catalog.json")!)
+        )
+        _ = try store.installPackage(from: makePackage(id: "com.example.demo"))
+
+        let metadata = await manager.refreshCatalog()
+
+        XCTAssertEqual(metadata?.manifestsByID["com.example.demo"]?.version, "1.0.0")
+        XCTAssertEqual(dynamicManager.pluginManagementItems.map(\.id), ["com.example.demo"])
+        XCTAssertEqual(manager.status.errorMessage, "catalog unavailable")
+        XCTAssertFalse(manager.status.isRefreshing)
     }
 
     func testAutomaticUpdatePlanOnlyIncludesInstalledPluginsWithNewerCatalogVersions() async throws {
@@ -1924,6 +2009,24 @@ private struct StubPluginCatalogProvider: PluginCatalogProviding {
 
     func loadCatalog() async throws -> PluginCatalogSnapshot {
         snapshot
+    }
+}
+
+private final class InstalledDirectoryCountingFileManager: FileManager, @unchecked Sendable {
+    private let lock = NSLock()
+    private var installedDirectoryScans = 0
+
+    var scanCount: Int { lock.withLock { installedDirectoryScans } }
+
+    override func contentsOfDirectory(
+        at url: URL,
+        includingPropertiesForKeys keys: [URLResourceKey]?,
+        options mask: FileManager.DirectoryEnumerationOptions = []
+    ) throws -> [URL] {
+        if url.lastPathComponent == "Installed" {
+            lock.withLock { installedDirectoryScans += 1 }
+        }
+        return try super.contentsOfDirectory(at: url, includingPropertiesForKeys: keys, options: mask)
     }
 }
 
