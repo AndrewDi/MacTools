@@ -8,6 +8,7 @@ public struct StorageExplorerWorkspaceView: View {
     public let localization: PluginLocalization
     @State private var showsInspector = false
     @StateObject private var quickLookPresenter = StorageExplorerQuickLookPresenter()
+    @StateObject private var quickLookKeyMonitor = StorageExplorerQuickLookKeyMonitor()
 
     public init(controller: StorageExplorerController,
                 localization: PluginLocalization = PluginLocalization(bundle: .main)) {
@@ -29,6 +30,15 @@ public struct StorageExplorerWorkspaceView: View {
         .onKeyPress(.space) {
             guard let item = controller.inspectedItem else { return .ignored }
             return showQuickLook(for: item) ? .handled : .ignored
+        }
+        .onAppear {
+            quickLookKeyMonitor.start {
+                guard let item = controller.inspectedItem else { return false }
+                return showQuickLook(for: item)
+            }
+        }
+        .onDisappear {
+            quickLookKeyMonitor.stop()
         }
     }
 
@@ -452,6 +462,45 @@ private final class StorageExplorerQuickLookPresenter: NSObject, ObservableObjec
     func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem! {
         previewURL as NSURL?
     }
+}
+
+@MainActor
+private final class StorageExplorerQuickLookKeyMonitor: ObservableObject {
+    private var monitor: Any?
+    private var action: (() -> Bool)?
+
+    func start(action: @escaping () -> Bool) {
+        self.action = action
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 49,
+                  !Self.isEditingText(in: event.window),
+                  Self.hasNoActionModifiers(event.modifierFlags),
+                  self?.action?() == true else {
+                return event
+            }
+            return nil
+        }
+    }
+
+    func stop() {
+        if let monitor {
+            NSEvent.removeMonitor(monitor)
+        }
+        monitor = nil
+        action = nil
+    }
+
+    private static func isEditingText(in window: NSWindow?) -> Bool {
+        (window?.firstResponder as? NSTextView)?.isFieldEditor == true
+    }
+
+    private static func hasNoActionModifiers(_ flags: NSEvent.ModifierFlags) -> Bool {
+        flags.intersection(.deviceIndependentFlagsMask)
+            .subtracting([.capsLock, .numericPad])
+            .isEmpty
+    }
+
 }
 
 private struct StorageExplorerListDragModifier: ViewModifier {
