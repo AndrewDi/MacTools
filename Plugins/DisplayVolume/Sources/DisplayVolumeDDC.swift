@@ -125,14 +125,24 @@ final class Arm64DDCTransport: DDCVolumeTransport, @unchecked Sendable {
         _ reply: [UInt8],
         displayName: String
     ) throws -> DDCVolumeValue {
-        
         guard reply.count >= 10 else {
             throw DisplayVolumeControllerError.unsupportedReply(displayName: displayName)
         }
 
         let checksum = checksum(seed: 0x50, bytes: Array(reply.dropLast()))
-        let expectedChecksum = reply.last!
         guard checksum == reply.last else {
+            throw DisplayVolumeControllerError.unsupportedReply(displayName: displayName)
+        }
+
+        guard reply[0] == 0x91 else {
+            throw DisplayVolumeControllerError.unsupportedReply(displayName: displayName)
+        }
+
+        guard reply[1] == 0x08 else {
+            throw DisplayVolumeControllerError.unsupportedReply(displayName: displayName)
+        }
+
+        guard reply[4] == DDCVolumeControl.volume else {
             throw DisplayVolumeControllerError.unsupportedReply(displayName: displayName)
         }
 

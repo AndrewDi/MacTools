@@ -373,7 +373,9 @@ final class DisplayVolumePlugin:
         controller.refresh()
         displayTopologyTask?.cancel()
         displayTopologyTask = Task { @MainActor [weak self] in
+            guard !Task.isCancelled else { return }
             try? await Task.sleep(nanoseconds: 200_000_000)
+            guard !Task.isCancelled else { return }
             self?.controller.refresh()
             self?.onStateChange?()
         }
