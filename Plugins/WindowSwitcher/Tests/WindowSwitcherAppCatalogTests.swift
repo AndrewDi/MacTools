@@ -46,6 +46,44 @@ private final class CatalogAXAccess: WindowSwitcherAXAccess, @unchecked Sendable
 
 @MainActor
 final class WindowSwitcherAppCatalogTests: XCTestCase {
+    func testOnlyScannedHostLoadsFreshPresentationMetadata() async throws {
+        let host = CatalogAXAccess(number: 7, elementPID: 201)
+        let helper = CatalogAXAccess(number: 8, elementPID: 202)
+        var hostReads = 0
+        var helperReads = 0
+        var name = "Original"
+        let records = WindowSwitcherWindowRecords(windowRecordProvider: {
+            [.init(windowNumber: 8, processIdentifier: 43, title: "Fixture", isOnScreen: true,
+                   bounds: CGRect(x: 20, y: 20, width: 800, height: 600))]
+        })
+        let catalog = WindowSwitcherAppCatalog(notificationCenter: NotificationCenter(),
+            accessFactory: { $0 == 42 ? host : helper }, allSpacesCatalog: records,
+            discovery: .init(applications: {
+                [.init(processIdentifier: 42, bundleIdentifier: "fixture.host", bundlePath: "/Fixture.app",
+                       localizedName: nil, loadPresentation: {
+                           hostReads += 1
+                           return .init(localizedName: name, icon: nil, isHidden: false, isActive: false)
+                       }),
+                 .init(processIdentifier: 43, bundleIdentifier: "fixture.host.helper", bundlePath: "/Fixture.app/Helper.app",
+                       localizedName: nil, isRegular: false, loadPresentation: {
+                           helperReads += 1
+                           return .init(localizedName: "Helper", icon: nil, isHidden: false, isActive: false)
+                       })]
+            }, isAccessibilityTrusted: { true }, isDragging: { false }))
+        defer { catalog.stop() }
+        catalog.start()
+        catalog.refresh()
+        XCTAssertEqual(hostReads, 1, "An in-flight host scan must not reread presentation metadata")
+        try await waitUntil { catalog.refresh(); return numbers(catalog) == [7, 8] }
+        XCTAssertEqual(helperReads, 0)
+        name = "Renamed"
+        try await waitUntil {
+            catalog.refresh()
+            return catalog.entries(sortMode: .fixed).filter { $0.processIdentifier == 42 }.allSatisfy { $0.appName == name }
+        }
+        XCTAssertEqual(helperReads, 0)
+    }
+
     private func makeCatalog(host: CatalogAXAccess, helper: CatalogAXAccess,
                              accessFactory: (@Sendable (pid_t) -> any WindowSwitcherAXAccess)? = nil) -> WindowSwitcherAppCatalog {
         let records = WindowSwitcherWindowRecords(windowRecordProvider: {

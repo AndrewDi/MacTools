@@ -20,6 +20,9 @@ PLUGIN_INTERFACES = REPO_ROOT / "Sources/MacToolsPluginKit/PluginInterfaces.swif
 PLUGIN_SETTINGS_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/PluginSettingsModels.swift"
 APP_VERSION_CONFIG = REPO_ROOT / "Configs/AppVersion.xcconfig"
 NEW_API_MINIMUM_HOSTS = {
+    "PluginObservedContent": "1.3.1",
+    "pluginPresentationIsVisible": "1.3.1",
+    "PluginShortcutResetRequesting": "1.3.1",
     # Plugin-scoped, exclusive primary menu-bar icon placement.
     "PluginMenuBarIconPlacement": "1.3.1",
     "PluginMenuBarIconDescriptor": "1.3.1",

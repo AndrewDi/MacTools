@@ -136,6 +136,10 @@ In Search and Select, Command-1 through Command-9 opens numbered visible results
 
 With MacTools 1.3.1 or later and the Siri plugin on macOS 27, open the command palette, type `ask siri <message>`, and press Return once to send it into a new Siri conversation. Type `ask`, select Ask Siri, and press Tab to complete the trigger and start inline input. The Siri feature-panel button opens the message editor directly and becomes Cancel while sending. Change the trigger phrase in Siri settings, or select the Siri action and use the message editor. Settings keep the trigger editor and status left-aligned, with controls that adapt to narrow windows. Installation requires macOS 27 and the Siri AI app; unavailable requirements are shown in the plugin catalog. MacTools handles opening Siri and preserves existing drafts. Accessibility permission is required; answers remain in Siri. See [Siri usage and limitations](docs/plugins/siri.md).
 
+### Background monitoring
+
+Hidden System Status, Device Battery, and Activity Bar cards retain their interaction state and catch up when reopened. Activity tracking and battery alerts continue in the background; hidden input counters avoid unnecessary panel updates. Window discovery and bulk clipboard shortcut removal also avoid repeated shared work.
+
 ## Supported Languages
 
 Mac Settings follows the app language across its catalog, controls, profiles, and error guidance. Its workspace includes English and Simplified Chinese, with English fallback for other locales; English and Chinese setting names remain searchable.

@@ -200,7 +200,7 @@ private struct ConfiguredMenuBarPanelContent: View {
         placements: [ComponentGridPlacement]? = nil, gridHeight: CGFloat? = nil
     ) -> some View {
         ComponentPanelContent(
-            pluginHost: pluginHost, contentBodyHeight: height, isPanelVisible: isVisible,
+            pluginHost: pluginHost, contentBodyHeight: height, isPanelVisible: isVisible && !isFeatureDetailInline,
             onDismiss: onDismiss, panelID: panelID, suppliedItems: items,
             suppliedEntries: pluginHost.panelEntries(in: panelID).filter { $0.surface == .dashboard }, embedded: embedded,
             suppliedPlacements: placements, suppliedGridHeight: gridHeight ?? (placements == nil ? nil : height),

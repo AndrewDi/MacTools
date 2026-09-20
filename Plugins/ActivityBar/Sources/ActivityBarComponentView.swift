@@ -149,7 +149,7 @@ struct ActivityBarComponentView: View {
         }
     }
 
-    @ObservedObject var controller: ActivityBarController
+    let controller: ActivityBarController
     @ObservedObject private var presentation: ActivityBarComponentPresentation
     let localization: PluginLocalization
     let onContentHeightChange: (CGFloat) -> Void
@@ -209,6 +209,12 @@ struct ActivityBarComponentView: View {
     }
 
     var body: some View {
+        PluginObservedContent(controller) { _ in
+            activityContent
+        }
+    }
+
+    private var activityContent: some View {
         VStack(spacing: 0) {
             headerBar
             todayStats

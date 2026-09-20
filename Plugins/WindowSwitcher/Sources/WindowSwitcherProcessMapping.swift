@@ -18,13 +18,14 @@ enum WindowSwitcherProcessMapping {
 
         func host(for pid: pid_t) -> pid_t { hostByOwner[pid] ?? pid }
 
-        func owners(for host: pid_t) -> [pid_t] {
-            hostByOwner.compactMap { owner, mapped in mapped == host && owner != host ? owner : nil }
-        }
-
-        func helpers(for host: pid_t, owningWindowsIn records: [WindowSwitcherWindowRecord]) -> [pid_t] {
-            let live = Set(records.map(\.processIdentifier))
-            return owners(for: host).filter { live.contains($0) }
+        func helpersByHost(owningWindowsIn records: [WindowSwitcherWindowRecord]) -> [pid_t: Set<pid_t>] {
+            var helpers: [pid_t: Set<pid_t>] = [:]
+            for record in records {
+                let owner = record.processIdentifier
+                guard let host = hostByOwner[owner], host != owner else { continue }
+                helpers[host, default: []].insert(owner)
+            }
+            return helpers
         }
     }
 

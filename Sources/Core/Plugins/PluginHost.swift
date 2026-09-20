@@ -2206,6 +2206,20 @@ final class PluginHost: ObservableObject {
         )
     }
 
+    private func resetShortcuts(pluginID: String, definitionIDs: [String]) {
+        let ids = Set(definitionIDs)
+        guard !ids.isEmpty else { return }
+        let descriptors = shortcutDescriptors()
+        let targets = descriptors.filter { $0.pluginID == pluginID && ids.contains($0.definition.id) }
+        guard !targets.isEmpty else { return }
+        for descriptor in targets {
+            applyShortcutCustomization(.inheritDefault, for: descriptor,
+                                       descriptors: descriptors, updatesPresentation: false)
+        }
+        rebuildDerivedState()
+        syncGlobalShortcuts()
+    }
+
     func presentPluginSettings(pluginID: String) {
         rebuildDerivedState()
 
@@ -3349,6 +3363,12 @@ final class PluginHost: ObservableObject {
                     shortcutDefinitionID: shortcutDefinitionID
                 )
             }
+            if let requester = plugin as? any PluginShortcutResetRequesting {
+                requester.resetShortcutCustomizations = { [weak self, weak plugin] definitionIDs in
+                    guard let self, let plugin, self.corePlugin(for: pluginID) === plugin else { return }
+                    self.resetShortcuts(pluginID: pluginID, definitionIDs: definitionIDs)
+                }
+            }
             if let inlineShortcutConsumer = plugin as?
                 any PluginInlineShortcutSettingsContextConsuming {
                 inlineShortcutConsumer.inlineShortcutSettingsContextProvider = { [weak self] in
@@ -3968,7 +3988,7 @@ final class PluginHost: ObservableObject {
                     canClear: !descriptor.definition.isRequired && binding != nil,
                     usesDefaultValue: customization == .inheritDefault,
                     errorMessage: shortcutErrors[descriptor.itemID]
-                        ?? eventShortcutConflictError(for: descriptor)
+                        ?? eventShortcutConflictError(for: descriptor, descriptors: shortcutDescriptors)
                         ?? globalShortcutConflicts[descriptor.itemID].map {
                             ShortcutValidationError.duplicate(ownerDescription: $0).localizedDescription
                         }
@@ -4986,6 +5006,7 @@ final class PluginHost: ObservableObject {
         plugin.requestPermissionGuidance = nil
         (plugin as? any PluginActionInputPresentationRequesting)?.requestActionInput = nil
         plugin.shortcutBindingResolver = nil
+        (plugin as? any PluginShortcutResetRequesting)?.resetShortcutCustomizations = nil
         (plugin as? any PluginFocusedWindowTargetConsuming)?
             .focusedWindowTargetProvider = nil
         if let presetApplying = plugin as? any PluginActionShortcutPresetApplying {
@@ -5672,17 +5693,15 @@ final class PluginHost: ObservableObject {
         ).localizedDescription
     }
 
-    private func eventShortcutConflictError(for descriptor: ShortcutDescriptor) -> String? {
+    private func eventShortcutConflictError(
+        for descriptor: ShortcutDescriptor,
+        descriptors: [ShortcutDescriptor]
+    ) -> String? {
         guard descriptor.plugin is any PluginShortcutEventHandling,
               let binding = legacyResolvedBinding(for: descriptor) else { return nil }
         do {
-            try validateShortcutCustomization(.custom(binding), for: descriptor)
+            try validateShortcutCustomization(.custom(binding), for: descriptor, descriptors: descriptors)
         } catch { return error.localizedDescription }
-        if let conflict = shortcutAssignmentService.assignments.first(where: { consumedShortcutBindings(binding, for: descriptor).contains($0.binding) }) {
-            return ShortcutValidationError.duplicate(
-                ownerDescription: actionRegistry.definition(for: conflict.reference.key)?.title ?? conflict.reference.key.actionID
-            ).localizedDescription
-        }
         return nil
     }
 
@@ -5690,9 +5709,10 @@ final class PluginHost: ObservableObject {
         forPluginID pluginID: String,
         shortcutDefinitionID: String
     ) -> ShortcutBinding? {
-        guard let descriptor = shortcutDescriptors().first(where: {
+        let descriptors = shortcutDescriptors()
+        guard let descriptor = descriptors.first(where: {
             $0.pluginID == pluginID && $0.definition.id == shortcutDefinitionID
-        }), eventShortcutConflictError(for: descriptor) == nil else { return nil }
+        }), eventShortcutConflictError(for: descriptor, descriptors: descriptors) == nil else { return nil }
         return legacyResolvedBinding(for: descriptor)
     }
 
@@ -5934,7 +5954,9 @@ final class PluginHost: ObservableObject {
     private func applyShortcutCustomization(
         _ customization: ShortcutCustomization,
         for descriptor: ShortcutDescriptor,
-        assignmentID: UUID? = nil
+        assignmentID: UUID? = nil,
+        descriptors: [ShortcutDescriptor]? = nil,
+        updatesPresentation: Bool = true
     ) -> String? {
         if let reference = actionReference(for: descriptor) {
             let binding = ShortcutStore.resolve(
@@ -5963,18 +5985,20 @@ final class PluginHost: ObservableObject {
                     binding: shortcutAssignmentService.assignment(for: reference)?.binding
                 )
                 shortcutErrors.removeValue(forKey: descriptor.itemID)
-                rebuildDerivedState()
-                syncGlobalShortcuts()
+                if updatesPresentation {
+                    rebuildDerivedState()
+                    syncGlobalShortcuts()
+                }
                 return nil
             case let .failure(error):
                 shortcutErrors[descriptor.itemID] = error.localizedDescription
-                rebuildDerivedState()
+                if updatesPresentation { rebuildDerivedState() }
                 return error.localizedDescription
             }
         }
 
         do {
-            try validateShortcutCustomization(customization, for: descriptor)
+            try validateShortcutCustomization(customization, for: descriptor, descriptors: descriptors)
             shortcutStore.setCustomization(customization, for: descriptor.itemID)
             notifyShortcutBindingChange(
                 for: descriptor,
@@ -5984,23 +6008,26 @@ final class PluginHost: ObservableObject {
                 )
             )
             shortcutErrors.removeValue(forKey: descriptor.itemID)
-            rebuildDerivedState()
-            syncGlobalShortcuts()
+            if updatesPresentation {
+                rebuildDerivedState()
+                syncGlobalShortcuts()
+            }
             return nil
         } catch let error as ShortcutValidationError {
             shortcutErrors[descriptor.itemID] = error.localizedDescription
-            rebuildDerivedState()
+            if updatesPresentation { rebuildDerivedState() }
             return error.localizedDescription
         } catch {
             shortcutErrors[descriptor.itemID] = error.localizedDescription
-            rebuildDerivedState()
+            if updatesPresentation { rebuildDerivedState() }
             return error.localizedDescription
         }
     }
 
     private func validateShortcutCustomization(
         _ customization: ShortcutCustomization,
-        for descriptor: ShortcutDescriptor
+        for descriptor: ShortcutDescriptor,
+        descriptors: [ShortcutDescriptor]? = nil
     ) throws {
         let candidate = ShortcutStore.resolve(
             customization: customization,
@@ -6026,7 +6053,7 @@ final class PluginHost: ObservableObject {
                 throw error
             }
 
-            if let conflict = shortcutDescriptors().first(where: { other in
+            if let conflict = (descriptors ?? shortcutDescriptors()).first(where: { other in
                 other.itemID != descriptor.itemID
                     && resolvedBinding(for: other).map { shortcutBindingsConflict(candidate, for: descriptor, with: $0, for: other) } == true
                     && !canShareShortcutBinding(descriptor, with: other)
@@ -6245,8 +6272,9 @@ final class PluginHost: ObservableObject {
         // bindings after dynamic defaults or action assignments change; do not
         // Carbon-register their active-only shortcuts.
         for descriptor in descriptors where descriptor.plugin is any PluginShortcutEventHandling {
-            notifyShortcutBindingChange(for: descriptor, binding: legacyResolvedBinding(
-                forPluginID: descriptor.pluginID, shortcutDefinitionID: descriptor.definition.id))
+            let binding = eventShortcutConflictError(for: descriptor, descriptors: descriptors) == nil
+                ? legacyResolvedBinding(for: descriptor) : nil
+            notifyShortcutBindingChange(for: descriptor, binding: binding)
         }
         actionShortcutItems = shortcutAssignmentService.settingsItems
         shortcutBindingRevision = shortcutAssignmentService.revision
@@ -6268,6 +6296,33 @@ final class PluginHost: ObservableObject {
     }
 
     private func buildActionShortcutCatalogItems() -> [ActionShortcutCatalogItem] {
+        // These values are shared by many rows, but may change between host updates.
+        // Keep the cache local so localization, permissions and plugin replacement stay live.
+        var ownerTitles: [String: String] = [:]
+        var permissionRequirements: [String: [String: String]] = [:]
+        let plugins = Dictionary(activePlugins.map { ($0.metadata.id, $0) },
+                                 uniquingKeysWith: { first, _ in first })
+        func ownerTitle(_ providerID: String) -> String {
+            if let title = ownerTitles[providerID] { return title }
+            let title = actionOwnerTitle(providerID: providerID)
+            ownerTitles[providerID] = title
+            return title
+        }
+        func permissionSummary(_ reference: ActionReference) -> String? {
+            let providerID = reference.key.providerID
+            guard let plugin = plugins[providerID],
+                  let provider = plugin as? any PluginActionPermissionProviding,
+                  let ids = guardedValue(for: plugin, operation: "read action permission requirements",
+                                         provider.permissionRequirementIDs(for: reference.key)) else { return nil }
+            if permissionRequirements[providerID] == nil {
+                let requirements = guardedValue(for: plugin, operation: "read permission requirements",
+                                                plugin.permissionRequirements) ?? []
+                permissionRequirements[providerID] = Dictionary(requirements.map { ($0.id, $0.title) },
+                                                               uniquingKeysWith: { first, _ in first })
+            }
+            let titles = ids.compactMap { permissionRequirements[providerID]?[$0] }
+            return titles.isEmpty ? nil : FeatureL10n.format("所需权限：%@", FeatureL10n.joined(titles))
+        }
         var items: [ActionShortcutCatalogItem] = actionCatalogEntries.flatMap {
             entry -> [ActionShortcutCatalogItem] in
             guard case let .success(action) = actionRegistry.registeredAction(
@@ -6283,6 +6338,8 @@ final class PluginHost: ObservableObject {
             let rows: [ActionShortcutSettingsItem?] = assignmentItems.isEmpty
                 ? [nil]
                 : assignmentItems.map(Optional.some)
+            let title = ownerTitle(entry.reference.key.providerID)
+            let permissions = permissionSummary(entry.reference)
             return rows.map { assignmentItem in
                 let status: ActionShortcutCatalogStatus
                 if let assignmentItem {
@@ -6296,17 +6353,9 @@ final class PluginHost: ObservableObject {
                     reference: entry.reference,
                     assignmentID: assignmentItem?.assignment.id,
                     title: entry.title,
-                    ownerTitle: actionOwnerTitle(providerID: entry.reference.key.providerID),
+                    ownerTitle: title,
                     description: action.definition.description,
-                    permissionSummary: {
-                        let titles = actionPermissionTitles(for: entry.reference)
-                        return titles.isEmpty
-                            ? nil
-                            : FeatureL10n.format(
-                                "所需权限：%@",
-                                FeatureL10n.joined(titles)
-                            )
-                    }(),
+                    permissionSummary: permissions,
                     systemImage: action.definition.systemImage,
                     bindingText: assignmentItem?.bindingText ?? "",
                     status: status,
@@ -6326,9 +6375,7 @@ final class PluginHost: ObservableObject {
                 reference: item.assignment.reference,
                 assignmentID: item.assignment.id,
                 title: item.title,
-                ownerTitle: actionOwnerTitle(
-                    providerID: item.assignment.reference.key.providerID
-                ),
+                ownerTitle: ownerTitle(item.assignment.reference.key.providerID),
                 description: FeatureL10n.string("操作提供方暂时不可用；快捷键分配已保留。"),
                 permissionSummary: nil,
                 systemImage: "puzzlepiece.extension",

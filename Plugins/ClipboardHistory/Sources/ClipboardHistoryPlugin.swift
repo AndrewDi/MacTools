@@ -28,6 +28,7 @@ final class ClipboardHistoryPlugin:
     PluginShortcutSettingsGroupPresentationProviding,
     PluginShortcutBindingValidating,
     PluginInlineShortcutSettingsContextConsuming,
+    PluginShortcutResetRequesting,
     PluginWindowLayoutTargetProviding,
     PluginSettingsPresenting,
     AccessibilityPermissionRefreshing,
@@ -106,6 +107,7 @@ final class ClipboardHistoryPlugin:
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var inlineShortcutSettingsContextProvider: (() -> PluginSettingsContext)?
+    var resetShortcutCustomizations: (([String]) -> Void)?
     var focusedWindowLayoutTarget: NSWindow? {
         panelController.focusedWindowLayoutTarget
     }
@@ -240,6 +242,14 @@ final class ClipboardHistoryPlugin:
     private var activeItemShortcutAssignments: Set<UUID> = []
     private var waitingItemShortcutAssignments: [UUID: [CheckedContinuation<Void, Never>]] = [:]
     private var cachedItemShortcutDefinitions: [PluginShortcutDefinition] = []
+    private struct ItemShortcutContentRevision: Equatable {
+        let history: UInt64
+        let snippets: UInt64
+        let itemIDs: Set<UUID>
+    }
+    private var itemShortcutContentRevision: ItemShortcutContentRevision?
+    private var shortcutHistoryItems: [UUID: ClipboardHistoryItem] = [:]
+    private var shortcutSnippets: [UUID: ClipboardSavedItem] = [:]
     private var itemShortcutLifecycleGeneration: UInt64 = 0
     private var activeProvisionalShortcutSaves: [UUID: ClipboardHistorySavedMetadata] = [:]
     private var pendingShortcutSaveRollbacks: [UUID: ClipboardHistorySavedMetadata] = [:]
@@ -551,9 +561,13 @@ final class ClipboardHistoryPlugin:
 
         itemShortcutStore.onRemoved = { [weak self] removed in
             guard let self else { return }
-            let context = self.inlineShortcutSettingsContextProvider?()
-            for assignment in removed {
-                context?.resetShortcut(for: "\(Self.pluginID).shortcut.\(assignment.definitionID)")
+            if let resetShortcutCustomizations = self.resetShortcutCustomizations {
+                resetShortcutCustomizations(removed.map(\.definitionID))
+            } else {
+                let context = self.inlineShortcutSettingsContextProvider?()
+                for assignment in removed {
+                    context?.resetShortcut(for: "\(Self.pluginID).shortcut.\(assignment.definitionID)")
+                }
             }
             self.onStateChange?()
         }
@@ -1859,13 +1873,15 @@ final class ClipboardHistoryPlugin:
 
     private func pruneItemShortcutsWhenReady() {
         itemShortcutStore.expireIfNeeded()
+        guard !itemShortcutStore.assignments.isEmpty else { return }
+        refreshItemShortcutContent()
         let didLoadHistory = controller.isLoaded && controller.didLoadItemsSuccessfully
         let didLoadSnippets = savedLibraryController.isLoaded
             && savedLibraryController.fatalErrorMessage == nil
         itemShortcutStore.removeMissingItems(
-            historyIDs: didLoadHistory ? Set(controller.items.map(\.id)) : nil,
-            savedIDs: didLoadHistory ? Set(controller.savedItems.map(\.id)) : nil,
-            snippetIDs: didLoadSnippets ? Set(savedLibraryController.items.map(\.id)) : nil
+            historyIDs: didLoadHistory ? Set(shortcutHistoryItems.keys) : nil,
+            savedIDs: didLoadHistory ? Set(shortcutHistoryItems.values.lazy.filter(\.isSaved).map(\.id)) : nil,
+            snippetIDs: didLoadSnippets ? Set(shortcutSnippets.keys) : nil
         )
     }
 
@@ -2659,24 +2675,35 @@ final class ClipboardHistoryPlugin:
         return String(title.prefix(100))
     }
 
+    private func refreshItemShortcutContent() {
+        let itemIDs = Set(itemShortcutStore.assignments.map(\.itemID))
+        let revision = ItemShortcutContentRevision(history: controller.presentationRevision,
+                                                   snippets: savedLibraryController.presentationRevision,
+                                                   itemIDs: itemIDs)
+        guard revision != itemShortcutContentRevision else { return }
+        itemShortcutContentRevision = revision
+        shortcutHistoryItems.removeAll(keepingCapacity: !itemIDs.isEmpty)
+        shortcutSnippets.removeAll(keepingCapacity: !itemIDs.isEmpty)
+        guard !itemIDs.isEmpty else { return }
+        // Retain only assigned targets, and share this lookup between pruning and
+        // title construction. Status-only controller updates need no history scan.
+        for item in controller.items where itemIDs.contains(item.id) {
+            shortcutHistoryItems[item.id] = item
+        }
+        for item in savedLibraryController.items where itemIDs.contains(item.id) {
+            shortcutSnippets[item.id] = item
+        }
+    }
+
     private func refreshItemShortcutDefinitions() {
-        var historyItemsByID: [UUID: ClipboardHistoryItem] = [:]
-        historyItemsByID.reserveCapacity(controller.items.count)
-        for item in controller.items {
-            historyItemsByID[item.id] = item
-        }
-        var snippetsByID: [UUID: ClipboardSavedItem] = [:]
-        snippetsByID.reserveCapacity(savedLibraryController.items.count)
-        for item in savedLibraryController.items {
-            snippetsByID[item.id] = item
-        }
+        refreshItemShortcutContent()
         let originalAssignmentItemIDs = Set(itemShortcutStore.assignments.lazy
             .filter { $0.pasteFormat == .original }
             .map(\.itemID))
 
         cachedItemShortcutDefinitions = itemShortcutStore.assignments.map { assignment in
-            let item = historyItemsByID[assignment.itemID]
-            let name = itemShortcutTitle(item: item, snippet: snippetsByID[assignment.itemID])
+            let item = shortcutHistoryItems[assignment.itemID]
+            let name = itemShortcutTitle(item: item, snippet: shortcutSnippets[assignment.itemID])
             let isTextOnly = assignment.source == .snippet || item?.isPlainTextOnly == true
             let isLegacyDuplicate = isTextOnly && assignment.pasteFormat == .plainText
                 && originalAssignmentItemIDs.contains(assignment.itemID)
