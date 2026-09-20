@@ -69,18 +69,11 @@ public struct StorageExplorerWorkspaceView: View {
     }
 
     private func explorer(width: CGFloat) -> some View {
-        let nodes = StorageExplorerHierarchyLayout.make(
-            snapshot: controller.snapshot,
-            directory: controller.currentPath ?? controller.snapshot.rootPath,
-            metric: controller.metric,
-            excluding: controller.basket,
-            otherName: text("other", "其他")
-        )
-        return Group {
+        Group {
             if width >= 680 {
                 GeometryReader { geometry in
                     HSplitView {
-                        treemapPanel(nodes: nodes)
+                        treemapPanel(nodes: controller.hierarchyNodes)
                             .frame(
                                 minWidth: max(420, geometry.size.width * 0.52),
                                 idealWidth: geometry.size.width * 0.72,
@@ -96,7 +89,7 @@ public struct StorageExplorerWorkspaceView: View {
                 }
             } else {
                 VStack(spacing: 10) {
-                    treemapPanel(nodes: nodes)
+                    treemapPanel(nodes: controller.hierarchyNodes)
                     compactList.frame(maxHeight: 120)
                 }
             }

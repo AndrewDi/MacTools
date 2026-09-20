@@ -23,12 +23,14 @@ struct StorageExplorerPresentation: Sendable {
     var rows: [StorageExplorerRow] = []
     var chart: [StorageExplorerRow] = []
     var mapRootItems: [StorageItem] = []
+    var hierarchy: [StorageExplorerHierarchyNode] = []
     var matchingCount = 0
     var total: Int64 = 0
 
     static func make(snapshot: StorageExplorerSnapshot, directory: String, mode: StorageExplorerMode,
                      metric: StorageExplorerMetric, query: String, sort: StorageExplorerSort,
-                     ascending: Bool) -> Self {
+                     ascending: Bool, excluding excludedPaths: Set<String> = [],
+                     otherName: String = "Other") -> Self {
         var candidates: [StorageItem]
         switch mode {
         case .folders: candidates = snapshot.children(of: directory)
@@ -100,8 +102,21 @@ struct StorageExplorerPresentation: Sendable {
             if comparison == .orderedSame { return lhs.path < rhs.path }
             return comparison == (ascending ? .orderedAscending : .orderedDescending)
         }
-        return Self(rows: candidates.prefix(5_000).map(row), chart: chart, mapRootItems: bySize,
-                    matchingCount: candidates.count, total: total)
+        let hierarchy = StorageExplorerHierarchyLayout.make(
+            snapshot: snapshot,
+            directory: directory,
+            metric: metric,
+            excluding: excludedPaths,
+            otherName: otherName
+        )
+        return Self(
+            rows: candidates.prefix(5_000).map(row),
+            chart: chart,
+            mapRootItems: bySize,
+            hierarchy: hierarchy,
+            matchingCount: candidates.count,
+            total: total
+        )
     }
 }
 

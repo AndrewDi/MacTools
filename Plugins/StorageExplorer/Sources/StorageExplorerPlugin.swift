@@ -32,7 +32,8 @@ private struct StorageExplorerPluginProvider: PluginProvider {
                 trashPartialFailure: localization.string(
                     "storageExplorer.trashPartialFailure",
                     defaultValue: "%d 个项目未能移至废纸篓：%@"
-                )
+                ),
+                otherName: localization.string("storageExplorer.other", defaultValue: "其他")
             )
         )
         return [

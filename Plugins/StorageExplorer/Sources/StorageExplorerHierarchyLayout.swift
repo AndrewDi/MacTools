@@ -19,32 +19,63 @@ enum StorageExplorerHierarchyLayout {
         otherName: String,
         maximumDepth: Int = 3
     ) -> [StorageExplorerHierarchyNode] {
-        let excluded = excludedPaths.sorted()
+        let excluded = excludedPaths
+        var removedBytesByAncestor: [String: Int64] = [:]
+        var adjustedBytesByPath: [String: Int64] = [:]
+
+        func parentPath(of path: String) -> String? {
+            if let parent = snapshot.items[path]?.parentPath {
+                return parent
+            }
+            let parent = (path as NSString).deletingLastPathComponent
+            guard !parent.isEmpty, parent != ".", parent != path else { return nil }
+            return parent
+        }
+
+        for path in excluded.sorted() {
+            guard let selected = snapshot.items[path] else { continue }
+            let selectedBytes = metric.bytes(selected)
+            var ancestor = parentPath(of: path)
+            var visited: Set<String> = []
+            while let path = ancestor, visited.insert(path).inserted {
+                removedBytesByAncestor[path, default: 0] += selectedBytes
+                ancestor = parentPath(of: path)
+            }
+        }
 
         func isExcluded(_ path: String) -> Bool {
-            excluded.contains { path == $0 || path.hasPrefix($0 + "/") }
+            var candidate: String? = path
+            var visited: Set<String> = []
+            while let path = candidate, visited.insert(path).inserted {
+                if excluded.contains(path) { return true }
+                candidate = parentPath(of: path)
+            }
+            return false
         }
 
         func adjustedBytes(_ item: StorageItem) -> Int64 {
-            guard !isExcluded(item.path) else { return 0 }
-            let removed = excluded.reduce(Int64(0)) { partial, path in
-                guard path.hasPrefix(item.path + "/"), let selected = snapshot.items[path] else { return partial }
-                return partial + metric.bytes(selected)
-            }
-            return max(0, metric.bytes(item) - removed)
+            if let cached = adjustedBytesByPath[item.path] { return cached }
+            let bytes = isExcluded(item.path)
+                ? 0
+                : max(0, metric.bytes(item) - removedBytesByAncestor[item.path, default: 0])
+            adjustedBytesByPath[item.path] = bytes
+            return bytes
         }
 
         func nodes(parentPath: String, depth: Int, colorKey: String?) -> [StorageExplorerHierarchyNode] {
             let parentBytes = snapshot.items[parentPath].map(adjustedBytes) ?? 0
-            let children = snapshot.children(of: parentPath)
-                .filter { adjustedBytes($0) > 0 }
-                .sorted {
-                    let lhs = adjustedBytes($0), rhs = adjustedBytes($1)
-                    return lhs == rhs ? $0.path < $1.path : lhs > rhs
-                }
+            var children: [(item: StorageItem, bytes: Int64)] = []
+            for item in snapshot.children(of: parentPath) {
+                let bytes = adjustedBytes(item)
+                if bytes > 0 { children.append((item, bytes)) }
+            }
+            children.sort {
+                $0.bytes == $1.bytes ? $0.item.path < $1.item.path : $0.bytes > $1.bytes
+            }
             let limit = depth == 0 ? 48 : depth == 1 ? 18 : 10
             let visible = Array(children.prefix(limit))
-            var result = visible.enumerated().map { index, item -> StorageExplorerHierarchyNode in
+            var result = visible.enumerated().map { index, value -> StorageExplorerHierarchyNode in
+                let item = value.item
                 // The completed snapshot is sorted deterministically by size and path. Top-level
                 // rank drives a warm-to-cool palette, while descendants inherit their group color.
                 let key = colorKey ?? "size-rank:\(index):\(item.path)"
@@ -53,7 +84,7 @@ enum StorageExplorerHierarchyLayout {
                     : []
                 return StorageExplorerHierarchyNode(
                     item: item,
-                    bytes: adjustedBytes(item),
+                    bytes: value.bytes,
                     children: nested,
                     colorKey: key
                 )

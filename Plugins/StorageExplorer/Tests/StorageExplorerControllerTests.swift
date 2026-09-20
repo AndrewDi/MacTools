@@ -47,6 +47,66 @@ final class StorageExplorerControllerTests: XCTestCase {
         XCTAssertEqual(controller.basket.count, 2)
     }
 
+    func testBackgroundHierarchyTracksLatestSelectionAndNavigation() async throws {
+        let scanner = ControlledStorageScanner()
+        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
+        let root = "/tmp/storage-hierarchy"
+        let snapshot = Self.fixture(root: root)
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        scanner.finish(path: root, snapshot: snapshot)
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/b", root + "/a"] }
+
+        controller.toggleSelection(path: root + "/b")
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/a"] }
+
+        controller.drillDown(to: try XCTUnwrap(snapshot.items[root + "/a"]))
+        XCTAssertTrue(controller.hierarchyNodes.isEmpty)
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/a/one"] }
+        XCTAssertEqual(controller.currentPath, root + "/a")
+    }
+
+    func testSameDirectoryRefreshKeepsPreviousHierarchyUntilReplacementPublishes() async throws {
+        let scanner = ControlledStorageScanner()
+        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
+        let root = "/tmp/storage-hierarchy-refresh"
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        scanner.finish(path: root, snapshot: Self.fixture(root: root))
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { !controller.hierarchyNodes.isEmpty }
+        let previousHierarchy = controller.hierarchyNodes
+
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        XCTAssertEqual(controller.hierarchyNodes, previousHierarchy)
+
+        var replacement = StorageExplorerSnapshot(rootPath: root)
+        replacement.apply([
+            StorageItem(
+                name: "storage-hierarchy-refresh",
+                path: root,
+                url: URL(fileURLWithPath: root),
+                isDirectory: true,
+                size: 400,
+                allocatedSize: 400
+            ),
+            StorageItem(
+                name: "replacement",
+                path: root + "/replacement",
+                url: URL(fileURLWithPath: root + "/replacement"),
+                isDirectory: false,
+                size: 400,
+                allocatedSize: 400,
+                parentPath: root
+            )
+        ])
+        scanner.finish(path: root, snapshot: replacement)
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/replacement"] }
+    }
+
     func testPartialResultsUpdateProgressWithoutReplacingVisibleSnapshot() async throws {
         let scanner = ControlledStorageScanner()
         let controller = StorageExplorerController(scanner: scanner, observeChanges: false)

@@ -30,6 +30,7 @@ public final class StorageExplorerController: ObservableObject {
     @Published public private(set) var matchingCount = 0
     @Published public private(set) var displayedBytes: Int64 = 0
     @Published public private(set) var mapRootItems: [StorageItem] = []
+    @Published private(set) var hierarchyNodes: [StorageExplorerHierarchyNode] = []
     @Published public private(set) var snapshotHasObservedChanges = false
     public let status = StorageExplorerScanStatus()
     public let scanner: any StorageExplorerScanning
@@ -99,6 +100,10 @@ public final class StorageExplorerController: ObservableObject {
             selectedPath = nil
             navigationStack = []
             rows = []; chartRows = []
+            mapRootItems = []
+            hierarchyNodes = []
+            matchingCount = 0
+            displayedBytes = 0
             searchQuery = ""
         }
         if observeChanges && observer == nil {
@@ -211,10 +216,14 @@ public final class StorageExplorerController: ObservableObject {
         guard item.isDirectory && !item.isPackage, snapshot.items[item.path] != nil else { return }
         navigationRevision += 1
         currentPath = item.path
-        mode = .folders
         selectedPath = nil
         rebuildNavigation()
-        refreshPresentation()
+        clearPresentationForNavigation()
+        if mode == .folders {
+            refreshPresentation()
+        } else {
+            mode = .folders
+        }
     }
     public func navigateUp() {
         guard let parent = currentDirectory?.parentPath, let item = snapshot.items[parent] else { return }
@@ -239,6 +248,10 @@ public final class StorageExplorerController: ObservableObject {
 
     private func refreshPresentation() {
         presentationRevision += 1
+        schedulePresentation()
+    }
+
+    private func schedulePresentation() {
         guard presentationTask == nil else { return }
         presentationTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(120))
@@ -247,21 +260,35 @@ public final class StorageExplorerController: ObservableObject {
             let generation = self.generation
             let snapshot = self.snapshot, directory = self.currentPath ?? snapshot.rootPath
             let mode = self.mode, metric = self.metric, query = self.searchQuery, sort = self.sort, ascending = self.ascending
+            let basket = self.basket, otherName = self.copy.otherName
             let result = await Task.detached(priority: .userInitiated) {
                 StorageExplorerPresentation.make(snapshot: snapshot, directory: directory, mode: mode,
-                    metric: metric, query: query, sort: sort, ascending: ascending)
+                    metric: metric, query: query, sort: sort, ascending: ascending,
+                    excluding: basket, otherName: otherName)
             }.value
             self.presentationTask = nil
-            if generation == self.generation && directory == self.currentPath && mode == self.mode
-                && metric == self.metric && query == self.searchQuery && sort == self.sort && ascending == self.ascending {
+            if revision == self.presentationRevision && generation == self.generation
+                && directory == self.currentPath && mode == self.mode && metric == self.metric
+                && query == self.searchQuery && sort == self.sort && ascending == self.ascending
+                && basket == self.basket {
                 self.rows = result.rows
                 self.chartRows = result.chart
                 self.mapRootItems = result.mapRootItems
+                self.hierarchyNodes = result.hierarchy
                 self.matchingCount = result.matchingCount
                 self.displayedBytes = result.total
             }
-            if revision != self.presentationRevision { self.refreshPresentation() }
+            if revision != self.presentationRevision { self.schedulePresentation() }
         }
+    }
+
+    private func clearPresentationForNavigation() {
+        rows = []
+        chartRows = []
+        mapRootItems = []
+        hierarchyNodes = []
+        matchingCount = 0
+        displayedBytes = 0
     }
 
     public func canStage(_ item: StorageItem) -> Bool {
@@ -400,11 +427,27 @@ public struct StorageExplorerControllerCopy: Sendable {
     public let movedToTrash: String
     public let trashOperationFailed: String
     public let trashPartialFailure: String
+    public let otherName: String
+
+    public init(
+        itemChanged: String,
+        movedToTrash: String,
+        trashOperationFailed: String,
+        trashPartialFailure: String,
+        otherName: String = "其他"
+    ) {
+        self.itemChanged = itemChanged
+        self.movedToTrash = movedToTrash
+        self.trashOperationFailed = trashOperationFailed
+        self.trashPartialFailure = trashPartialFailure
+        self.otherName = otherName
+    }
 
     public static let fallback = StorageExplorerControllerCopy(
         itemChanged: "所选项目已在磁盘上发生更改。请刷新后重新选择。",
         movedToTrash: "已移至废纸篓",
         trashOperationFailed: "无法将所选项目移至废纸篓。请刷新后重试。",
-        trashPartialFailure: "%d 个项目未能移至废纸篓：%@"
+        trashPartialFailure: "%d 个项目未能移至废纸篓：%@",
+        otherName: "其他"
     )
 }

@@ -89,6 +89,48 @@ final class StorageExplorerPresentationTests: XCTestCase {
         XCTAssertEqual(reduced.first { $0.isAggregate }?.bytes, 20)
     }
 
+    func testHierarchyExcludesSelectedFoldersAndPrecomputesNestedDeductions() throws {
+        let root = "/fixture"
+        func item(_ suffix: String, parent: String?, bytes: Int64, directory: Bool) -> StorageItem {
+            let path = root + suffix
+            return StorageItem(
+                name: URL(fileURLWithPath: path).lastPathComponent,
+                path: path,
+                url: URL(fileURLWithPath: path),
+                isDirectory: directory,
+                size: bytes,
+                allocatedSize: bytes * 2,
+                parentPath: parent.map { root + $0 }
+            )
+        }
+        var snapshot = StorageExplorerSnapshot(rootPath: root)
+        snapshot.apply([
+            item("", parent: nil, bytes: 300, directory: true),
+            item("/a", parent: "", bytes: 180, directory: true),
+            item("/a/large", parent: "/a", bytes: 100, directory: false),
+            item("/a/small", parent: "/a", bytes: 30, directory: false),
+            item("/a/tiny", parent: "/a", bytes: 10, directory: false),
+            item("/b", parent: "", bytes: 90, directory: true),
+            item("/b/selected", parent: "/b", bytes: 40, directory: false),
+            item("/loose", parent: "", bytes: 30, directory: false)
+        ])
+
+        let nodes = StorageExplorerHierarchyLayout.make(
+            snapshot: snapshot,
+            directory: root,
+            metric: .logical,
+            excluding: [root + "/a/small", root + "/b"],
+            otherName: "Other"
+        )
+
+        XCTAssertEqual(nodes.map(\.id), [root + "/a", root + "/loose"])
+        let folder = try XCTUnwrap(nodes.first)
+        XCTAssertEqual(folder.bytes, 150)
+        XCTAssertEqual(folder.children.map(\.id), [root + "/a/large", root + "/a/tiny", "group:other:" + root + "/a"])
+        XCTAssertEqual(folder.children.map(\.bytes), [100, 10, 40])
+        XCTAssertEqual(nodes.reduce(0) { $0 + $1.bytes }, 180)
+    }
+
     func testHierarchyColorKeysFollowStableSizeRankAndDescendantsInheritGroup() throws {
         let root = "/fixture"
         var snapshot = StorageExplorerSnapshot(rootPath: root)
