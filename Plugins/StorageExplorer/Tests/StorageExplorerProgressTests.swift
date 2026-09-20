@@ -22,12 +22,33 @@ final class StorageExplorerProgressTests: XCTestCase {
         let file = root.appendingPathComponent("a/file")
         try Data(repeating: 3, count: 10_000).write(to: file)
         try FileManager.default.linkItem(at: file, to: root.appendingPathComponent("b/link"))
+        let canonicalPath = root.appendingPathComponent("a/file").path
+        let duplicatePath = root.appendingPathComponent("b/link").path
         for workers in [1, 2, 4] {
-            let result = try await StorageExplorerScanner(workerCount: workers).scanSnapshot(rootURL: root) { _ in }
-            XCTAssertEqual(result.items[result.rootPath]?.size, 10_000)
-            XCTAssertEqual(result.items.count, 5)
-            XCTAssertEqual(result.progress.skippedCount, 0)
+            for _ in 0..<3 {
+                let result = try await StorageExplorerScanner(workerCount: workers).scanSnapshot(rootURL: root) { _ in }
+                XCTAssertEqual(result.items[result.rootPath]?.size, 10_000)
+                XCTAssertEqual(result.items[root.appendingPathComponent("a").path]?.size, 10_000)
+                XCTAssertEqual(result.items[root.appendingPathComponent("b").path]?.size, 0)
+                XCTAssertEqual(result.items[canonicalPath]?.size, 10_000)
+                XCTAssertEqual(result.items[duplicatePath]?.size, 0)
+                XCTAssertEqual(result.fileTypeTotals["—"]?.size, 10_000)
+                XCTAssertEqual(result.fileTypeTotals["—"]?.count, 2)
+                XCTAssertEqual(result.items.count, 5)
+                XCTAssertEqual(result.progress.skippedCount, 0)
+            }
         }
+
+        let productionResult = try await StorageExplorerScanner(
+            workerCount: 4,
+            publishesItems: false,
+            maximumRetainedFiles: 100
+        ).scanSnapshot(rootURL: root) { _ in }
+        XCTAssertEqual(productionResult.items[productionResult.rootPath]?.size, 10_000)
+        XCTAssertEqual(productionResult.items[canonicalPath]?.size, 10_000)
+        XCTAssertNil(productionResult.items[duplicatePath])
+        XCTAssertEqual(productionResult.fileTypeTotals["—"]?.size, 10_000)
+        XCTAssertEqual(productionResult.fileTypeTotals["—"]?.count, 2)
     }
 
     func testCacheInvalidationRefreshesNestedContentAndReusesUnaffectedDirectories() async throws {

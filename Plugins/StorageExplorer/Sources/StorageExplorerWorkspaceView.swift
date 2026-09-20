@@ -6,9 +6,8 @@ import SwiftUI
 public struct StorageExplorerWorkspaceView: View {
     @ObservedObject public var controller: StorageExplorerController
     public let localization: PluginLocalization
-    @State private var showsInspector = false
+    @State private var hoveredBreadcrumbIndex: Int?
     @StateObject private var quickLookPresenter = StorageExplorerQuickLookPresenter()
-    @StateObject private var quickLookKeyMonitor = StorageExplorerQuickLookKeyMonitor()
 
     public init(controller: StorageExplorerController,
                 localization: PluginLocalization = PluginLocalization(bundle: .main)) {
@@ -25,21 +24,6 @@ public struct StorageExplorerWorkspaceView: View {
             workspace(width: geometry.size.width)
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
         }
-        .focusable(true, interactions: .activate)
-        .focusEffectDisabled()
-        .onKeyPress(.space) {
-            guard let item = controller.inspectedItem else { return .ignored }
-            return showQuickLook(for: item) ? .handled : .ignored
-        }
-        .onAppear {
-            quickLookKeyMonitor.start {
-                guard let item = controller.inspectedItem else { return false }
-                return showQuickLook(for: item)
-            }
-        }
-        .onDisappear {
-            quickLookKeyMonitor.stop()
-        }
     }
 
     private func workspace(width: CGFloat) -> some View {
@@ -48,7 +32,6 @@ public struct StorageExplorerWorkspaceView: View {
                 controls
             }
             if controller.rootItem != nil {
-                navigation
                 if controller.snapshotHasObservedChanges {
                     Label(
                         text("folderChangedNotice", "扫描后文件夹发生了变化；移动已变化的文件夹前需要刷新。"),
@@ -66,6 +49,7 @@ public struct StorageExplorerWorkspaceView: View {
                     metric: controller.metric,
                     scanningTitle: text("scanning", "正在扫描…"),
                     filesScannedFormat: text("filesScannedFormat", "已扫描 %d 个项目"),
+                    elapsedSecondsFormat: text("elapsedSecondsFormat", "%.1f 秒"),
                     skippedCountFormat: text("skippedCount", "跳过 %d 项")
                 )
             } else {
@@ -96,7 +80,7 @@ public struct StorageExplorerWorkspaceView: View {
             if width >= 680 {
                 GeometryReader { geometry in
                     HSplitView {
-                        hierarchyTreemap(nodes: nodes)
+                        treemapPanel(nodes: nodes)
                             .frame(
                                 minWidth: max(420, geometry.size.width * 0.52),
                                 idealWidth: geometry.size.width * 0.72,
@@ -112,7 +96,7 @@ public struct StorageExplorerWorkspaceView: View {
                 }
             } else {
                 VStack(spacing: 10) {
-                    hierarchyTreemap(nodes: nodes)
+                    treemapPanel(nodes: nodes)
                     compactList.frame(maxHeight: 120)
                 }
             }
@@ -121,23 +105,36 @@ public struct StorageExplorerWorkspaceView: View {
         .clipped()
     }
 
-    private func hierarchyTreemap(nodes: [StorageExplorerHierarchyNode]) -> some View {
-        StorageExplorerHierarchyTreemapView(
-            nodes: nodes,
-            selection: $controller.selectedPath,
-            emptyLabel: text("noSizedItems", "尚无可显示的大小"),
-            addReviewLabel: text("addToReview", "加入审阅"),
-            unavailableReviewLabel: text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。"),
-            aggregateReviewLabel: text(
-                "aggregateReviewUnsupported",
-                "这是多个较小项目的合并视图，不能作为单个项目加入审阅。"
-            ),
-            open: controller.drillDown,
-            preview: showQuickLook,
-            toggleReview: { controller.toggleSelection(path: $0.path) },
-            canReview: controller.canStage
+    private func treemapPanel(nodes: [StorageExplorerHierarchyNode]) -> some View {
+        VStack(spacing: 0) {
+            treemapPathRail
+            Divider()
+            StorageExplorerHierarchyTreemapView(
+                nodes: nodes,
+                selection: $controller.selectedPath,
+                emptyLabel: text("noSizedItems", "尚无可显示的大小"),
+                addReviewLabel: text("addToReview", "加入审阅"),
+                unavailableReviewLabel: text("reviewUnavailable", "此项目不能加入审阅。"),
+                symlinkReviewUnavailableLabel: text(
+                    "symlinkReviewUnsupported",
+                    "符号链接不能加入审阅；请在访达中管理链接本身。"
+                ),
+                aggregateReviewLabel: text(
+                    "aggregateReviewUnsupported",
+                    "这是多个较小项目的合并视图，不能作为单个项目加入审阅。"
+                ),
+                open: controller.drillDown,
+                preview: showQuickLook,
+                toggleReview: { controller.toggleSelection(path: $0.path) },
+                canReview: controller.canStage
+            )
+        }
+        .background(Color.secondary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(Color.secondary.opacity(0.22), lineWidth: 1)
         )
-        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var controls: some View {
@@ -153,37 +150,112 @@ public struct StorageExplorerWorkspaceView: View {
         .disabled(controller.isExecutingTrash)
     }
 
-    private var navigation: some View {
-        HStack(spacing: 8) {
-            Button { controller.navigateUp() } label: {
-                Image(systemName: "arrow.up")
+    private var treemapPathRail: some View {
+        HStack(spacing: 6) {
+            if controller.navigationStack.count > 1 {
+                Button { controller.navigateUp() } label: {
+                    Image(systemName: "arrow.up")
+                }
+                .buttonStyle(.plain)
+                .controlSize(.small)
+                .help(text("goUp", "返回上一级"))
+                .frame(width: 24, height: 24)
+                .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 5))
             }
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .disabled(controller.navigationStack.count <= 1)
-            .help(text("goUp", "返回上一级"))
 
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
+                HStack(spacing: 2) {
                     ForEach(Array(controller.navigationStack.enumerated()), id: \.element.path) { index, item in
-                        if index > 0 { Image(systemName: "chevron.right").foregroundStyle(.tertiary) }
-                        Button(item.name.isEmpty ? "/" : item.name) { controller.navigateToBreadcrumb(at: index) }
-                            .buttonStyle(.plain)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 3)
-                            .background(Color.secondary.opacity(0.09), in: Capsule())
-                            .help(String(format: text("openPath", "打开 %@"), item.path))
+                        if index > 0 {
+                            Image(systemName: "chevron.right")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        breadcrumbSegment(item, index: index)
                     }
                 }
-                .font(PluginSettingsTheme.Typography.rowTitle)
+                .font(PluginSettingsTheme.Typography.rowDescription)
             }
-            Spacer(minLength: 6)
-            Button { showsInspector.toggle() } label: { Image(systemName: "info.circle") }
-                .buttonStyle(.borderless)
-                .help(text("details", "详细信息"))
-                .popover(isPresented: $showsInspector) { inspector.frame(width: 300, height: 430).padding(12) }
+            .layoutPriority(1)
+
+            Spacer(minLength: 4)
+            scanSummary
             scanActions
         }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 5)
+        .background(Color.secondary.opacity(0.035))
+    }
+
+    private func breadcrumbSegment(_ item: StorageItem, index: Int) -> some View {
+        let isCurrent = index == controller.navigationStack.count - 1
+        let size = ByteCountFormatter.string(fromByteCount: controller.metric.bytes(item), countStyle: .file)
+        return Button {
+            controller.navigateToBreadcrumb(at: index)
+        } label: {
+            Text(item.name.isEmpty ? "/" : item.name)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .foregroundStyle(isCurrent ? .primary : .secondary)
+                .fontWeight(isCurrent ? .semibold : .regular)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(
+                    Color.accentColor.opacity(isCurrent ? 0.12 : hoveredBreadcrumbIndex == index ? 0.09 : 0),
+                    in: RoundedRectangle(cornerRadius: 5)
+                )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            if isHovering {
+                hoveredBreadcrumbIndex = index
+            } else if hoveredBreadcrumbIndex == index {
+                hoveredBreadcrumbIndex = nil
+            }
+        }
+        .help("\(item.path)\n\(size)")
+        .accessibilityHint(String(format: text("openPath", "打开 %@"), item.path))
+    }
+
+    private var scanSummary: some View {
+        let size = ByteCountFormatter.string(
+            fromByteCount: controller.status.progress.allocatedBytesScanned,
+            countStyle: .file
+        )
+        let itemCount = String(format: text("filesScannedFormat", "已扫描 %d 个项目"), controller.status.progress.filesScanned)
+        let elapsed = String(
+            format: text("elapsedSecondsFormat", "%.1f 秒"),
+            controller.status.progress.elapsed
+        )
+        let skipped = controller.status.progress.skippedCount
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 7) {
+                Text(size).fontWeight(.semibold)
+                Text(itemCount)
+                Text(elapsed)
+                if skipped > 0 { skippedSummary(count: skipped) }
+            }
+            HStack(spacing: 7) {
+                Text(size).fontWeight(.semibold)
+                if skipped > 0 { skippedSummary(count: skipped) }
+            }
+        }
+        .font(PluginSettingsTheme.Typography.rowDescription)
+        .foregroundStyle(.secondary)
+        .monospacedDigit()
+        .fixedSize()
+    }
+
+    private func skippedSummary(count: Int) -> some View {
+        Label(
+            String(format: text("skippedCount", "跳过 %d 项"), count),
+            systemImage: "exclamationmark.circle"
+        )
+        .foregroundStyle(.orange)
+        .help(String(format: text(
+            "skippedDetailsMessage",
+            "%d 个项目因权限、云端占位文件或文件系统边界而被跳过。显示的总大小可能偏低。"
+        ), count))
     }
 
     private var scanActions: some View {
@@ -218,57 +290,63 @@ public struct StorageExplorerWorkspaceView: View {
     }
 
     private var compactList: some View {
-        ScrollView {
-            LazyVStack(spacing: 1) {
-                ForEach(controller.rows.prefix(16)) { row in
-                    HStack(spacing: 8) {
-                        Button {
-                            controller.toggleSelection(path: row.item.path)
-                        } label: {
-                            Image(systemName: controller.basket.contains(row.id) ? "checkmark.circle.fill" : "plus.circle")
-                                .foregroundStyle(controller.basket.contains(row.id) ? Color.accentColor : Color.secondary)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(!controller.canStage(row.item))
-                        Text(localizedName(row)).lineLimit(1).truncationMode(.middle)
-                        Spacer(minLength: 4)
-                        Text(row.sizeLabel)
-                            .font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                        if row.item.isDirectory && !row.item.isPackage {
-                            Button { controller.drillDown(to: row.item) } label: {
-                                Image(systemName: "chevron.right")
+        VStack(spacing: 0) {
+            ScrollView {
+                LazyVStack(spacing: 1) {
+                    ForEach(controller.rows.prefix(16)) { row in
+                        HStack(spacing: 8) {
+                            Button {
+                                controller.toggleSelection(path: row.item.path)
+                            } label: {
+                                Image(systemName: controller.basket.contains(row.id) ? "checkmark.circle.fill" : "plus.circle")
+                                    .foregroundStyle(controller.basket.contains(row.id) ? Color.accentColor : Color.secondary)
                             }
                             .buttonStyle(.plain)
-                            .help(text("openFolder", "打开文件夹"))
+                            .disabled(!controller.canStage(row.item))
+                            Text(localizedName(row)).lineLimit(1).truncationMode(.middle)
+                            Spacer(minLength: 4)
+                            Text(row.sizeLabel)
+                                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                            if row.item.isDirectory && !row.item.isPackage {
+                                Button { controller.drillDown(to: row.item) } label: {
+                                    Image(systemName: "chevron.right")
+                                }
+                                .buttonStyle(.plain)
+                                .help(text("openFolder", "打开文件夹"))
+                            }
                         }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        controller.selectedPath == row.id ? Color.accentColor.opacity(0.12) : Color.clear,
-                        in: RoundedRectangle(cornerRadius: 6)
-                    )
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if row.item.isDirectory && !row.item.isPackage {
-                            controller.drillDown(to: row.item)
-                        } else {
-                            controller.selectedPath = row.id
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            controller.selectedPath == row.id ? Color.accentColor.opacity(0.12) : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 6)
+                        )
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            if row.item.isDirectory && !row.item.isPackage {
+                                controller.drillDown(to: row.item)
+                            } else {
+                                controller.selectedPath = row.id
+                            }
                         }
+                        .modifier(StorageExplorerListDragModifier(
+                            enabled: controller.canStage(row.item),
+                            path: row.item.path
+                        ))
+                        .focusable(true, interactions: .activate)
+                        .focusEffectDisabled()
+                        .onKeyPress(.space) {
+                            showQuickLook(for: row.item) ? .handled : .ignored
+                        }
+                        .help(row.item.isSymlink
+                            ? text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。")
+                            : row.item.path)
                     }
-                    .modifier(StorageExplorerListDragModifier(
-                        enabled: controller.canStage(row.item),
-                        path: row.item.path
-                    ))
-                    .focusable(true, interactions: .activate)
-                    .focusEffectDisabled()
-                    .onKeyPress(.space) {
-                        showQuickLook(for: row.item) ? .handled : .ignored
-                    }
-                    .help(row.item.isSymlink
-                        ? text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。")
-                        : row.item.path)
                 }
+            }
+            if let item = controller.inspectedItem {
+                Divider()
+                inlineDetails(for: item)
             }
         }
         .background(Color.secondary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
@@ -291,90 +369,94 @@ public struct StorageExplorerWorkspaceView: View {
         return true
     }
 
-    private var inspector: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.sectionHeaderContent) {
-                Label(text("details", "详细信息"), systemImage: "info.circle")
-                    .font(PluginSettingsTheme.Typography.sectionTitle).foregroundStyle(.secondary)
-                scanDetails
-                Divider()
-                if let item = controller.inspectedItem {
-                    Text(item.path == "type:package" ? text("applicationsAndPackages", "应用与软件包") : item.name)
-                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle).textSelection(.enabled)
-                    if !item.path.hasPrefix("type:") {
-                        Text(item.path).font(PluginSettingsTheme.Typography.rowDescription)
-                            .foregroundStyle(.secondary).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    }
-                    detail(text("logicalSize", "文件大小"), ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file))
-                    detail(text("allocatedSize", "占用空间"), ByteCountFormatter.string(fromByteCount: item.allocatedSize, countStyle: .file))
-                    if item.isAccessDenied { Label(text("accessDenied", "无访问权限"), systemImage: "lock.fill").foregroundStyle(.orange) }
-                    if item.isCloudPlaceholder { Label(text("cloudPlaceholder", "仅在云端"), systemImage: "icloud").foregroundStyle(.secondary) }
-                    if item.isSymlink {
-                        Label(text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。"), systemImage: "link")
-                            .foregroundStyle(.secondary)
-                    }
-                    if item.isHardLinked {
-                        Label(
-                            String(format: text("hardLinkNotice", "此文件有 %d 个硬链接；移除最后一个链接后才会释放空间。"), item.hardLinkCount),
-                            systemImage: "link.badge.plus"
-                        )
-                        .foregroundStyle(.secondary)
-                    }
-                    if item.isIncomplete { Text(text("incomplete", "大小尚不完整" )).foregroundStyle(.orange) }
-                    Text(text("spaceNote", "占用空间不等于可释放空间；共享数据和废纸篓会影响实际可用容量。"))
-                        .font(PluginSettingsTheme.Typography.rowDescription).foregroundStyle(.secondary)
-                    if !item.path.hasPrefix("type:") {
-                        Button(text("revealInFinder", "在访达中显示")) { controller.revealInFinder(path: item.path) }
-                        Button(controller.basket.contains(item.path) ? text("removeFromReview", "移出审阅") : text("addToReview", "加入审阅")) {
-                            controller.toggleSelection(path: item.path)
-                        }.disabled(!controller.canStage(item))
-                        if !item.isDirectory && !item.isSymlink && !item.isCloudPlaceholder {
-                            StorageExplorerQuickLookView(url: item.url).frame(height: 170)
-                        }
-                    }
-                } else {
-                    Text(text("selectToInspect", "选择图块或列表项目以查看详情。"))
-                        .font(PluginSettingsTheme.Typography.rowDescription).foregroundStyle(.secondary)
-                }
-            }.padding(.leading, 12).padding(.trailing, 4)
-        }
-        .buttonStyle(.bordered).controlSize(.small)
-    }
-
-    private var scanDetails: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            detail(
-                text("allocatedSize", "占用空间"),
-                ByteCountFormatter.string(
-                    fromByteCount: controller.status.progress.allocatedBytesScanned,
-                    countStyle: .file
-                )
-            )
-            Text(String(format: text("filesScannedFormat", "已扫描 %d 个项目"), controller.status.progress.filesScanned))
-            Text(String(format: "%.1f s", controller.status.progress.elapsed))
-            if controller.status.progress.skippedCount > 0 {
-                Label(
-                    String(format: text("skippedCount", "跳过 %d 项"), controller.status.progress.skippedCount),
-                    systemImage: "exclamationmark.circle"
-                )
-                .foregroundStyle(.orange)
-                Text(String(format: text(
-                    "skippedDetailsMessage",
-                    "%d 个项目因权限、云端占位文件或文件系统边界而被跳过。显示的总大小可能偏低。"
-                ), controller.status.progress.skippedCount))
+    private func inlineDetails(for item: StorageItem) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: item.iconSystemName)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.name)
+                    .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(item.path)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(ByteCountFormatter.string(fromByteCount: item.allocatedSize, countStyle: .file))
+                    .font(PluginSettingsTheme.Typography.monospacedValue)
+                if item.size != item.allocatedSize {
+                    Text(ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .help(text("logicalSize", "文件大小"))
+                }
+            }
+            if item.isAccessDenied {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(.orange)
+                    .help(text("accessDenied", "无访问权限"))
+            }
+            if item.isCloudPlaceholder {
+                Image(systemName: "icloud")
+                    .foregroundStyle(.secondary)
+                    .help(text("cloudPlaceholder", "仅在云端"))
+            }
+            if item.isSymlink {
+                Image(systemName: "link")
+                    .foregroundStyle(.secondary)
+                    .help(text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。"))
+            }
+            if item.isIncomplete {
+                Image(systemName: "exclamationmark.circle")
+                    .foregroundStyle(.orange)
+                    .help(text("incomplete", "大小尚不完整"))
+            }
+            if !item.isDirectory && !item.isSymlink && !item.isCloudPlaceholder {
+                Button { _ = showQuickLook(for: item) } label: {
+                    Image(systemName: "eye")
+                }
+                .help(text("preview", "预览"))
+            }
+            Button { controller.revealInFinder(path: item.path) } label: {
+                Image(systemName: "folder")
+            }
+            .help(text("revealInFinder", "在访达中显示"))
+            Button { controller.toggleSelection(path: item.path) } label: {
+                Image(systemName: controller.basket.contains(item.path) ? "checkmark.circle.fill" : "plus.circle")
+            }
+            .disabled(!controller.canStage(item))
+            .help(controller.basket.contains(item.path)
+                ? text("removeFromReview", "移出审阅")
+                : text("addToReview", "加入审阅"))
         }
-        .font(PluginSettingsTheme.Typography.rowDescription)
-        .monospacedDigit()
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .help(inlineDetailsHelp(for: item))
     }
 
-    private func detail(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(PluginSettingsTheme.Typography.rowDescription).foregroundStyle(.secondary)
-            Text(value).font(PluginSettingsTheme.Typography.monospacedValue)
+    private func inlineDetailsHelp(for item: StorageItem) -> String {
+        var lines = [item.path]
+        lines.append("\(text("allocatedSize", "占用空间")): \(ByteCountFormatter.string(fromByteCount: item.allocatedSize, countStyle: .file))")
+        lines.append("\(text("logicalSize", "文件大小")): \(ByteCountFormatter.string(fromByteCount: item.size, countStyle: .file))")
+        if item.isHardLinked {
+            lines.append(String(format: text(
+                "hardLinkNotice",
+                "此文件有 %d 个硬链接；移除最后一个链接后才会释放空间。"
+            ), item.hardLinkCount))
         }
+        if item.isAccessDenied { lines.append(text("accessDenied", "无访问权限")) }
+        if item.isCloudPlaceholder { lines.append(text("cloudPlaceholder", "仅在云端")) }
+        if item.isSymlink {
+            lines.append(text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。"))
+        }
+        if item.isIncomplete { lines.append(text("incomplete", "大小尚不完整")) }
+        lines.append(text("spaceNote", "占用空间不等于可释放空间；共享数据和废纸篓会影响实际可用容量。"))
+        return lines.joined(separator: "\n")
     }
 
     private var reviewBar: some View {
@@ -452,6 +534,7 @@ private final class StorageExplorerQuickLookPresenter: NSObject, ObservableObjec
         guard let panel = QLPreviewPanel.shared() else { return }
         panel.dataSource = self
         panel.reloadData()
+        PluginPresentationSafety.prepareForWindowOrdering(panel)
         panel.makeKeyAndOrderFront(nil)
     }
 
@@ -462,45 +545,6 @@ private final class StorageExplorerQuickLookPresenter: NSObject, ObservableObjec
     func previewPanel(_ panel: QLPreviewPanel!, previewItemAt index: Int) -> QLPreviewItem! {
         previewURL as NSURL?
     }
-}
-
-@MainActor
-private final class StorageExplorerQuickLookKeyMonitor: ObservableObject {
-    private var monitor: Any?
-    private var action: (() -> Bool)?
-
-    func start(action: @escaping () -> Bool) {
-        self.action = action
-        guard monitor == nil else { return }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard event.keyCode == 49,
-                  !Self.isEditingText(in: event.window),
-                  Self.hasNoActionModifiers(event.modifierFlags),
-                  self?.action?() == true else {
-                return event
-            }
-            return nil
-        }
-    }
-
-    func stop() {
-        if let monitor {
-            NSEvent.removeMonitor(monitor)
-        }
-        monitor = nil
-        action = nil
-    }
-
-    private static func isEditingText(in window: NSWindow?) -> Bool {
-        (window?.firstResponder as? NSTextView)?.isFieldEditor == true
-    }
-
-    private static func hasNoActionModifiers(_ flags: NSEvent.ModifierFlags) -> Bool {
-        flags.intersection(.deviceIndependentFlagsMask)
-            .subtracting([.capsLock, .numericPad])
-            .isEmpty
-    }
-
 }
 
 private struct StorageExplorerListDragModifier: ViewModifier {
@@ -522,6 +566,7 @@ private struct StorageExplorerScanningView: View {
     let metric: StorageExplorerMetric
     let scanningTitle: String
     let filesScannedFormat: String
+    let elapsedSecondsFormat: String
     let skippedCountFormat: String
 
     var body: some View {
@@ -541,7 +586,10 @@ private struct StorageExplorerScanningView: View {
                 .frame(width: 110, alignment: .trailing)
                 Text(String(format: filesScannedFormat, status.progress.filesScanned))
                     .frame(width: 170, alignment: .leading)
-                Text(String(format: "%.1f s", status.progress.elapsed))
+                Text(String(
+                    format: elapsedSecondsFormat,
+                    status.progress.elapsed
+                ))
                     .frame(width: 64, alignment: .trailing)
             }
             .font(PluginSettingsTheme.Typography.rowDescription)

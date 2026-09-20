@@ -4545,6 +4545,109 @@
         }
       }
     },
+    "storageExplorer.elapsedSecondsFormat": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "%.1f ث" } },
+        "de": { "stringUnit": { "state": "translated", "value": "%.1f s" } },
+        "en": { "stringUnit": { "state": "translated", "value": "%.1f s" } },
+        "es": { "stringUnit": { "state": "translated", "value": "%.1f s" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "%.1f s" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "%.1f秒" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "%.1f초" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "%.1f s" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "%.1f с" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "%.1f 秒" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "%.1f 秒" } }
+      }
+    },
+    "storageExplorer.reviewUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": { "stringUnit": { "state": "translated", "value": "لا يمكن إضافة هذا العنصر إلى المراجعة." } },
+        "de": { "stringUnit": { "state": "translated", "value": "Dieses Objekt kann nicht zur Prüfung hinzugefügt werden." } },
+        "en": { "stringUnit": { "state": "translated", "value": "This item cannot be added to review." } },
+        "es": { "stringUnit": { "state": "translated", "value": "Este elemento no se puede añadir a la revisión." } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Cet élément ne peut pas être ajouté à la vérification." } },
+        "ja": { "stringUnit": { "state": "translated", "value": "この項目はレビューに追加できません。" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "이 항목은 검토에 추가할 수 없습니다." } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Este elemento não pode ser adicionado à revisão." } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Этот объект нельзя добавить на проверку." } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "此项目不能加入审阅。" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "此項目無法加入檢閱。" } }
+      }
+    },
+    "storageExplorer.preview": {
+      "extractionState": "manual",
+      "localizations": {
+        "ar": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "معاينة"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorschau"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vista previa"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçu"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレビュー"
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "미리보기"
+          }
+        },
+        "pt": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pré-visualizar"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Предпросмотр"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預覽"
+          }
+        }
+      }
+    },
     "storageExplorer.hardLinkNotice": {
       "extractionState": "manual",
       "localizations": {

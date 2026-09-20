@@ -6,6 +6,7 @@ struct StorageExplorerHierarchyTreemapView: View {
     let emptyLabel: String
     let addReviewLabel: String
     let unavailableReviewLabel: String
+    let symlinkReviewUnavailableLabel: String
     let aggregateReviewLabel: String
     let open: (StorageItem) -> Void
     let preview: (StorageItem) -> Bool
@@ -13,7 +14,9 @@ struct StorageExplorerHierarchyTreemapView: View {
     let canReview: (StorageItem) -> Bool
 
     @State private var hoveredID: String?
+    @State private var hoverLocation: CGPoint?
     @State private var rectangles: [StorageExplorerHierarchyRect] = []
+    @FocusState private var focusedID: String?
 
     var body: some View {
         GeometryReader { geometry in
@@ -31,6 +34,13 @@ struct StorageExplorerHierarchyTreemapView: View {
 
                 ForEach(rectangles) { entry in
                     interactiveRegion(entry)
+                }
+
+                if let hovered = rectangles.last(where: { $0.id == hoveredID }),
+                   let hoverLocation,
+                   !hovered.node.isAggregate,
+                   canReview(hovered.node.item) {
+                    dragHotspot(for: hovered, at: hoverLocation)
                 }
 
                 if let hovered = rectangles.last(where: { $0.id == hoveredID }),
@@ -52,8 +62,10 @@ struct StorageExplorerHierarchyTreemapView: View {
                     // Parent and child rectangles overlap by design. Resolve hover once at the
                     // container level so the deepest visible tile wins without competing events.
                     hoveredID = rectangles.last(where: { $0.rect.contains(location) })?.id
+                    hoverLocation = location
                 case .ended:
                     hoveredID = nil
+                    hoverLocation = nil
                 }
             }
             .onAppear { updateLayout(size: geometry.size) }
@@ -62,7 +74,7 @@ struct StorageExplorerHierarchyTreemapView: View {
     }
 
     private func interactiveRegion(_ entry: StorageExplorerHierarchyRect) -> some View {
-        let inset = entry.rect.insetBy(dx: 2, dy: 2)
+        let inset = interactionRect(for: entry.rect)
         let reviewAvailable = !entry.node.isAggregate && canReview(entry.node.item)
         return Color.clear
             .contentShape(Rectangle())
@@ -80,28 +92,85 @@ struct StorageExplorerHierarchyTreemapView: View {
                     if reviewAvailable {
                         Button(addReviewLabel) { toggleReview(entry.node.item) }
                     } else {
-                        Label(unavailableReviewLabel, systemImage: "link")
+                        Label(
+                            reviewUnavailableLabel(for: entry.node.item),
+                            systemImage: entry.node.item.isSymlink ? "link" : "exclamationmark.circle"
+                        )
                     }
                 }
             }
-            .modifier(StorageExplorerReviewDragModifier(
-                enabled: reviewAvailable,
-                item: entry.node.item,
-                bytes: entry.node.bytes
-            ))
-            .focusable(true, interactions: .activate)
+            .focusable(!entry.node.isAggregate, interactions: .activate)
+            .focused($focusedID, equals: entry.id)
             .focusEffectDisabled()
-            .onKeyPress(.space) {
-                preview(entry.node.item) ? .handled : .ignored
+            .onKeyPress(.return) {
+                guard !entry.node.isAggregate else { return .ignored }
+                activate(entry)
+                return .handled
             }
+            .onKeyPress(.space) {
+                guard !entry.node.isAggregate else { return .ignored }
+                return preview(entry.node.item) ? .handled : .ignored
+            }
+            .modifier(StorageExplorerTreemapAccessibilityModifier(
+                label: entry.node.item.name,
+                value: ByteCountFormatter.string(fromByteCount: entry.node.bytes, countStyle: .file),
+                hint: helpText(for: entry.node) + helpSuffix(for: entry.node),
+                enabled: !entry.node.isAggregate,
+                reviewAvailable: reviewAvailable,
+                addReviewLabel: addReviewLabel,
+                activate: { activate(entry) },
+                addToReview: { toggleReview(entry.node.item) }
+            ))
             .help(helpText(for: entry.node) + helpSuffix(for: entry.node))
             // Keep positioning last so drag previews and hit targets use the tile's
             // local bounds instead of the full treemap coordinate space.
             .position(x: inset.midX, y: inset.midY)
     }
 
+    /// SwiftUI centers a custom drag preview over its source view. A treemap tile can be
+    /// hundreds of points wide, which made the preview appear far from a pointer near an edge.
+    /// Keep a small drag source under the current pointer so the preview begins where the drag
+    /// actually starts while the full tile remains the visual and keyboard interaction target.
+    @ViewBuilder
+    private func dragHotspot(
+        for entry: StorageExplorerHierarchyRect,
+        at location: CGPoint
+    ) -> some View {
+        let inset = interactionRect(for: entry.rect)
+        let diameter: CGFloat = 36
+        let width = max(0, min(diameter, inset.width))
+        let height = max(0, min(diameter, inset.height))
+        let halfWidth = width / 2
+        let halfHeight = height / 2
+        let x = min(max(location.x, inset.minX + halfWidth), inset.maxX - halfWidth)
+        let y = min(max(location.y, inset.minY + halfHeight), inset.maxY - halfHeight)
+        if width > 0, height > 0 {
+            Color.clear
+                .contentShape(Rectangle())
+                .frame(width: width, height: height)
+                .draggable(entry.node.item.path) {
+                    StorageExplorerDragPreview(item: entry.node.item, bytes: entry.node.bytes)
+                }
+                .onTapGesture { activate(entry) }
+                .contextMenu {
+                    Button(addReviewLabel) { toggleReview(entry.node.item) }
+                }
+                .help(helpText(for: entry.node) + helpSuffix(for: entry.node))
+                .position(x: x, y: y)
+                .zIndex(9)
+        }
+    }
+
+    private func activate(_ entry: StorageExplorerHierarchyRect) {
+        if entry.node.item.isDirectory && !entry.node.item.isPackage {
+            open(entry.node.item)
+        } else {
+            selection = entry.id
+        }
+    }
+
     private func hoverReviewButton(for entry: StorageExplorerHierarchyRect) -> some View {
-        let inset = entry.rect.insetBy(dx: 2, dy: 2)
+        let inset = interactionRect(for: entry.rect)
         return Button { toggleReview(entry.node.item) } label: {
             Image(systemName: "plus.circle.fill")
                 .symbolRenderingMode(.palette)
@@ -125,6 +194,8 @@ struct StorageExplorerHierarchyTreemapView: View {
         let base = color(for: entry.node.colorKey)
         let brightness = max(0.5, 0.88 - Double(entry.depth) * 0.10)
         let isHovered = hoveredID == entry.id
+        let isFocused = focusedID == entry.id
+        let isSelected = selection == entry.id
         let hasHover = hoveredID != nil
         context.fill(shape, with: .color(base.opacity(brightness * (hasHover && !isHovered ? 0.48 : 1))))
         if entry.node.isAggregate {
@@ -140,6 +211,13 @@ struct StorageExplorerHierarchyTreemapView: View {
         )
         if isHovered {
             context.stroke(shape, with: .color(.black.opacity(0.45)), lineWidth: 1)
+        }
+        if isFocused || isSelected {
+            context.stroke(
+                shape,
+                with: .color(isFocused ? Color.accentColor : .white),
+                lineWidth: isFocused ? 4 : 2.5
+            )
         }
         guard inset.width > 62, inset.height > 30 else { return }
         let name = Text(entry.node.item.name)
@@ -175,9 +253,17 @@ struct StorageExplorerHierarchyTreemapView: View {
 
     private func updateLayout(size: CGSize) {
         hoveredID = nil
+        hoverLocation = nil
         rectangles = StorageExplorerHierarchyRectLayout.make(
             nodes: nodes,
             in: CGRect(origin: .zero, size: size)
+        )
+    }
+
+    private func interactionRect(for rect: CGRect) -> CGRect {
+        rect.insetBy(
+            dx: min(2, max(0, rect.width / 2)),
+            dy: min(2, max(0, rect.height / 2))
         )
     }
 
@@ -212,35 +298,69 @@ struct StorageExplorerHierarchyTreemapView: View {
             return "\n" + aggregateReviewLabel
         }
         if node.item.isSymlink {
+            return "\n" + symlinkReviewUnavailableLabel
+        }
+        if !canReview(node.item) {
             return "\n" + unavailableReviewLabel
         }
         return ""
     }
+
+    private func reviewUnavailableLabel(for item: StorageItem) -> String {
+        item.isSymlink ? symlinkReviewUnavailableLabel : unavailableReviewLabel
+    }
 }
 
-private struct StorageExplorerReviewDragModifier: ViewModifier {
+private struct StorageExplorerTreemapAccessibilityModifier: ViewModifier {
+    let label: String
+    let value: String
+    let hint: String
     let enabled: Bool
-    let item: StorageItem
-    let bytes: Int64
+    let reviewAvailable: Bool
+    let addReviewLabel: String
+    let activate: () -> Void
+    let addToReview: () -> Void
 
     @ViewBuilder
     func body(content: Content) -> some View {
         if enabled {
-            content.draggable(item.path) {
-                HStack(spacing: 8) {
-                    Image(systemName: item.iconSystemName)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(item.name).lineLimit(1)
-                        Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .padding(10)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
+            if reviewAvailable {
+                accessible(content)
+                    .accessibilityAction { activate() }
+                    .accessibilityAction(named: Text(addReviewLabel)) { addToReview() }
+            } else {
+                accessible(content)
+                    .accessibilityAction { activate() }
             }
         } else {
-            content
+            accessible(content)
         }
+    }
+
+    private func accessible(_ content: Content) -> some View {
+        content
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(label)
+            .accessibilityValue(value)
+            .accessibilityHint(hint)
+    }
+}
+
+private struct StorageExplorerDragPreview: View {
+    let item: StorageItem
+    let bytes: Int64
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: item.iconSystemName)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name).lineLimit(1)
+                Text(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
