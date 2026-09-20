@@ -20,6 +20,9 @@ PLUGIN_INTERFACES = REPO_ROOT / "Sources/MacToolsPluginKit/PluginInterfaces.swif
 PLUGIN_SETTINGS_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/PluginSettingsModels.swift"
 APP_VERSION_CONFIG = REPO_ROOT / "Configs/AppVersion.xcconfig"
 NEW_API_MINIMUM_HOSTS = {
+    "PluginPanelPresentation": "1.3.1",
+    "PluginPanelFocusRestoration": "1.3.1",
+    "PluginPanelDismissalMonitor": "1.3.1",
     "PluginObservedContent": "1.3.1",
     "pluginPresentationIsVisible": "1.3.1",
     "PluginShortcutResetRequesting": "1.3.1",
@@ -390,6 +393,14 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
             self.assertEqual(NEW_API_MINIMUM_HOSTS[symbol], "1.2.1")
             self.assertEqual(len(minimum_host_violations("probe", "1.2.0", symbol)), 1)
             self.assertEqual(minimum_host_violations("probe", "1.2.1", symbol), [])
+
+    def test_global_panel_inventory_requires_host_1_3_1(self) -> None:
+        source = (REPO_ROOT / "Sources/MacToolsPluginKit/PluginPanelPresentation.swift").read_text(encoding="utf-8")
+        for symbol in public_top_level_type_names(source):
+            with self.subTest(symbol=symbol):
+                self.assertEqual(NEW_API_MINIMUM_HOSTS.get(symbol), "1.3.1")
+                self.assertTrue(minimum_host_violations("probe", "1.3.0", symbol))
+                self.assertEqual(minimum_host_violations("probe", "1.3.1", symbol), [])
 
     def test_centered_window_snap_inventory_requires_host_1_3_1(self) -> None:
         for filename in ("WindowSnapGeometry.swift", "WindowSnapOverlayController.swift", "PluginWindowSnapCoordinator.swift"):

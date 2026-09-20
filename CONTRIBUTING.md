@@ -143,3 +143,7 @@ Window Switcher’s own centered drag guides consume `PluginWindowSnapCoordinato
 ## Stable CLI candidates
 
 The optional stable CLI uses the existing host-owned commands and separate signed download. Publication remains disabled until signed acceptance is complete. See [CLI candidate packaging and release gates](docs/plugins/cli-release.md) before changing release metadata or enabling distribution. Run the installer/channel tests, `make script-tests`, and `make ci` for changes across installer and release infrastructure. Never use a successful unsigned test run as evidence of signed stable acceptance.
+
+## Global panel presentation
+
+Use the shared PluginKit presentation policy for transient global panels and keep application activation separate from keyboard focus. Follow [the presentation contract](docs/plugins/global-panel-presentation.md), including dismissal protection, focus handoff, and native acceptance checks. New presentation helpers first ship in host 1.3.1; plugins consuming them must declare that minimum host version and pass the minimum-host inventory tests.

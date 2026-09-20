@@ -2199,6 +2199,7 @@ enum ClipboardHistoryFixedShortcut {
 @MainActor
 final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
     static let panelStyleMask: NSWindow.StyleMask = [
+        .nonactivatingPanel,
         .titled,
         .resizable,
         .fullSizeContentView,
@@ -2479,9 +2480,7 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
             )
             if panel.frame != frame { panel.setFrame(frame, display: false) }
         }
-        PluginPresentationSafety.prepareForWindowOrdering(panel)
-        NSApp.activate(ignoringOtherApps: true)
-        panel.makeKeyAndOrderFront(nil)
+        PluginPanelPresentation.present(panel)
         positionTracker.reset(frame: panel.frame, screens: screens)
     }
 
@@ -2543,6 +2542,8 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
     }
 
     func close(restorePreviousApplication: Bool = true, discardsPreviews: Bool = false) {
+        let shouldRestore = restorePreviousApplication && NSApp.isActive
+            && (panel?.isKeyWindow == true || actionPaletteController.isKeyWindow)
         windowSnapCoordinator.cancelDragging()
         savePendingPanelPosition()
         model.cancelPresentationPreparation()
@@ -2565,12 +2566,11 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
         model.dismissActionMenu()
         panel?.orderOut(nil)
         removeKeyMonitor()
-        if restorePreviousApplication {
-            previousApplication?.activate(options: [])
-        }
+        if shouldRestore { previousApplication?.activate(options: []) }
     }
 
     func windowWillClose(_ notification: Notification) {
+        let shouldRestore = NSApp.isActive && panel?.isKeyWindow == true
         windowSnapCoordinator.cancelDragging()
         savePendingPanelPosition()
         model.resetPreviewPresentation()
@@ -2585,7 +2585,8 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
         actionPaletteController.dismiss(notify: false)
         model.dismissActionMenu()
         removeKeyMonitor()
-        previousApplicationState.consume()?.activate(options: [])
+        let previousApplication = previousApplicationState.consume()
+        if shouldRestore { previousApplication?.activate(options: []) }
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -2623,6 +2624,11 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
         actionPaletteController.dismiss(notify: false)
         model.dismissActionMenu()
         model.requestSearchFocus()
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        guard notification.object as? NSWindow === panel else { return }
+        needsFilterRefreshOnActivation = true
     }
 
     @objc private func applicationDidResignActive(_ notification: Notification) {
@@ -2666,15 +2672,13 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
                 guard let self else { return }
                 self.actionPaletteController.dismiss(notify: false)
                 self.model.dismissActionMenu()
-                PluginPresentationSafety.prepareForWindowOrdering(panel)
-                panel.makeKeyAndOrderFront(nil)
+                PluginPanelPresentation.present(panel)
                 performAction(action)
             },
             onDismiss: { [weak self] in
                 guard let self else { return }
                 self.model.dismissActionMenu()
-                PluginPresentationSafety.prepareForWindowOrdering(panel)
-                panel.makeKeyAndOrderFront(nil)
+                PluginPanelPresentation.present(panel)
                 self.model.requestSearchFocus()
             }
         )
@@ -2700,9 +2704,10 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
         panel.hasShadow = true
         panel.isReleasedWhenClosed = false
         Self.restrictMovementToExplicitDragRegions(panel)
-        panel.animationBehavior = .none
+        PluginPanelPresentation.configure(panel)
         panel.level = .floating
-        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        // This persistent workspace follows the chosen Space when summoned.
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .canJoinAllApplications, .ignoresCycle]
         panel.minSize = NSSize(width: 860, height: 540)
         panel.delegate = self
         windowSnapCoordinator.attach(to: panel)
@@ -7128,8 +7133,7 @@ private final class ClipboardHistoryActionPaletteController: NSObject, NSWindowD
             parentWindow.addChildWindow(panel, ordered: .above)
         }
         reposition(relativeTo: parentWindow)
-        PluginPresentationSafety.prepareForWindowOrdering(panel)
-        panel.makeKeyAndOrderFront(nil)
+        PluginPanelPresentation.present(panel)
     }
 
     func reposition(relativeTo parentWindow: NSWindow) {
@@ -7165,7 +7169,7 @@ private final class ClipboardHistoryActionPaletteController: NSObject, NSWindowD
     private func makePanel() -> PalettePanel {
         let panel = PalettePanel(
             contentRect: NSRect(x: 0, y: 0, width: 430, height: 520),
-            styleMask: [.borderless, .fullSizeContentView],
+            styleMask: PluginPanelPresentation.styleMask.union(.fullSizeContentView),
             backing: .buffered,
             defer: false
         )
@@ -7174,10 +7178,9 @@ private final class ClipboardHistoryActionPaletteController: NSObject, NSWindowD
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-        panel.isReleasedWhenClosed = false
-        panel.animationBehavior = .utilityWindow
+        PluginPanelPresentation.configure(panel)
         panel.level = .floating
-        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+        panel.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary, .canJoinAllApplications, .ignoresCycle]
         panel.delegate = self
         let hostingView = NSHostingView(rootView: ClipboardHistoryActionPalette(
             model: model,

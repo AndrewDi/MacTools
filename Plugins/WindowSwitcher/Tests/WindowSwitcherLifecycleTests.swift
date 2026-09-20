@@ -186,9 +186,11 @@ final class WindowSwitcherLifecycleTests: XCTestCase {
         defer { plugin.deactivate(reason: .hostShutdown) }
         plugin.store.setMode(.searchSelect)
         plugin.store.setSortMode(.recentUse)
+        let previousApplicationPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
         tap.onShortcutPressed(false, false, false)
         XCTAssertEqual(plugin.session?.selectedID, "b")
         await eventually { overlay.isVisible }
+        XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, previousApplicationPID)
         overlay.onSelect?(catalog.windows[1])
         await eventually { catalog.activated == ["b"] }
         try? await Task.sleep(for: .milliseconds(50))

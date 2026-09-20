@@ -13,6 +13,8 @@
   <p>MacTools brings frequently used system actions together in a lightweight, fast, and unobtrusive menu bar app. Built with SwiftUI + AppKit for macOS 14.0 and later.</p>
 </div>
 
+Global Command Palette, Action Grid, Window Switcher, and Clipboard History panels open independently of Settings without activating MacTools. Menu-bar search opens the standalone palette; Settings keeps its own in-window search. Explicit settings navigation, confirmations, and preview interactions may still acquire application focus when needed.
+
 ## Screenshots
 
 <img src="docs/assets/screenshots/readme-hero-en-dark.png" alt="MacTools menu bar panels in dark mode">

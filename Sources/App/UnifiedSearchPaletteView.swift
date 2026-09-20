@@ -326,6 +326,7 @@ struct UnifiedSearchPaletteActions {
     let consumeQuickSelection: (UnifiedSearchQuickSelectionRequest) -> Bool
     let setPendingExecutionCancellation: ((() -> Void)?) -> Void
     var resetCommandPalettePosition: (() -> Void)? = nil
+    var setDismissalSuspended: (Bool) -> Void = { _ in }
 }
 
 private struct UnifiedSearchPaletteShadowModifier: ViewModifier {
@@ -401,6 +402,7 @@ struct UnifiedSearchPaletteView: View {
     @StateObject private var searchInputState = CommandPaletteSearchInputState()
     @State private var selectedResultID: String?
     @State private var pendingAlert: PendingAlert?
+    @State private var isRecordingShortcut = false
     @State private var executionFeedback: String?
     @State private var executionTask: Task<Void, Never>?
     @State private var executionGeneration: UInt = 0
@@ -522,6 +524,9 @@ struct UnifiedSearchPaletteView: View {
             inputDraft = nil
             updateInputQuery("")
             inlineMatch = nil
+        }
+        .onChange(of: isRecordingShortcut || pendingAlert != nil || inputModel.confirmationRequested) { _, suspended in
+            actions.setDismissalSuspended(suspended)
         }
         .onExitCommand { leaveInputOrDismiss() }
         .alert(inputModel.item?.definition.confirmation?.title ?? "", isPresented: $inputModel.confirmationRequested) {
@@ -1042,7 +1047,12 @@ struct UnifiedSearchPaletteView: View {
                     case let .failure(error):
                         return .rejected(error.localizedDescription)
                     }
-                }
+                },
+                onBeginRecording: {
+                    isRecordingShortcut = true
+                    actions.setDismissalSuspended(true)
+                },
+                onEndRecording: { isRecordingShortcut = false }
             )
             .controlSize(.mini)
             .fixedSize(horizontal: true, vertical: false)

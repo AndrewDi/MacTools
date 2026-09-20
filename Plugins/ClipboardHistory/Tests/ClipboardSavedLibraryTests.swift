@@ -722,6 +722,27 @@ final class ClipboardSavedLibraryTests: XCTestCase {
         )
     }
 
+    func testKeywordInputStateResetsWithoutReadingExternalEditorWhileHostPanelIsKey() {
+        var state = ClipboardSnippetKeywordInputState()
+        let itemID = UUID()
+        state.snippetsByKeyword = [";bb": itemID]
+        _ = state.consume(text: ";", keyCode: 0, modifiers: [], processIdentifier: 42,
+                          classifyEditor: { _ in .nonSecure })
+        XCTAssertEqual(state.bufferedTextForTesting, ";")
+
+        for character in "bb;bb" {
+            XCTAssertNil(state.consume(text: String(character), keyCode: 0, modifiers: [],
+                processIdentifier: 42, isHostPanelKey: true, classifyEditor: { _ in
+                    XCTFail("Panel typing must not query the external application's editor")
+                    return .nonSecure
+                }))
+        }
+        XCTAssertEqual(state.bufferedTextForTesting, "")
+        let match = state.consume(text: ";bb", keyCode: 0, modifiers: [], processIdentifier: 42,
+                                  classifyEditor: { _ in .nonSecure })
+        XCTAssertEqual(match?.itemID, itemID, "Expansion resumes after panel focus ends")
+    }
+
     func testKeywordInputStateSkipsEditorClassificationForUnrelatedTyping() {
         var state = ClipboardSnippetKeywordInputState()
         state.snippetsByKeyword = [";bb": UUID()]
