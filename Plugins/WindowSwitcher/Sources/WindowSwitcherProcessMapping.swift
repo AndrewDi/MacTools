@@ -2,8 +2,8 @@ import AppKit
 import Foundation
 
 /// Chrome, Electron, and similar apps often render user windows in an accessory
-/// helper. Display and app activation use the host pid; raise, capture, and
-/// WindowServer identity use the window owner pid.
+/// helper. Display and app activation use the host PID; AX actions retain their
+/// source worker, while capture and WindowServer operations use the owner PID.
 enum WindowSwitcherProcessMapping {
     struct Candidate: Equatable, Sendable {
         var processIdentifier: pid_t

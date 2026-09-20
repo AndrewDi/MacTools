@@ -150,14 +150,7 @@ final class WindowSwitcherWindowRecords {
          windowRecordProvider: @escaping @Sendable () -> [WindowSwitcherWindowRecord]? = {
              guard let info = CGWindowListCopyWindowInfo(
                  [.optionAll, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else { return nil }
-             return WindowSwitcherWindowRecord.parse(info).map { record in
-                 var record = record
-                 let classification = WindowSwitcherSpaceMembership.classify(record.windowNumber)
-                 record.hasSpace = classification.hasSpace ?? record.hasSpace
-                 record.isOnActiveSpace = classification.isOnActiveSpace
-                 record.isOnFullscreenSpace = classification.isOnFullscreenSpace
-                 return record
-             }
+             return WindowSwitcherSpaceMembership.classify(records: WindowSwitcherWindowRecord.parse(info))
          }) {
         self.windowRecordRefreshTimeout = windowRecordRefreshTimeout.isFinite ? max(0, windowRecordRefreshTimeout) : 0.75
         self.windowRecordProvider = windowRecordProvider
@@ -353,21 +346,70 @@ enum WindowSwitcherSpaceMembership {
         var isOnFullscreenSpace: Bool? = nil
     }
 
-    static func classify(_ window: CGWindowID) -> Classification {
-        guard let (connection, copySpaces) = functions,
-              let raw = copySpaces(connection(), 7, [NSNumber(value: window)] as CFArray)?.takeRetainedValue(),
-              let spaces = raw as? [NSNumber] else { return Classification() }
-        var result = Classification(hasSpace: !spaces.isEmpty)
-        let memberships = spaces.map(\.uint64Value)
-        guard let copyDisplays, let displays = copyDisplays(connection())?.takeRetainedValue() as? [[String: Any]] else {
+    private struct Topology {
+        var activeIDs = Set<UInt64>()
+        var fullscreenIDs = Set<UInt64>()
+        var hasUnknownActiveSpace = false
+
+        init(displays: [[String: Any]]?) {
+            guard let displays, !displays.isEmpty else {
+                hasUnknownActiveSpace = true
+                return
+            }
+            fullscreenIDs = fullscreenSpaceIDs(in: displays)
+            for display in displays {
+                guard let current = display["Current Space"] as? [String: Any],
+                      let id = (current["ManagedSpaceID"] ?? current["id64"]) as? NSNumber,
+                      id.uint64Value > 0 else { hasUnknownActiveSpace = true; continue }
+                activeIDs.insert(id.uint64Value)
+            }
+        }
+
+        func classify(_ memberships: [UInt64]?) -> Classification {
+            guard let memberships else { return Classification() }
+            var result = Classification(hasSpace: !memberships.isEmpty)
+            if !memberships.isEmpty {
+                result.isOnActiveSpace = !activeIDs.isDisjoint(with: memberships)
+                    ? true : (hasUnknownActiveSpace ? nil : false)
+            }
+            if !fullscreenIDs.isEmpty {
+                result.isOnFullscreenSpace = !fullscreenIDs.isDisjoint(with: memberships)
+            }
             return result
         }
-        result.isOnActiveSpace = intersectsActiveSpaces(memberships, displays: displays)
-        let fullscreen = fullscreenSpaceIDs(in: displays)
-        if !fullscreen.isEmpty {
-            result.isOnFullscreenSpace = memberships.contains { fullscreen.contains($0) }
+    }
+
+    static func managedDisplays() -> [[String: Any]]? {
+        guard let (connection, _) = functions, let copyDisplays else { return nil }
+        return copyDisplays(connection())?.takeRetainedValue() as? [[String: Any]]
+    }
+
+    static func memberships(_ window: CGWindowID) -> [UInt64]? {
+        guard let (connection, copySpaces) = functions,
+              let spaces = copySpaces(connection(), 7, [NSNumber(value: window)] as CFArray)?.takeRetainedValue() as? [NSNumber]
+        else { return nil }
+        return spaces.map(\.uint64Value)
+    }
+
+    static func classify(_ window: CGWindowID) -> Classification {
+        Topology(displays: managedDisplays()).classify(memberships(window))
+    }
+
+    /// Share one topology snapshot across the inventory, including failed reads.
+    /// The next inventory reads it again so Space changes are never cached across scans.
+    static func classify(records: [WindowSwitcherWindowRecord],
+                         loadDisplays: () -> [[String: Any]]? = { managedDisplays() },
+                         loadMemberships: (CGWindowID) -> [UInt64]? = { memberships($0) }) -> [WindowSwitcherWindowRecord] {
+        guard !records.isEmpty else { return [] }
+        let topology = Topology(displays: loadDisplays())
+        return records.map { record in
+            var record = record
+            let classification = topology.classify(loadMemberships(record.windowNumber))
+            record.hasSpace = classification.hasSpace ?? record.hasSpace
+            record.isOnActiveSpace = classification.isOnActiveSpace
+            record.isOnFullscreenSpace = classification.isOnFullscreenSpace
+            return record
         }
-        return result
     }
 
     static func fullscreenSpaceIDs(in displays: [[String: Any]]) -> Set<UInt64> {
@@ -383,6 +425,6 @@ enum WindowSwitcherSpaceMembership {
     }
 
     static func hasSpace(_ window: CGWindowID) -> Bool? {
-        classify(window).hasSpace
+        memberships(window).map { !$0.isEmpty }
     }
 }

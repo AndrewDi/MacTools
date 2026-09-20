@@ -12,6 +12,54 @@ private final class WindowRecordResponse: @unchecked Sendable {
 
 @MainActor
 final class WindowSwitcherWindowRecordsTests: XCTestCase {
+    func testInventorySharesTopologyAndRefreshesItOnNextScan() {
+        let records = (1...3).map {
+            WindowSwitcherWindowRecord(windowNumber: UInt32($0), processIdentifier: 42, title: "Fixture",
+                isOnScreen: false, bounds: CGRect(x: 0, y: 0, width: 800, height: 600))
+        }
+        var displayReads = 0
+        var membershipReads: [CGWindowID] = []
+        var currentSpace = 1
+        let displays: () -> [[String: Any]]? = {
+            displayReads += 1
+            return [["Current Space": ["ManagedSpaceID": currentSpace],
+                     "Spaces": [["id64": 2, "type": 4]]]]
+        }
+        let memberships: (CGWindowID) -> [UInt64]? = {
+            membershipReads.append($0)
+            return [UInt64($0)]
+        }
+        let first = WindowSwitcherSpaceMembership.classify(records: records, loadDisplays: displays, loadMemberships: memberships)
+        XCTAssertEqual(displayReads, 1)
+        XCTAssertEqual(membershipReads, [1, 2, 3])
+        XCTAssertEqual(first.map(\.isOnActiveSpace), [true, false, false])
+        XCTAssertEqual(first.map(\.isOnFullscreenSpace), [false, true, false])
+        currentSpace = 2
+        let second = WindowSwitcherSpaceMembership.classify(records: records, loadDisplays: displays, loadMemberships: memberships)
+        XCTAssertEqual(displayReads, 2)
+        XCTAssertEqual(second.map(\.isOnActiveSpace), [false, true, false])
+    }
+
+    func testInventoryPreservesUnknownAndEmptySpaceMembership() {
+        let records = (1...3).map {
+            WindowSwitcherWindowRecord(windowNumber: UInt32($0), processIdentifier: 42, title: "Fixture",
+                isOnScreen: false, bounds: CGRect(x: 0, y: 0, width: 800, height: 600))
+        }
+        var displayReads = 0
+        let classified = WindowSwitcherSpaceMembership.classify(records: records, loadDisplays: {
+            displayReads += 1
+            return nil
+        }, loadMemberships: { $0 == 1 ? [1] : ($0 == 2 ? [] : nil) })
+        XCTAssertEqual(displayReads, 1)
+        XCTAssertEqual(classified.map(\.hasSpace), [true, false, nil])
+        XCTAssertTrue(classified.allSatisfy { $0.isOnActiveSpace == nil && $0.isOnFullscreenSpace == nil })
+
+        let partial = WindowSwitcherSpaceMembership.classify(records: records, loadDisplays: {
+            [["Current Space": ["ManagedSpaceID": 1]], [:]]
+        }, loadMemberships: { [UInt64($0)] })
+        XCTAssertEqual(partial.map(\.isOnActiveSpace), [true, nil, nil])
+    }
+
     func testActiveSpaceMembershipCoversSeparateDisplaysAndFullscreen() {
         let displays: [[String: Any]] = [
             ["Current Space": ["ManagedSpaceID": NSNumber(value: 1)]],

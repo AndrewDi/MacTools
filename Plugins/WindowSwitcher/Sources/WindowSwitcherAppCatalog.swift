@@ -554,6 +554,31 @@ extension WindowSwitcherCatalog {
 
 @MainActor
 final class WindowSwitcherAppCatalog: WindowSwitcherCatalog {
+    struct Application {
+        var processIdentifier: pid_t
+        var bundleIdentifier: String?
+        var bundlePath: String?
+        var localizedName: String?
+        var icon: NSImage? = nil
+        var launchDate: Date? = nil
+        var isRegular = true
+        var isHidden = false
+        var isActive = false
+    }
+
+    struct DiscoveryEnvironment {
+        var applications: () -> [Application] = {
+            NSWorkspace.shared.runningApplications.filter { !$0.isTerminated }.map {
+                Application(processIdentifier: $0.processIdentifier, bundleIdentifier: $0.bundleIdentifier,
+                            bundlePath: $0.bundleURL?.path, localizedName: $0.localizedName, icon: $0.icon,
+                            launchDate: $0.launchDate, isRegular: $0.activationPolicy == .regular,
+                            isHidden: $0.isHidden, isActive: $0.isActive)
+            }
+        }
+        var isAccessibilityTrusted: () -> Bool = { AXIsProcessTrusted() }
+        var isDragging: () -> Bool = { CGEventSource.buttonState(.combinedSessionState, button: .left) }
+    }
+
     var onChange: (() -> Void)?
     private(set) var isInitialDiscoveryComplete = false
     private(set) var unavailableApplicationCount = 0
@@ -577,7 +602,8 @@ final class WindowSwitcherAppCatalog: WindowSwitcherCatalog {
     private var timer: Timer?
     private var running = false
     private var invalidationTask: Task<Void, Never>?
-    private let allSpacesCatalog = WindowSwitcherWindowRecords()
+    private let allSpacesCatalog: WindowSwitcherWindowRecords
+    private let discovery: DiscoveryEnvironment
     private var publication = WindowSwitcherPublishedWindows()
     private let hostWindows = WindowSwitcherHostWindows()
     private var allSpacesRecordsAreFresh = false
@@ -587,9 +613,13 @@ final class WindowSwitcherAppCatalog: WindowSwitcherCatalog {
     private var didReadAllSpaces = false
 
     init(notificationCenter: NotificationCenter = NSWorkspace.shared.notificationCenter,
-         accessFactory: @escaping @Sendable (pid_t) -> any WindowSwitcherAXAccess = { _ in SystemWindowSwitcherAXAccess() }) {
+         accessFactory: @escaping @Sendable (pid_t) -> any WindowSwitcherAXAccess = { _ in SystemWindowSwitcherAXAccess() },
+         allSpacesCatalog: WindowSwitcherWindowRecords = WindowSwitcherWindowRecords(),
+         discovery: DiscoveryEnvironment = DiscoveryEnvironment()) {
         self.notificationCenter = notificationCenter
         self.accessFactory = accessFactory
+        self.allSpacesCatalog = allSpacesCatalog
+        self.discovery = discovery
     }
 
     func start() {
@@ -642,18 +672,21 @@ final class WindowSwitcherAppCatalog: WindowSwitcherCatalog {
         guard running else { return }
         // AX reads execute in the target app. Avoid competing with its tracking
         // loop during drags; the periodic refresh catches up after mouse-up.
-        guard !CGEventSource.buttonState(.combinedSessionState, button: .left) else { return }
-        guard AXIsProcessTrusted() else {
+        guard !discovery.isDragging() else { return }
+        guard discovery.isAccessibilityTrusted() else {
             // Notify the plugin so an open session is cancelled on revocation.
             onChange?()
             return
         }
         refreshAllSpaces()
         let ownPID = ProcessInfo.processInfo.processIdentifier
-        let runningApps = NSWorkspace.shared.runningApplications.filter { !$0.isTerminated }
-        processMapping = WindowSwitcherProcessMapping.snapshot(runningApplications: runningApps, ownPID: ownPID)
+        let runningApps = discovery.applications()
+        processMapping = WindowSwitcherProcessMapping.snapshot(candidates: runningApps.map {
+            .init(processIdentifier: $0.processIdentifier, bundleIdentifier: $0.bundleIdentifier,
+                  bundlePath: $0.bundlePath, isRegular: $0.isRegular)
+        }, ownPID: ownPID)
         let apps = runningApps.filter {
-            $0.activationPolicy == .regular && $0.processIdentifier != ownPID
+            $0.isRegular && $0.processIdentifier != ownPID
                 && processMapping.host(for: $0.processIdentifier) == $0.processIdentifier
         }
         let hostPIDs = Set(apps.map(\.processIdentifier))
@@ -680,9 +713,11 @@ final class WindowSwitcherAppCatalog: WindowSwitcherCatalog {
                 var entries = windowEntries(from: result, app: app, ownerPID: pid)
                 var helperUnavailable = false
                 for helperPID in processMapping.helpers(for: pid, owningWindowsIn: allSpacesRecords) {
-                    guard let helperApp = NSRunningApplication(processIdentifier: helperPID), !helperApp.isTerminated else { continue }
+                    guard let helperApp = runningApps.first(where: { $0.processIdentifier == helperPID }) else { continue }
                     let helperWorker = ensureWorker(pid: helperPID, launchDate: helperApp.launchDate)
                     let helperScan = await helperWorker.scan()
+                    guard running, workers[pid] === worker else { return }
+                    guard workers[helperPID] === helperWorker else { continue }
                     if helperScan.unavailable { helperUnavailable = true }
                     let remapped = windowEntries(from: helperScan, app: app, ownerPID: helperPID)
                     entries = WindowSwitcherListing.preferringUniqueWindowNumbers(entries + remapped)
@@ -746,7 +781,7 @@ final class WindowSwitcherAppCatalog: WindowSwitcherCatalog {
         return created
     }
 
-    private func windowEntries(from scan: WindowSwitcherScan, app: NSRunningApplication, ownerPID: pid_t) -> [WindowSwitcherAppEntry] {
+    private func windowEntries(from scan: WindowSwitcherScan, app: Application, ownerPID: pid_t) -> [WindowSwitcherAppEntry] {
         scan.windows.map { window in
             var entry = WindowSwitcherAppEntry(id: window.id, processIdentifier: app.processIdentifier,
                 bundleIdentifier: app.bundleIdentifier, appName: app.localizedName ?? "App",
@@ -756,6 +791,7 @@ final class WindowSwitcherAppCatalog: WindowSwitcherCatalog {
             entry.isHidden = app.isHidden
             entry.metadataUnavailable = window.unavailable
             entry.windowOwnerPID = ownerPID
+            entry.axWorkerPID = ownerPID
             entry.isOnFullscreenSpace = window.isFullscreen
             entry.workerWindowID = window.id
             let display = displayContext(for: window.bounds)
@@ -766,7 +802,11 @@ final class WindowSwitcherAppCatalog: WindowSwitcherCatalog {
     }
 
     private func processWorker(for entry: WindowSwitcherAppEntry) -> WindowSwitcherProcessWorker? {
-        workers[entry.owningProcessIdentifier] ?? workers[entry.processIdentifier]
+        // A compositor owner can differ from the process exposing this AX record.
+        // Never redirect a recorded AX identity to another worker.
+        if let axWorkerPID = entry.axWorkerPID { return workers[axWorkerPID] }
+        if entry.windowElement != nil { return workers[entry.processIdentifier] }
+        return workers[entry.owningProcessIdentifier] ?? workers[entry.processIdentifier]
     }
 
     private func rebuildPublication() {

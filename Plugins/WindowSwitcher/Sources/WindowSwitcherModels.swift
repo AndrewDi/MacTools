@@ -439,6 +439,7 @@ struct WindowSwitcherAppEntry: Identifiable {
     var metadataUnavailable: Bool = false
     var displayNameContext: String? = nil
     var displayID: UInt32? = nil
+    var axWorkerPID: pid_t? = nil
     var windowOwnerPID: pid_t? = nil
     var isOnOtherDesktop: Bool = false
     var isOnFullscreenSpace: Bool = false
@@ -600,6 +601,7 @@ extension WindowSwitcherAppEntry: Equatable {
             && lhs.windowNumber == rhs.windowNumber
             && lhs.displayNameContext == rhs.displayNameContext
             && lhs.displayID == rhs.displayID
+            && lhs.axWorkerPID == rhs.axWorkerPID
             && lhs.windowOwnerPID == rhs.windowOwnerPID
             && lhs.isOnOtherDesktop == rhs.isOnOtherDesktop
             && lhs.isOnFullscreenSpace == rhs.isOnFullscreenSpace
