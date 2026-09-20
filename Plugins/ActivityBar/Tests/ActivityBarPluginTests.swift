@@ -460,6 +460,38 @@ final class ActivityBarPluginTests: XCTestCase {
         XCTAssertEqual(harness.storage.setCallCount(forKey: "activity-bar.input.days.v1"), 1)
     }
 
+    func testHiddenInputCollectionSkipsHostUpdatesAndBothPanelSurfacesCatchUp() async throws {
+        let harness = makeHarness(inputEventNotificationDelay: .milliseconds(1))
+        defer { harness.plugin.deactivate(reason: .hostShutdown) }
+        harness.plugin.handleAction(.setSwitch(true))
+        var changes = 0
+        harness.plugin.onStateChange = { changes += 1 }
+        harness.inputMonitor.emit(.keystroke(app: "Terminal"))
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(harness.controller.todayInputStats.totalInputs, 1)
+        XCTAssertEqual(changes, 0)
+
+        harness.plugin.panelSurfaceDidBecomeVisible(.primary)
+        XCTAssertEqual(changes, 1)
+        XCTAssertEqual(harness.storage.setCallCount(forKey: "activity-bar.input.days.v1"), 0)
+        harness.plugin.panelSurfaceDidBecomeVisible(.component)
+        XCTAssertEqual(changes, 2)
+        harness.plugin.panelSurfaceDidBecomeHidden(.primary)
+        harness.inputMonitor.emit(.pointerClick(app: "Terminal"))
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(changes, 3)
+        harness.plugin.panelSurfaceDidBecomeHidden(.component)
+        harness.inputMonitor.emit(.scroll(app: "Terminal"))
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(changes, 3)
+        XCTAssertEqual(harness.controller.todayInputStats.totalInputs, 3)
+        harness.plugin.panelSurfaceDidBecomeVisible(.primary)
+        XCTAssertEqual(changes, 4)
+        harness.plugin.deactivate(reason: .hostShutdown)
+        let restored = ActivityBarStatsStore(storage: harness.storage)
+        XCTAssertEqual(restored.today.totalInputs, 3)
+    }
+
     func testHostShutdownFlushesPendingInputStats() {
         let harness = makeHarness()
 

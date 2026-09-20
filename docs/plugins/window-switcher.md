@@ -71,3 +71,7 @@ These are two native cases, not a completed platform matrix. Physical macOS 26, 
 ## Discovery lifecycle and ownership
 
 After every asynchronous helper scan, the catalog checks its running state and the host and helper worker identities before publishing results. A scan from a stopped or replaced worker cannot update the current session. AX records retain their source worker independently of the WindowServer owner PID, including when host and helper scans expose the same window number. Inventory classification shares one display/Space topology snapshot per scan and reloads it on the next scan; unavailable metadata remains unknown.
+
+## Panel activation
+
+The chooser is constructed as a nonactivating panel in both cycling and persistent search modes, including when preview is visible. Presentation, dismissal, and compatibility focus restoration share the [PluginKit panel contract](global-panel-presentation.md). Only deliberate interaction with the preview requests host activation for native gesture compatibility. Cancellation restores the original application only if MacTools acquired foreground ownership; committing a selection or losing focus to another window does not restore it. The 140 ms cycling delay still suppresses the chooser for a quick release.

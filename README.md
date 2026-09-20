@@ -13,6 +13,8 @@
   <p>MacTools brings frequently used system actions together in a lightweight, fast, and unobtrusive menu bar app. Built with SwiftUI + AppKit for macOS 14.0 and later.</p>
 </div>
 
+Global Command Palette, Action Grid, Window Switcher, and Clipboard History panels open independently of Settings without activating MacTools. Menu-bar search opens the standalone palette; Settings keeps its own in-window search. Explicit settings navigation, confirmations, and preview interactions may still acquire application focus when needed.
+
 ## Screenshots
 
 <img src="docs/assets/screenshots/readme-hero-en-dark.png" alt="MacTools menu bar panels in dark mode">
@@ -45,7 +47,7 @@
 | Stage Manager | Toggle Stage Manager to focus the current window and place other windows on the side. |
 | System Mute | Mute or restore system audio output through CoreAudio on the default output device, with automatic restoration when the plugin is disabled. |
 | Microphone Mute | Mute or restore the default microphone input through CoreAudio without requesting recording permission. |
-| App Volume | On macOS 15 and later, adjust the volume of each app currently playing audio and keep preferences locally per app; first use requires System Audio Recording permission. |
+| App Volume | On macOS 15 and later, adjust the volume of each app currently playing audio and keep preferences locally per app. Playback changes update the list in the background with reduced idle scanning; first use requires System Audio Recording permission. |
 | Display Volume | Control external display volume via DDC/CI, with global shortcuts for decrease and increase that can follow the mouse or adjust all displays together. Displays that don't support DDC/CI volume reads (e.g. LG) use local volume tracking with UserDefaults persistence. |
 | Disk Cleanup | Scan system caches, developer artifacts (node_modules, build outputs), and leftover installers; move to Trash by default, with path safety checks, Full Disk Access guidance, sensitive-data protection before deletion, localized rule explanations with low, medium, and high risk levels, and cleanup history showing cancelled runs and recovery details with totals based on successful removals. Explanations and history support all 11 app languages. |
 | Xcode Cleanup | Scan DerivedData, device support files, archives, simulators, and preview caches by category; deletion is disabled while Xcode is running and only runs inside allowlisted roots. |
@@ -136,6 +138,10 @@ In Search and Select, Command-1 through Command-9 opens numbered visible results
 ### Send a message to Siri
 
 With MacTools 1.3.1 or later and the Siri plugin on macOS 27, open the command palette, type `ask siri <message>`, and press Return once to send it into a new Siri conversation. Type `ask`, select Ask Siri, and press Tab to complete the trigger and start inline input. The Siri feature-panel button opens the message editor directly and becomes Cancel while sending. Change the trigger phrase in Siri settings, or select the Siri action and use the message editor. Settings keep the trigger editor and status left-aligned, with controls that adapt to narrow windows. Installation requires macOS 27 and the Siri AI app; unavailable requirements are shown in the plugin catalog. MacTools handles opening Siri and preserves existing drafts. Accessibility permission is required; answers remain in Siri. See [Siri usage and limitations](docs/plugins/siri.md).
+
+### Background monitoring
+
+Hidden System Status, Device Battery, and Activity Bar cards retain their interaction state and catch up when reopened. Activity tracking and battery alerts continue in the background; hidden input counters avoid unnecessary panel updates. Window discovery and bulk clipboard shortcut removal also avoid repeated shared work.
 
 ## Supported Languages
 

@@ -3861,10 +3861,11 @@ private struct PluginSettingsDetailPane: View {
             activeSearchTarget = nil
         }
         .onReceive(
-            NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
-        ) { _ in
-            // Permission changes are completed in System Settings while MacTools is inactive.
-            // Refresh every provider once on return so form and workspace cards use current state.
+            NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)
+        ) { notification in
+            guard notification.object is MacToolsCommandWindow else { return }
+            // Refresh permissions when the settings window itself is revisited.
+            // Global panels must not turn background settings into a full refresh.
             pluginHost.refreshAll()
         }
     }

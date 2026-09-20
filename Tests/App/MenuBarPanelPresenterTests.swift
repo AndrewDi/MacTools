@@ -161,6 +161,23 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         )
     }
 
+    func testNativePopoverKeepsKeyboardFocusWithoutActivatingApplication() async throws {
+        let fixture = try await makePresentedFixture()
+        defer { fixture.close() }
+        fixture.presenter.dismissPanels()
+        // Allow activation changes from fixture setup and preceding windows to
+        // settle before measuring this presentation.
+        try await Task.sleep(for: .milliseconds(150))
+        let originalPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        fixture.presenter.showDashboard(relativeTo: fixture.button)
+        XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, originalPID)
+        await Task.yield()
+        let window = try XCTUnwrap(fixture.presenter.debugPopoverForTests.contentViewController?.view.window)
+        XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, originalPID)
+        XCTAssertTrue(window.isKeyWindow)
+        XCTAssertTrue(window.styleMask.contains(.nonactivatingPanel))
+    }
+
     func testEditingBlocksExplicitNativeAndRepeatedStatusItemDismissalUntilDone() async throws {
         var closeCount = 0
         let fixture = try await makePresentedFixture(onClosed: { closeCount += 1 })
@@ -359,9 +376,9 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         // A dedicated anchor avoids depending on available menu-bar space and
         // asynchronous status-item placement in the user's desktop session.
         let screen = try XCTUnwrap(NSScreen.main)
-        let anchorWindow = NSWindow(contentRect: CGRect(x: screen.visibleFrame.minX + 180,
+        let anchorWindow = NSPanel(contentRect: CGRect(x: screen.visibleFrame.minX + 180,
             y: screen.visibleFrame.maxY - 100, width: 80, height: 40),
-            styleMask: [.titled], backing: .buffered, defer: false)
+            styleMask: [.titled, .nonactivatingPanel], backing: .buffered, defer: false)
         anchorWindow.isReleasedWhenClosed = false
         let button = NSStatusBarButton(frame: CGRect(x: 24, y: 8, width: 28, height: 24))
         button.image = NSImage(systemSymbolName: "circle.dotted", accessibilityDescription: nil)

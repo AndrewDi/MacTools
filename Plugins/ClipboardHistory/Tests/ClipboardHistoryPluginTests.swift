@@ -1186,6 +1186,48 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         XCTAssertLessThan(start.duration(to: clock.now), .milliseconds(25))
     }
 
+    func testAssignedSavedTitleRefreshesAndUnsavingPrunesItsShortcut() async throws {
+        let item = historyItem()
+        let persistence = BlockingClipboardHistoryPersistence(items: [item])
+        persistence.allowSaveToFinish()
+        let plugin = makePlugin(persistence: persistence)
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        plugin.inlineShortcutSettingsContextProvider = {
+            PluginSettingsContext(pluginID: ClipboardHistoryPlugin.pluginID)
+        }
+        plugin.controller.start()
+        plugin.savedLibraryController.start()
+        let loaded = await waitUntil { plugin.controller.isLoaded && plugin.savedLibraryController.isLoaded }
+        XCTAssertTrue(loaded)
+        let result = await plugin.assignItemShortcut(itemID: item.id, lifetime: .untilRemoved,
+            binding: ShortcutBinding(keyCode: 1, modifiers: [.command, .option, .control]))
+        XCTAssertEqual(result, .accepted)
+        let definitionID = ClipboardItemShortcutStore.definitionID(for: item.id)
+        XCTAssertNotNil(plugin.shortcutDefinitions.first { $0.id == definitionID })
+
+        let updated = await plugin.controller.updateSavedMetadata(.init(id: item.id, title: "Renamed target", tags: []))
+        XCTAssertNotNil(updated)
+        XCTAssertTrue(plugin.shortcutDefinitions.first { $0.id == definitionID }?.title.contains("Renamed target") == true)
+        let deleted = await plugin.controller.deleteSavedItem(id: item.id)
+        XCTAssertTrue(deleted)
+        XCTAssertNil(plugin.itemShortcutStore.assignment(for: item.id))
+        XCTAssertFalse(plugin.shortcutDefinitions.contains { $0.id == definitionID })
+    }
+
+    func testRemovingMultipleDefinitionsUsesOneHostResetRequest() {
+        let plugin = makePlugin()
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        var requests: [[String]] = []
+        plugin.resetShortcutCustomizations = { requests.append($0) }
+        let assignments = (0..<10).map { _ in
+            plugin.itemShortcutStore.assign(itemID: UUID(), source: .history, lifetime: .oneDay)
+        }
+        plugin.itemShortcutStore.removeAll()
+        XCTAssertEqual(requests, [assignments.map(\.definitionID)])
+        XCTAssertTrue(plugin.itemShortcutStore.assignments.isEmpty)
+        XCTAssertFalse(plugin.shortcutDefinitions.contains { ClipboardItemShortcutStore.itemID(for: $0.id) != nil })
+    }
+
     func testLastingHistoryShortcutRequiresDurableSave() async throws {
         let item = ClipboardHistoryItem(
             id: UUID(), text: "Keep me", capturedAt: Date(),

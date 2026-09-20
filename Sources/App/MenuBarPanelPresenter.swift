@@ -643,7 +643,6 @@ final class MenuBarPanelPresenter: NSObject {
     }
 
     private func focus(_ popover: NSPopover) {
-        NSApplication.shared.activate(ignoringOtherApps: true)
         popover.contentViewController?.view.window?.makeKey()
 
         DispatchQueue.main.async { [weak popover] in
