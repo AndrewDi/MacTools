@@ -20,7 +20,7 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
         host.setPanelNavigationSelectionValue(
             "display-2",
             controlID: "display-navigation",
-            for: plugin.metadata.id
+            for: host.testEntry(pluginID: plugin.metadata.id, kind: .row).id
         )
 
         XCTAssertEqual(
@@ -39,7 +39,7 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
 
         host.clearPanelNavigationSelection(
             controlID: "display-navigation",
-            for: plugin.metadata.id
+            for: host.testEntry(pluginID: plugin.metadata.id, kind: .row).id
         )
 
         XCTAssertEqual(
@@ -60,7 +60,7 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
         let plugin = MockNavigationPlugin()
         let host = makeHost(plugin: plugin)
 
-        host.invokePanelAction(controlID: "open-system-settings", for: plugin.metadata.id)
+        host.invokePanelAction(controlID: "open-system-settings", for: host.testEntry(pluginID: plugin.metadata.id, kind: .row).id)
 
         XCTAssertEqual(
             plugin.receivedActions,
@@ -107,7 +107,7 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
         return PluginHost(
             plugins: plugins,
             shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )
@@ -115,7 +115,15 @@ final class PluginHostNavigationSelectionTests: XCTestCase {
 }
 
 @MainActor
-private final class MockNavigationPlugin: MacToolsPlugin, PluginPrimaryPanel {
+private final class MockNavigationPlugin: MacToolsPlugin {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     let metadata = PluginMetadata(
         id: "mock-navigation",
         title: "Mock Navigation",
@@ -125,7 +133,7 @@ private final class MockNavigationPlugin: MacToolsPlugin, PluginPrimaryPanel {
         defaultDescription: "Mock navigation plugin"
     )
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+    let rowDescriptor = PluginPanelRowDescriptor(
         controlStyle: .disclosure,
         menuActionBehavior: .keepPresented
     )
@@ -135,13 +143,12 @@ private final class MockNavigationPlugin: MacToolsPlugin, PluginPrimaryPanel {
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var receivedActions: [PluginPanelAction] = []
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: "Mock",
             isOn: false,
-            isExpanded: true,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: PluginPanelDetail(primaryControls: [], secondaryPanel: nil),
             errorMessage: nil
         )

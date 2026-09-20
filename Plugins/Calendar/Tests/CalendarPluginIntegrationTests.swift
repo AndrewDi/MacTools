@@ -22,13 +22,13 @@ final class CalendarPluginIntegrationTests: XCTestCase {
                 authorization: .fullAccess, requestResult: .fullAccess
             ))],
             shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )
 
         XCTAssertTrue(host.panelItems.isEmpty)
-        XCTAssertEqual(host.componentItems.map(\.id), ["calendar"])
+        XCTAssertEqual(host.componentItems.map(\.pluginID), ["calendar"])
         XCTAssertEqual(host.componentItems.first?.span.width, 4)
         XCTAssertEqual(host.componentItems.first?.span.height, 38)
         XCTAssertEqual(host.permissionCards.map(\.permissionID), ["calendar-events", "calendar-automation"])
@@ -70,11 +70,11 @@ final class CalendarPluginIntegrationTests: XCTestCase {
         let host = PluginHost(
             plugins: [plugin],
             shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )
-        let cachedContent = host.componentViewItem(for: "calendar", dismiss: {}).content
+        let cachedContent = host.componentViewItem(for: host.testEntry(pluginID: "calendar", kind: .widget).id, dismiss: {}).content
         let view = NSHostingView(rootView: cachedContent.background(Color.white))
         view.appearance = try XCTUnwrap(NSAppearance(named: .aqua))
         view.frame = CGRect(x: 0, y: 0, width: 304, height: 504)
@@ -88,7 +88,7 @@ final class CalendarPluginIntegrationTests: XCTestCase {
             action: .setBoolean(controlID: "show-recent-agenda", value: false)
         )
 
-        XCTAssertTrue(host.isComponentViewCached(for: "calendar"))
+        XCTAssertTrue(host.isComponentViewCached(for: host.testEntry(pluginID: "calendar", kind: .widget).id))
         XCTAssertEqual(host.componentItems.first?.span.height, 38)
         XCTAssertNotEqual(try snapshot(view), visibleDetails)
 
@@ -110,16 +110,16 @@ final class CalendarPluginIntegrationTests: XCTestCase {
         let host = PluginHost(
             plugins: [plugin],
             shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )
-        let view = NSHostingView(rootView: host.componentViewItem(for: "calendar", dismiss: {}).content
+        let view = NSHostingView(rootView: host.componentViewItem(for: host.testEntry(pluginID: "calendar", kind: .widget).id, dismiss: {}).content
             .background(Color(nsColor: .windowBackgroundColor)))
         view.appearance = try XCTUnwrap(NSAppearance(named: .aqua))
         view.frame = CGRect(x: 0, y: 0, width: 304, height: 504)
-        plugin.panelSurfaceDidBecomeVisible(.component)
-        defer { plugin.panelSurfaceDidBecomeHidden(.component) }
+        plugin.panelItemDidBecomeVisible("widget")
+        defer { plugin.panelItemDidBecomeHidden("widget") }
         try await settleLayout(view)
 
         let emptySpan = try XCTUnwrap(host.componentItems.first?.span.height)
@@ -146,8 +146,8 @@ final class CalendarPluginIntegrationTests: XCTestCase {
                     endDate: start.addingTimeInterval(3600), isAllDay: false, color: .accent
                 )
             }
-            plugin.panelSurfaceDidBecomeHidden(.component)
-            plugin.panelSurfaceDidBecomeVisible(.component)
+            plugin.panelItemDidBecomeHidden("widget")
+            plugin.panelItemDidBecomeVisible("widget")
             try await settleLayout(view)
 
             let span = try XCTUnwrap(host.componentItems.first?.span.height)
@@ -168,8 +168,8 @@ final class CalendarPluginIntegrationTests: XCTestCase {
         }
 
         service.authorization = .denied("Calendar access denied")
-        plugin.panelSurfaceDidBecomeHidden(.component)
-        plugin.panelSurfaceDidBecomeVisible(.component)
+        plugin.panelItemDidBecomeHidden("widget")
+        plugin.panelItemDidBecomeVisible("widget")
         try await settleLayout(view)
         XCTAssertGreaterThan(try XCTUnwrap(host.componentItems.first?.span.height), emptySpan)
         XCTAssertLessThanOrEqual(try XCTUnwrap(host.componentItems.first?.span.height), 48)
@@ -183,8 +183,8 @@ final class CalendarPluginIntegrationTests: XCTestCase {
         let span = plugin.descriptor.span
         var changes = 0
         plugin.onStateChange = { changes += 1 }
-        let view = NSHostingView(rootView: plugin.makeView(context: PluginComponentContext(
-            pluginID: "calendar", dismiss: {}, isPanelVisible: false
+        let view = NSHostingView(rootView: plugin.makeView(context: PluginPanelWidgetContext(
+            pluginID: "calendar", itemID: "widget", placementID: nil, dismiss: {}
         )))
         view.frame = CGRect(x: 0, y: 0, width: 304, height: 504)
 
@@ -241,8 +241,8 @@ final class CalendarPluginIntegrationTests: XCTestCase {
                 calendarTitle: offset == 1 ? "Personal" : "Work")
         }
         let plugin = CalendarPlugin(context: makeContext(defaults: defaults), eventService: service)
-        plugin.panelSurfaceDidBecomeVisible(.component)
-        defer { plugin.panelSurfaceDidBecomeHidden(.component) }
+        plugin.panelItemDidBecomeVisible("widget")
+        defer { plugin.panelItemDidBecomeHidden("widget") }
         plugin.handleSettingsAction(.setSelection(controlID: "alternate-calendar", optionID: "chinese"))
         var appearances = [ColorScheme.light, .dark].map { scheme in
             (name: "system-\(scheme)", scheme: scheme, contrast: ColorSchemeContrast.standard,
@@ -260,8 +260,8 @@ final class CalendarPluginIntegrationTests: XCTestCase {
         for appearance in appearances {
             let scheme = appearance.scheme
             let theme = appearance.theme
-            let view = NSHostingView(rootView: plugin.makeView(context: PluginComponentContext(
-                pluginID: "calendar", dismiss: {}, isPanelVisible: true
+            let view = NSHostingView(rootView: plugin.makeView(context: PluginPanelWidgetContext(
+                pluginID: "calendar", itemID: "widget", placementID: UUID(), dismiss: {}
             ))
             .foregroundStyle(theme.text.primary)
             .environment(\.pluginComponentTheme, theme)
@@ -301,7 +301,7 @@ final class CalendarPluginIntegrationTests: XCTestCase {
             authorization: .fullAccess, requestResult: .fullAccess
         ))
         let host = PluginHost(plugins: [plugin], shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager())
         guard case let .form(sections) = try XCTUnwrap(plugin.settingsPage).body,
@@ -314,7 +314,7 @@ final class CalendarPluginIntegrationTests: XCTestCase {
         XCTAssertEqual(options.map(\.id), ["none", "chinese"])
         for scheme in [ColorScheme.light, .dark] {
             let theme = PluginComponentTheme.system(colorScheme: scheme, contrast: .standard)
-            let view = NSHostingView(rootView: host.componentViewItem(for: "calendar", dismiss: {}).content
+            let view = NSHostingView(rootView: host.componentViewItem(for: host.testEntry(pluginID: "calendar", kind: .widget).id, dismiss: {}).content
                 .environment(\.pluginComponentTheme, theme)
                 .environment(\.colorScheme, scheme)
                 .background(theme.surfaces.panel))
@@ -328,7 +328,7 @@ final class CalendarPluginIntegrationTests: XCTestCase {
             try await settleLayout(view)
             XCTAssertNotEqual(try snapshot(view), lunar)
             try attachSnapshot(view, spanHeight: 38, name: "Calendar-alternate-none-\(scheme)")
-            XCTAssertTrue(host.isComponentViewCached(for: "calendar"))
+            XCTAssertTrue(host.isComponentViewCached(for: host.testEntry(pluginID: "calendar", kind: .widget).id))
             XCTAssertEqual(plugin.descriptor.span.height, 38)
         }
         host.performSettingsAction(pluginID: "calendar", action: .setSelection(controlID: "alternate-calendar", optionID: "invalid"))
@@ -355,7 +355,7 @@ final class CalendarPluginIntegrationTests: XCTestCase {
     private func attachSnapshot(_ view: NSView, spanHeight: Int, name: String) throws {
         view.setFrameSize(NSSize(
             width: 304,
-            height: PluginComponentPanelLayoutMetrics.default.itemHeight(forSpanHeight: spanHeight)
+            height: PluginPanelWidgetLayoutMetrics.default.itemHeight(forSpanHeight: spanHeight)
         ))
         let attachment = XCTAttachment(data: try snapshot(view), uniformTypeIdentifier: "public.png")
         attachment.name = name

@@ -20,14 +20,18 @@ private struct DisplaySleepPluginProvider: PluginProvider {
 
 @MainActor
 final class DisplaySleepPlugin:
-    MacToolsPlugin,
-    PluginPrimaryPanel,
-    PluginCommandProviding,
-    PluginActionProviding
-{
+    MacToolsPlugin, PluginCommandProviding, PluginActionProviding {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     let metadata: PluginMetadata
 
-    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
+    let rowDescriptor: PluginPanelRowDescriptor
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
@@ -61,20 +65,19 @@ final class DisplaySleepPlugin:
             order: 97,
             defaultDescription: localization.string("metadata.description", defaultValue: "立即让显示器休眠")
         )
-        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        self.rowDescriptor = PluginPanelRowDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
             buttonTitleProvider: { localization.string("panel.button.sleep", defaultValue: "休眠") }
         )
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: metadata.defaultDescription,
             isOn: false,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: nil
         )

@@ -19,7 +19,15 @@ private struct NightShiftPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+final class NightShiftPlugin: MacToolsPlugin, PluginActionProviding {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     private enum ActionID {
         static let setEnabled = "set-enabled"
         static let toggle = "toggle"
@@ -30,7 +38,7 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
     }
     let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+    let rowDescriptor = PluginPanelRowDescriptor(
         controlStyle: .switch,
         menuActionBehavior: .keepPresented
     )
@@ -71,15 +79,14 @@ final class NightShiftPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionPr
         self.isEnabled = controller.getStatus()
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: isEnabled
                 ? localization.string("panel.subtitle.enabled", defaultValue: "已开启")
                 : localization.string("panel.subtitle.disabled", defaultValue: "已关闭"),
             isOn: isEnabled,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: lastErrorMessage
         )

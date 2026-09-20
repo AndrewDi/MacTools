@@ -15,7 +15,8 @@ enum PanelLayoutDestination {
     }
 
     static func editorContentHeight(itemHeight: CGFloat, maximumHeight: CGFloat) -> CGFloat {
-        let minimumHeight = max(0, MenuBarPanelLayout.minimumContentHeight - MenuBarPanelLayout.editingActionBarHeight)
+        let minimumHeight = max(0, MenuBarPanelLayout.minimumPanelHeight
+            - MenuBarPanelLayout.editingPanelChromeHeight - MenuBarPanelLayout.editingActionBarHeight)
         return min(maximumHeight, max(minimumHeight, editorDocumentHeight(itemHeight: itemHeight)
             + MenuBarPanelLayout.contentVerticalPadding))
     }

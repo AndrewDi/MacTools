@@ -29,7 +29,15 @@ private enum ControlID {
 // MARK: - Plugin
 
 @MainActor
-final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
+final class ZshConfigPlugin: MacToolsPlugin {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
 
     private enum PermissionID {
         static let automation = "automation"
@@ -39,7 +47,7 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
 
     let metadata: PluginMetadata
 
-    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
+    let rowDescriptor: PluginPanelRowDescriptor
 
     // MARK: Callbacks
 
@@ -70,7 +78,7 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
             order: 72,
             defaultDescription: localization.string("metadata.description", defaultValue: "快速编辑 zsh 配置文件")
         )
-        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        self.rowDescriptor = PluginPanelRowDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
             buttonTitleProvider: { localization.string("panel.button.edit", defaultValue: "编辑") }
@@ -88,15 +96,14 @@ final class ZshConfigPlugin: MacToolsPlugin, PluginPrimaryPanel {
         onStateChange?()
     }
 
-    // MARK: - PluginPrimaryPanel
+    // MARK: - Panel row
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: panelSubtitle,
             isOn: false,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: nil
         )

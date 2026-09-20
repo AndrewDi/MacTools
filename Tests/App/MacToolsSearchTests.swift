@@ -221,7 +221,7 @@ final class MacToolsSearchTests: XCTestCase {
         XCTAssertEqual(index.results(matching: "确认").first?.id, definition.id)
     }
 
-    func testModelAutomaticallyRebuildsAfterPluginVisibilityChanges() async throws {
+    func testSearchDoesNotOfferComponentLayoutCommands() async throws {
         let plugin = SurfaceOnlySearchTestPlugin()
         let host = makePluginHostForTests(plugins: [plugin])
         let suiteName = "MacToolsSearchModelTests-\(UUID().uuidString)"
@@ -240,50 +240,20 @@ final class MacToolsSearchTests: XCTestCase {
             recentStore: CommandPaletteRecentStore(userDefaults: defaults)
         )
         model.updateQuery(plugin.metadata.title)
-        let hideAction = AppHostCommandAction.setPluginVisibility(
-            pluginID: plugin.metadata.id,
-            surface: .featurePanel,
-            isVisible: false
-        )
-        let showAction = AppHostCommandAction.setPluginVisibility(
-            pluginID: plugin.metadata.id,
-            surface: .featurePanel,
-            isVisible: true
-        )
-        XCTAssertTrue(model.results.contains { result in
-            guard case let .appHostCommand(definition) = result.action else {
-                return false
-            }
-            return definition.action == hideAction
-        })
+        let entry = try XCTUnwrap(host.panelEntries(in: "features").first)
+        XCTAssertFalse(model.results.contains { $0.id.hasPrefix("host-command.") })
         let (rebuild, cancellable) = expectModelResults(
             model,
-            description: "Visibility change rebuilds the command index"
+            description: "Layout editing leaves layout commands out of search"
         ) { results in
-            results.contains { result in
-                guard case let .appHostCommand(definition) = result.action else {
-                    return false
-                }
-                return definition.action == showAction
-            }
+            !results.contains { $0.id.hasPrefix("host-command.") }
         }
 
-        host.setPluginVisible(false, id: plugin.metadata.id, on: .featurePanel)
+        host.removePanelEntry(entry, from: "features")
 
         await fulfillment(of: [rebuild], timeout: 1)
         withExtendedLifetime(cancellable) {}
-        XCTAssertTrue(model.results.contains { result in
-            guard case let .appHostCommand(definition) = result.action else {
-                return false
-            }
-            return definition.action == showAction
-        })
-        XCTAssertFalse(model.results.contains { result in
-            guard case let .appHostCommand(definition) = result.action else {
-                return false
-            }
-            return definition.action == hideAction
-        })
+        XCTAssertFalse(model.results.contains { $0.id.hasPrefix("host-command.") })
     }
 
     func testModelQueryBindingKeepsCanonicalQueryAndResultsInSync() {
@@ -1308,12 +1278,15 @@ private final class SearchTestLaunchAtLoginService: LaunchAtLoginServicing {
 
 @MainActor
 private final class SearchableTestPlugin:
-    MacToolsPlugin,
-    PluginPrimaryPanel,
-    PluginGroupedShortcutSettingsProviding,
-    PluginSettingsSearchProviding,
-    PluginCommandProviding
-{
+    MacToolsPlugin, PluginGroupedShortcutSettingsProviding, PluginSettingsSearchProviding, PluginCommandProviding {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     static let customEntryID = "shortcut-target"
     var usesShortcutGroup = false
 
@@ -1325,7 +1298,7 @@ private final class SearchableTestPlugin:
         order: 1,
         defaultDescription: "管理内建和外接显示器亮度"
     )
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+    let rowDescriptor = PluginPanelRowDescriptor(
         controlStyle: .disclosure,
         menuActionBehavior: .keepPresented
     )
@@ -1345,13 +1318,12 @@ private final class SearchableTestPlugin:
         )]
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: metadata.defaultDescription,
             isOn: false,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: nil
         )
@@ -1567,7 +1539,15 @@ private final class MigratingRecentSearchTestPlugin: MacToolsPlugin, PluginActio
 }
 
 @MainActor
-private final class SurfaceOnlySearchTestPlugin: MacToolsPlugin, PluginPrimaryPanel {
+private final class SurfaceOnlySearchTestPlugin: MacToolsPlugin {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     let metadata = PluginMetadata(
         id: "surface-only",
         title: "锁定屏幕",
@@ -1576,7 +1556,7 @@ private final class SurfaceOnlySearchTestPlugin: MacToolsPlugin, PluginPrimaryPa
         order: 2,
         defaultDescription: "立即锁定屏幕"
     )
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+    let rowDescriptor = PluginPanelRowDescriptor(
         controlStyle: .button,
         menuActionBehavior: .dismissBeforeHandling
     )
@@ -1584,13 +1564,12 @@ private final class SurfaceOnlySearchTestPlugin: MacToolsPlugin, PluginPrimaryPa
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: metadata.defaultDescription,
             isOn: false,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: nil
         )

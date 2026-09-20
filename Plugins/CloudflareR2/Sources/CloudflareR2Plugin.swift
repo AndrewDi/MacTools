@@ -100,9 +100,15 @@ private struct CloudflareR2PluginProvider: PluginProvider {
 }
 
 @MainActor
-final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryPanel,
-    PluginSettingsPresenting, PluginActionProviding
-{
+final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginSettingsPresenting, PluginActionProviding {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     enum ControlID {
         static let upload = "execute"
     }
@@ -116,7 +122,7 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
     }
 
     let metadata: PluginMetadata
-    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
+    let rowDescriptor: PluginPanelRowDescriptor
     let configurationStore: R2ConfigurationStore
     @Published private(set) var status = R2UploadStatus.idle
 
@@ -181,7 +187,7 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
                 defaultValue: "上传文件到 Cloudflare R2"
             )
         )
-        primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        rowDescriptor = PluginPanelRowDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
             buttonTitleProvider: {
@@ -277,13 +283,12 @@ final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginPrimaryP
         })
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: status.subtitle(localization: localization),
             isOn: status.isUploading,
-            isExpanded: false,
             isEnabled: !status.isUploading,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: status.errorMessage
         )

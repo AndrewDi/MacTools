@@ -26,10 +26,15 @@ private struct AutoInputPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicationActivityStateHandling,
-    AccessibilityPermissionRefreshing, PluginActionProviding,
-    PluginActionShortcutSettingsProviding, PluginSettingsSearchProviding
-{
+final class AutoInputPlugin: MacToolsPlugin, PluginApplicationActivityStateHandling, AccessibilityPermissionRefreshing, PluginActionProviding, PluginActionShortcutSettingsProviding, PluginSettingsSearchProviding {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     private enum PermissionID {
         static let accessibility = "accessibility"
     }
@@ -45,7 +50,7 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
     }
 
     let metadata: PluginMetadata
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+    let rowDescriptor = PluginPanelRowDescriptor(
         controlStyle: .switch,
         menuActionBehavior: .keepPresented
     )
@@ -100,13 +105,12 @@ final class AutoInputPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginApplicati
         }
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: panelSubtitle,
             isOn: store.isAutoSwitchEnabled,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: persistenceErrorMessage ?? controller.errorMessage
         )

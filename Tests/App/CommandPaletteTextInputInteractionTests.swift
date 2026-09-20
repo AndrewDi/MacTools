@@ -266,7 +266,7 @@ private final class PaletteFixture {
         defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         recents = CommandPaletteRecentStore(userDefaults: defaults)
         host = PluginHost(plugins: [provider], shortcutStore: ShortcutStore(userDefaults: defaults),
-                              pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+                              pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
                               preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
                               globalShortcutManager: GlobalShortcutManager())
         let view = UnifiedSearchPaletteView(

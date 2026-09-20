@@ -21,9 +21,15 @@ private struct PhysicalCleanModePluginProvider: PluginProvider {
 }
 
 @MainActor
-final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, AccessibilityPermissionRefreshing,
-    PluginActionProviding, PluginActionPermissionProviding
-{
+final class PhysicalCleanModePlugin: MacToolsPlugin, AccessibilityPermissionRefreshing, PluginActionProviding, PluginActionPermissionProviding {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     private enum StorageKey {
         static let legacyEnabledState = "feature.cleanModeEnabled"
     }
@@ -47,7 +53,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
 
     let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+    let rowDescriptor = PluginPanelRowDescriptor(
         controlStyle: .switch,
         menuActionBehavior: .dismissBeforeHandling
     )
@@ -99,13 +105,12 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, PluginPrimaryPanel, Accessi
         storage.removeObject(forKey: StorageKey.legacyEnabledState)
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: panelSubtitle,
             isOn: session != nil,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: lastErrorMessage
         )

@@ -59,7 +59,7 @@ final class ComponentPanelLayoutTests: XCTestCase {
     }
 
     func testThousandTallCopiesKeepFirstFitGeometry() {
-        let span = PluginComponentSpan(width: 4, height: 50)!
+        let span = PluginPanelWidgetSpan(width: 4, height: 50)!
         let items = (0..<1000).map { (id: "copy-\($0)", span: span) }
         let placements = ComponentGridPlacementEngine.placements(for: items)
         let step = ComponentPanelLayout.itemHeight(for: span) + ComponentPanelLayout.verticalSpacing
@@ -83,8 +83,8 @@ final class ComponentPanelLayoutTests: XCTestCase {
         )
     }
 
-    private func makeItem(id: String, span: PluginComponentSpan) -> PluginComponentItem {
-        PluginComponentItem(
+    private func makeItem(id: String, span: PluginPanelWidgetSpan) -> PluginPanelWidgetSnapshot {
+        PluginPanelWidgetSnapshot(
             id: id,
             title: id,
             iconName: "sparkles",
@@ -105,10 +105,10 @@ final class ComponentDetailCoordinatorTests: XCTestCase {
         let coordinator = ComponentDetailCoordinator()
         let first = CGRect(x: 10, y: 20, width: 100, height: 80)
         let second = CGRect(x: 10, y: 120, width: 100, height: 80)
-        coordinator.toggle(pluginID: "status", detailID: "cpu", presentationID: "first")
+        coordinator.toggle(placementID: "first", detailID: "cpu")
         coordinator.updatePresentationFrame(id: "first", frame: first)
-        coordinator.toggle(pluginID: "status", detailID: "cpu", presentationID: "second")
-        XCTAssertEqual(coordinator.state.selection?.presentationID, "second")
+        coordinator.toggle(placementID: "second", detailID: "cpu")
+        XCTAssertEqual(coordinator.state.selection?.placementID, "second")
         XCTAssertNil(coordinator.state.selectedCardFrame)
         coordinator.updatePresentationFrame(id: "first", frame: first)
         XCTAssertNil(coordinator.state.selectedCardFrame)
@@ -120,13 +120,13 @@ final class ComponentDetailCoordinatorTests: XCTestCase {
         let coordinator = ComponentDetailCoordinator()
         let anchorFrame = CGRect(x: 20, y: 40, width: 300, height: 500)
 
-        coordinator.toggle(pluginID: "system-status", detailID: "cpu")
-        coordinator.updateCardFrame(pluginID: "system-status", frame: anchorFrame)
-        coordinator.toggle(pluginID: "system-status", detailID: "gpu")
+        coordinator.toggle(placementID: "system-status", detailID: "cpu")
+        coordinator.updatePresentationFrame(id: "system-status", frame: anchorFrame)
+        coordinator.toggle(placementID: "system-status", detailID: "gpu")
 
         XCTAssertEqual(
             coordinator.state.selection,
-            ComponentDetailCoordinator.Selection(pluginID: "system-status", detailID: "gpu")
+            ComponentDetailCoordinator.Selection(placementID: "system-status", detailID: "gpu")
         )
         XCTAssertEqual(coordinator.state.selectedCardFrame, anchorFrame)
     }
@@ -135,9 +135,9 @@ final class ComponentDetailCoordinatorTests: XCTestCase {
         let coordinator = ComponentDetailCoordinator()
         let anchorFrame = CGRect(x: 20, y: 40, width: 300, height: 500)
 
-        coordinator.toggle(pluginID: "system-status", detailID: "cpu")
-        coordinator.updateCardFrame(pluginID: "system-status", frame: anchorFrame)
-        coordinator.toggle(pluginID: "system-status", detailID: "cpu")
+        coordinator.toggle(placementID: "system-status", detailID: "cpu")
+        coordinator.updatePresentationFrame(id: "system-status", frame: anchorFrame)
+        coordinator.toggle(placementID: "system-status", detailID: "cpu")
 
         XCTAssertNil(coordinator.state.selection)
         XCTAssertNil(coordinator.state.selectedCardFrame)
@@ -147,14 +147,14 @@ final class ComponentDetailCoordinatorTests: XCTestCase {
         let coordinator = ComponentDetailCoordinator()
         let anchorFrame = CGRect(x: 20, y: 40, width: 300, height: 500)
 
-        coordinator.toggle(pluginID: "system-status", detailID: "cpu")
-        coordinator.updateCardFrame(pluginID: "system-status", frame: anchorFrame)
-        coordinator.toggle(pluginID: "another-component", detailID: "summary")
+        coordinator.toggle(placementID: "system-status", detailID: "cpu")
+        coordinator.updatePresentationFrame(id: "system-status", frame: anchorFrame)
+        coordinator.toggle(placementID: "another-component", detailID: "summary")
 
         XCTAssertEqual(
             coordinator.state.selection,
             ComponentDetailCoordinator.Selection(
-                pluginID: "another-component",
+                placementID: "another-component",
                 detailID: "summary"
             )
         )

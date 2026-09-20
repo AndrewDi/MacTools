@@ -2,56 +2,63 @@ import AppKit
 import MacToolsPluginKit
 import SwiftUI
 
+@MainActor
 struct PanelComponentLibraryItem: Identifiable {
     let id: String
     let title: String
     let description: String
     let iconName: String
     let iconTint: Color
-    let component: PluginComponentItem?
-    let feature: PluginPanelItem?
+    let items: [PanelCatalogItem]
 
-    @MainActor
+    var previewItems: [PanelCatalogItem] {
+        items.filter { $0.kind == .widget } + items.filter { $0.kind == .row }
+    }
+
     static func catalog(in host: PluginHost, matching query: String = "") -> [Self] {
-        let components = Dictionary(uniqueKeysWithValues: host.availableComponentItems.map { ($0.id, $0) })
-        let features = Dictionary(uniqueKeysWithValues: host.availablePanelItems.map { ($0.id, $0) })
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return host.featureManagementItems.compactMap { item in
-            guard components[item.id] != nil || features[item.id] != nil,
-                  query.isEmpty || [item.title, item.description].contains(where: {
-                      $0.localizedStandardContains(query)
-                  }) else { return nil }
-            return Self(id: item.id, title: item.title, description: item.description,
-                        iconName: item.iconName, iconTint: item.iconTint,
-                        component: components[item.id], feature: features[item.id])
-        }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        let catalog = host.availablePanelItems
+        let groups = Dictionary(grouping: catalog, by: \.key.pluginID)
+        var seen: Set<String> = []
+        return catalog.compactMap { first in
+            let pluginID = first.key.pluginID
+            guard seen.insert(pluginID).inserted, let items = groups[pluginID] else { return nil }
+            let metadataMatches = [first.pluginTitle, first.metadata.defaultDescription].contains {
+                $0.localizedStandardContains(query)
+            }
+            let matching = query.isEmpty || metadataMatches ? items : items.filter {
+                [$0.title, $0.description].contains { $0.localizedStandardContains(query) }
+            }
+            guard !matching.isEmpty else { return nil }
+            return Self(id: pluginID, title: first.pluginTitle, description: first.metadata.defaultDescription,
+                        iconName: first.metadata.iconName, iconTint: first.metadata.iconTint, items: matching)
+        }
     }
 }
 
-private enum PanelComponentLibraryPreviewItem: Identifiable {
-    case component(PluginComponentItem)
-    case feature(PluginPanelItem)
+@MainActor
+private struct PanelComponentLibraryPreviewItem: Identifiable {
+    let item: PanelCatalogItem
+    let component: PluginPanelWidgetSnapshot?
+    let feature: PluginPanelRowSnapshot?
 
-    var entry: MenuBarPanelEntry {
-        switch self {
-        case .component(let item): .init(pluginID: item.id, surface: .dashboard)
-        case .feature(let item): .init(pluginID: item.id, surface: .featurePanel)
-        }
+    init(item: PanelCatalogItem, host: PluginHost) {
+        self.item = item
+        component = host.panelCoordinator.widgetSnapshot(item)
+        feature = host.panelCoordinator.rowSnapshot(item)
     }
 
-    var id: String { entry.templateID }
+    nonisolated var id: String { item.id }
+    var key: PluginPanelItemKey { item.key }
+    var title: String { item.title }
 
     var sourceSize: CGSize {
-        switch self {
-        case .component(let item):
-            CGSize(width: ComponentPanelLayout.itemWidth(for: item.span), height: ComponentPanelLayout.itemHeight(for: item.span))
-        case .feature(let item):
-            CGSize(width: ComponentPanelLayout.gridWidth, height: MenuBarPanelLayout.rowHeight(for: item))
+        if let component {
+            return CGSize(width: ComponentPanelLayout.itemWidth(for: component.span),
+                          height: ComponentPanelLayout.itemHeight(for: component.span))
         }
-    }
-
-    var title: String {
-        FeatureL10n.string(entry.surface == .dashboard ? "卡片" : "功能行")
+        return CGSize(width: ComponentPanelLayout.gridWidth,
+                      height: feature.map { MenuBarPanelLayout.rowHeight(for: $0) } ?? 0)
     }
 }
 
@@ -85,10 +92,11 @@ enum PanelComponentLibraryLayout {
 struct PanelComponentLibrary: View {
     @ObservedObject var pluginHost: PluginHost
     let panelID: String
-    let onAdd: (MenuBarPanelEntry) -> Bool
+    let onAdd: (PluginPanelItemKey) -> Bool
     @State private var query = ""
     @State private var selection: String?
     @State private var errorMessage: String?
+    @State private var measuredPreviewSizes: [String: CGSize] = [:]
     @State private var presentationFocus = MenuBarPanelPopoverFocus()
     @FocusState private var searchFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -154,11 +162,10 @@ struct PanelComponentLibrary: View {
                         .padding(20)
 
                         GeometryReader { geometry in
-                            let previews = [selected.component.map(PanelComponentLibraryPreviewItem.component),
-                                            selected.feature.map(PanelComponentLibraryPreviewItem.feature)].compactMap { $0 }
+                            let previews = selected.previewItems.map { PanelComponentLibraryPreviewItem(item: $0, host: pluginHost) }
                             let width = PanelComponentLibraryLayout.columnWidth(
                                 availableWidth: geometry.size.width - PanelComponentLibraryLayout.horizontalPadding * 2)
-                            let columns = PanelComponentLibraryLayout.columns(for: previews.map(\.sourceSize), columnWidth: width)
+                            let columns = PanelComponentLibraryLayout.columns(for: previews.map(previewSourceSize), columnWidth: width)
                             ScrollView {
                                 HStack(alignment: .top, spacing: PanelComponentLibraryLayout.spacing) {
                                     ForEach(columns.indices, id: \.self) { column in
@@ -224,22 +231,23 @@ struct PanelComponentLibrary: View {
     }
 
     private func preview(_ item: PanelComponentLibraryPreviewItem, columnWidth: CGFloat) -> some View {
-        let size = PanelComponentLibraryLayout.previewSize(item.sourceSize, columnWidth: columnWidth)
+        let sourceSize = previewSourceSize(item)
+        let size = PanelComponentLibraryLayout.previewSize(sourceSize, columnWidth: columnWidth)
         return Button {
-            guard onAdd(item.entry) else {
+            guard onAdd(item.key) else {
                 errorMessage = FeatureL10n.string("组件暂不可用，请稍后重试。")
                 return
             }
             errorMessage = nil
             close()
         } label: {
-            PanelComponentLibraryPreview(size: item.sourceSize) {
-                switch item {
-                case .component(let component):
-                    pluginHost.componentPreviewView(for: component.id)
-                case .feature(let feature):
-                    AnyView(PanelComponentLibraryFeaturePreview(pluginHost: pluginHost, item: feature))
+            PanelComponentLibraryPreview(size: sourceSize, onSizeChange: { measuredPreviewSizes[item.id] = $0 }) { reportHeight in
+                if let component = item.component {
+                    return pluginHost.componentPreviewView(for: component.id, reportContentHeight: reportHeight)
+                } else if let feature = item.feature {
+                    return AnyView(PanelComponentLibraryFeaturePreview(pluginHost: pluginHost, item: feature))
                 }
+                return nil
             }
             .frame(width: size.width, height: size.height)
             .allowsHitTesting(false).accessibilityHidden(true)
@@ -250,6 +258,13 @@ struct PanelComponentLibrary: View {
         .help(item.title)
         .accessibilityLabel(item.title + ", " + FeatureL10n.string("添加组件"))
         .accessibilityIdentifier("panel.library.add.\(item.id)")
+    }
+
+    private func previewSourceSize(_ item: PanelComponentLibraryPreviewItem) -> CGSize {
+        guard let measured = measuredPreviewSizes[item.id], measured.width == item.sourceSize.width else {
+            return item.sourceSize
+        }
+        return measured
     }
 }
 
@@ -341,7 +356,8 @@ private struct PanelComponentLibraryPreviewButtonStyle: ButtonStyle {
 
 private struct PanelComponentLibraryPreview: View {
     let size: CGSize
-    let makeContent: () -> AnyView?
+    let onSizeChange: (CGSize) -> Void
+    let makeContent: (@escaping (CGFloat) -> Void) -> AnyView?
     @State private var image: NSImage?
     @State private var unavailable = false
     @Environment(\.menuBarPanelTheme) private var theme
@@ -356,14 +372,24 @@ private struct PanelComponentLibraryPreview: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             guard image == nil, !unavailable else { return }
-            guard let content = makeContent() else { unavailable = true; return }
+            var measuredHeight: CGFloat?
+            guard let content = makeContent({ height in
+                let metrics = PluginPanelWidgetLayoutMetrics.default
+                guard height.isFinite, height > 0,
+                      let span = Int(exactly: ceil(height / metrics.cellHeight)) else { return }
+                measuredHeight = metrics.itemHeight(forSpanHeight: span)
+            }) else { unavailable = true; return }
             // A static bitmap excludes plugin controls from keyboard focus and ongoing preview updates.
-            let hosting = NSHostingView(rootView: content
-                .environment(\.menuBarPanelTheme, theme)
-                .environment(\.pluginComponentTheme, theme.componentTheme)
-                .environment(\.colorScheme, colorScheme)
-                .environment(\.locale, PluginRuntimeLocalization.locale)
-                .frame(width: size.width, height: size.height))
+            func rootView(_ size: CGSize) -> AnyView {
+                AnyView(content
+                    .environment(\.menuBarPanelTheme, theme)
+                    .environment(\.pluginComponentTheme, theme.componentTheme)
+                    .environment(\.colorScheme, colorScheme)
+                    .environment(\.locale, PluginRuntimeLocalization.locale)
+                    .frame(width: size.width, height: size.height))
+            }
+            var renderSize = size
+            let hosting = NSHostingView(rootView: rootView(renderSize))
             let window = NSWindow(contentRect: CGRect(origin: .zero, size: size),
                                   styleMask: .borderless, backing: .buffered, defer: false)
             window.isReleasedWhenClosed = false
@@ -372,11 +398,19 @@ private struct PanelComponentLibraryPreview: View {
             window.contentView = hosting
             defer { window.close() }
             hosting.layoutSubtreeIfNeeded()
+            // Preview sizing never changes a live placement or refreshes the plugin.
+            if let measuredHeight, measuredHeight != renderSize.height {
+                renderSize.height = measuredHeight
+                hosting.rootView = rootView(renderSize)
+                window.setContentSize(renderSize)
+                hosting.layoutSubtreeIfNeeded()
+            }
             if let bitmap = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
                 hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
-                let result = NSImage(size: size)
+                let result = NSImage(size: renderSize)
                 result.addRepresentation(bitmap)
                 image = result
+                if renderSize != size { onSizeChange(renderSize) }
             } else {
                 unavailable = true
             }
@@ -386,12 +420,12 @@ private struct PanelComponentLibraryPreview: View {
 
 private struct PanelComponentLibraryFeaturePreview: View {
     let pluginHost: PluginHost
-    let item: PluginPanelItem
+    let item: PluginPanelRowSnapshot
 
     var body: some View {
         FeatureRowView(item: item,
-            indicator: pluginHost.primaryPanelIndicatorsByID[item.id],
-            compactIndicator: pluginHost.primaryPanelCompactIndicatorsByID[item.id],
+            indicator: pluginHost.rowIndicator(for: item.id),
+            compactIndicator: pluginHost.rowCompactIndicator(for: item.id),
             onDisclosureToggle: { _ in }, onSelectionChange: { _, _ in },
             onNavigationSelectionChange: { _, _ in }, onNavigationHoverChange: { _, _, _ in },
             onNavigationRowFrameChange: { _, _, _ in }, onDateChange: { _, _ in },

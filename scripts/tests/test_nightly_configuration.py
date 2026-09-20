@@ -170,7 +170,7 @@ class NightlyConfigurationTests(unittest.TestCase):
         ]:
             self.assertIn(option, makefile)
         self.assertIn(
-            'verify-plugin-kit-v6-binary-compatibility.sh "$(abspath $(DEBUG_BUILD_PRODUCTS_DIR))"',
+            'verify-plugin-kit-v7-binary-compatibility.sh "$(abspath $(DEBUG_BUILD_PRODUCTS_DIR))"',
             makefile,
         )
 

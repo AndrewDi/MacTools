@@ -11,7 +11,7 @@ final class PanelLayoutEditorTests: XCTestCase {
     func testMoveToMenuKeepsDestinationIconsVisible() async throws {
         let host = makeHost([LayoutEditorTestPlugin("a", order: 0)])
         _ = try XCTUnwrap(host.addMenuBarPanel())
-        let window = mount(PanelLayoutEditor(pluginHost: host, surface: .dashboard, onDismiss: {}))
+        let window = mount(PanelLayoutEditor(pluginHost: host, panelID: "components", onDismiss: {}))
         defer { window.close() }
         try await settle()
         let source = try XCTUnwrap(descendants(try XCTUnwrap(window.contentView))
@@ -49,61 +49,61 @@ final class PanelLayoutEditorTests: XCTestCase {
     }
 
     func testRepeatedAdditionsMoveRemoveAndRestoreIndependently() throws {
-        for surface in PluginDisplaySurface.allCases {
+        for surface in PluginPanelItemKind.allCases {
             let unavailable = LayoutEditorTestPlugin("unavailable", order: 9)
             unavailable.runtimeVisible = false
             let a = LayoutEditorTestPlugin("a", order: 0)
             let host = makeHost([a, LayoutEditorTestPlugin("b", order: 1), unavailable])
-            let other: PluginDisplaySurface = surface == .dashboard ? .featurePanel : .dashboard
-            let template = MenuBarPanelEntry(pluginID: "a", surface: surface)
+            let other: PluginPanelItemKind = surface == .widget ? .row : .widget
+            let template = host.testEntry(pluginID: "a", kind: surface)
             let destination = try XCTUnwrap(host.addMenuBarPanel())
             XCTAssertEqual(PanelComponentLibraryItem.catalog(in: host).map(\.id), ["a", "b"])
             XCTAssertEqual(PanelComponentLibraryItem.catalog(in: host, matching: " A ").map(\.id), ["a"])
             XCTAssertTrue(a.contexts.isEmpty)
-            for panel in [surface.defaultPanelID, surface.defaultPanelID, destination] {
-                XCTAssertTrue(host.addPanelEntry(template, to: panel))
+            for panel in [surface.testPanelID, surface.testPanelID, destination] {
+                XCTAssertTrue(host.addPanelItem(template.key, to: panel))
             }
-            let originals = host.panelEntries(in: surface.defaultPanelID)
+            let originals = host.panelEntries(in: surface.testPanelID)
             XCTAssertEqual(originals.map(\.pluginID), ["a", "b", "a", "a"])
             XCTAssertEqual(Set(originals.map(\.id)).count, 4)
             let second = originals[3]
             let moved = originals[2]
             let session = PanelLayoutEditingSession()
-            XCTAssertTrue(session.commit(.init(id: moved.id, offset: 0, sourcePanelID: surface.defaultPanelID),
+            XCTAssertTrue(session.commit(.init(id: moved.id, offset: 0, sourcePanelID: surface.testPanelID),
                                          in: host, panelID: destination))
             XCTAssertEqual(host.panelEntries(in: destination).first, moved)
-            XCTAssertTrue(host.panelEntries(in: surface.defaultPanelID).contains(second))
+            XCTAssertTrue(host.panelEntries(in: surface.testPanelID).contains(second))
             session.undo(in: host, panelID: destination)
-            XCTAssertEqual(host.panelEntries(in: surface.defaultPanelID), originals)
-            XCTAssertTrue(session.commit(.init(id: second.id, offset: 0), in: host, panelID: surface.defaultPanelID))
-            XCTAssertEqual(host.panelEntries(in: surface.defaultPanelID).first, second)
-            session.undo(in: host, panelID: surface.defaultPanelID)
-            XCTAssertEqual(host.panelEntries(in: surface.defaultPanelID), originals)
-            XCTAssertTrue(host.removePanelEntry(moved, from: surface.defaultPanelID))
-            XCTAssertFalse(host.removePanelEntry(moved, from: surface.defaultPanelID))
-            XCTAssertEqual(host.panelEntries(in: surface.defaultPanelID), [originals[0], originals[1], second])
-            XCTAssertTrue(host.removePanelEntry(template, from: surface.defaultPanelID))
-            XCTAssertEqual(host.panelEntries(in: surface.defaultPanelID), [originals[1], second])
-            XCTAssertEqual(host.panelEntries(in: other.defaultPanelID).map(\.pluginID), ["a", "b"])
-            XCTAssertFalse(host.addPanelEntry(.init(pluginID: "unavailable", surface: surface), to: destination))
+            XCTAssertEqual(host.panelEntries(in: surface.testPanelID), originals)
+            XCTAssertTrue(session.commit(.init(id: second.id, offset: 0), in: host, panelID: surface.testPanelID))
+            XCTAssertEqual(host.panelEntries(in: surface.testPanelID).first, second)
+            session.undo(in: host, panelID: surface.testPanelID)
+            XCTAssertEqual(host.panelEntries(in: surface.testPanelID), originals)
+            XCTAssertTrue(host.removePanelEntry(moved, from: surface.testPanelID))
+            XCTAssertFalse(host.removePanelEntry(moved, from: surface.testPanelID))
+            XCTAssertEqual(host.panelEntries(in: surface.testPanelID), [originals[0], originals[1], second])
+            XCTAssertTrue(host.removePanelEntry(template, from: surface.testPanelID))
+            XCTAssertEqual(host.panelEntries(in: surface.testPanelID), [originals[1], second])
+            XCTAssertEqual(host.panelEntries(in: other.testPanelID).map(\.pluginID), ["a", "b"])
+            XCTAssertFalse(host.addPanelItem(.init(pluginID: "unavailable", itemID: surface.testItemID), to: destination))
             let backup = host.makePreferencesBackup()
             let restored = makeHost([LayoutEditorTestPlugin("a", order: 0), LayoutEditorTestPlugin("b", order: 1)])
             _ = try restored.importPreferences(backup)
             XCTAssertEqual(restored.menuBarPanelStore.configuration, host.menuBarPanelStore.configuration)
-            XCTAssertEqual(restored.panelEntries(in: surface.defaultPanelID), host.panelEntries(in: surface.defaultPanelID))
+            XCTAssertEqual(restored.panelEntries(in: surface.testPanelID), host.panelEntries(in: surface.testPanelID))
             XCTAssertEqual(restored.panelEntries(in: destination), host.panelEntries(in: destination))
             let lastCopy = try XCTUnwrap(host.panelEntries(in: destination).first)
             XCTAssertNil(host.deleteMenuBarPanel(id: destination))
-            XCTAssertTrue(host.panelEntries(in: surface.defaultPanelID).contains(lastCopy))
-            XCTAssertFalse(host.panelEntries(in: surface.defaultPanelID).contains(template))
+            XCTAssertTrue(host.panelEntries(in: "components").contains(lastCopy))
+            XCTAssertFalse(host.panelEntries(in: surface.testPanelID).contains(template))
         }
     }
 
     func testAddingPreviouslyHiddenPluginDoesNotRestoreItsDefaultEntry() throws {
         let host = makeHost([LayoutEditorTestPlugin("a", order: 0)])
-        host.setPluginVisible(false, id: "a", on: .dashboard)
+        host.removeTestItem(pluginID: "a", kind: .widget)
         let destination = try XCTUnwrap(host.addMenuBarPanel())
-        XCTAssertTrue(host.addPanelEntry(.init(pluginID: "a", surface: .dashboard), to: destination))
+        XCTAssertTrue(host.addPanelItem(.init(pluginID: "a", itemID: "widget"), to: destination))
         XCTAssertTrue(host.panelEntries(in: "components").isEmpty)
         XCTAssertEqual(host.panelEntries(in: destination).map(\.pluginID), ["a"])
         XCTAssertEqual(host.panelEntries(in: "features").map(\.pluginID), ["a"])
@@ -206,7 +206,7 @@ final class PanelLayoutEditorTests: XCTestCase {
         let host = makeHost([a, b])
         let destination = try XCTUnwrap(host.addMenuBarPanel())
         let hosting = NSHostingView(rootView: PanelComponentLibrary(pluginHost: host, panelID: destination) {
-            host.addPanelEntry($0, to: destination)
+            host.addPanelItem($0, to: destination)
         })
         let window = NSWindow(contentRect: CGRect(x: 100, y: 100, width: 660, height: 440),
                               styleMask: [.titled], backing: .buffered, defer: false)
@@ -216,9 +216,9 @@ final class PanelLayoutEditorTests: XCTestCase {
         defer { window.close() }
         try await settle()
         XCTAssertEqual(a.contexts.count, 1)
-        XCTAssertTrue(a.contexts.allSatisfy { !$0.isPanelVisible })
+        XCTAssertTrue(a.contexts.allSatisfy { $0.isPreview })
         XCTAssertTrue(b.contexts.isEmpty)
-        let location = hosting.convert(CGPoint(x: 310, y: 170), to: nil)
+        let location = hosting.convert(CGPoint(x: 300, y: 170), to: nil)
         sendMouse(.leftMouseDown, at: location, to: window)
         sendMouse(.leftMouseUp, at: location, to: window)
         try await settle()
@@ -229,7 +229,7 @@ final class PanelLayoutEditorTests: XCTestCase {
         try await settle()
         let copies = host.panelEntries(in: destination)
         XCTAssertEqual(copies.count, 2)
-        XCTAssertNotEqual(copies[0].id, copies[1].id)
+        XCTAssertNotEqual(try XCTUnwrap(copies.first).id, try XCTUnwrap(copies.last).id)
         XCTAssertEqual(host.panelEntries(in: "components").map(\.pluginID), ["a", "b"])
         let bitmap = try XCTUnwrap(hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds))
         hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
@@ -240,19 +240,19 @@ final class PanelLayoutEditorTests: XCTestCase {
     }
 
     func testCrossPanelDragCommitsAtInsertionAndUndoRestoresBothLayouts() throws {
-        for surface in PluginDisplaySurface.allCases {
-            let other: PluginDisplaySurface = surface == .dashboard ? .featurePanel : .dashboard
+        for surface in PluginPanelItemKind.allCases {
+            let other: PluginPanelItemKind = surface == .widget ? .row : .widget
             let host = makeHost(["a", "hidden", "b", "c"].enumerated().map { LayoutEditorTestPlugin($0.element, order: $0.offset) })
             let destination = try XCTUnwrap(host.addMenuBarPanel())
-            host.setPluginVisible(false, id: "hidden", on: surface)
-            host.assignPanelEntry(pluginID: "b", surface: other, to: destination)
-            host.assignPanelEntry(pluginID: "c", surface: surface, to: destination)
-            let entry = MenuBarPanelEntry(pluginID: "a", surface: surface)
+            host.removeTestItem(pluginID: "hidden", kind: surface)
+            host.moveTestItem(pluginID: "b", kind: other, to: destination)
+            host.moveTestItem(pluginID: "c", kind: surface, to: destination)
+            let entry = host.testEntry(pluginID: "a", kind: surface)
             let before = host.menuBarPanelStore.configuration
-            let sourceIDs = host.panelEntries(in: surface.defaultPanelID).map(\.id)
+            let sourceIDs = host.panelEntries(in: surface.testPanelID).map(\.id)
             let destinationIDs = host.panelEntries(in: destination).map(\.id)
             let session = PanelLayoutEditingSession()
-            let token = try XCTUnwrap(session.begin(entry: entry, panelID: surface.defaultPanelID, ids: sourceIDs))
+            let token = try XCTUnwrap(session.begin(entry: entry, panelID: surface.testPanelID, ids: sourceIDs))
             session.enterPanel(destination, ids: destinationIDs)
             XCTAssertTrue(session.validate(in: host, panelID: destination))
             session.preview(offset: 1, ids: destinationIDs)
@@ -260,7 +260,7 @@ final class PanelLayoutEditorTests: XCTestCase {
             let move = try XCTUnwrap(session.finish(ids: destinationIDs))
             XCTAssertTrue(session.commit(move, in: host, panelID: destination))
             XCTAssertEqual(host.panelEntries(in: destination).map(\.id), [destinationIDs[0], entry.id, destinationIDs[1]])
-            XCTAssertEqual(host.panelID(pluginID: "a", surface: other), other.defaultPanelID)
+            XCTAssertEqual(host.testPanelID(pluginID: "a", kind: other), other.testPanelID)
             session.sourceEnded(token: token)
             XCTAssertTrue(session.canUndo(in: host, panelID: destination))
             session.undo(in: host, panelID: destination)
@@ -274,7 +274,7 @@ final class PanelLayoutEditorTests: XCTestCase {
         let destination = try XCTUnwrap(host.addMenuBarPanel())
         let intermediate = try XCTUnwrap(host.addMenuBarPanel())
         let source = MenuBarPanelDefinition.componentsID
-        let entry = MenuBarPanelEntry(pluginID: "a", surface: .dashboard)
+        let entry = host.testEntry(pluginID: "a", kind: .widget)
         let session = PanelLayoutEditingSession()
         let before = host.menuBarPanelStore.configuration
         let token = try XCTUnwrap(session.begin(entry: entry, panelID: source, ids: [entry.id]))
@@ -291,11 +291,11 @@ final class PanelLayoutEditorTests: XCTestCase {
         let move = try XCTUnwrap(session.finish(ids: []))
         XCTAssertTrue(session.commit(move, in: host, panelID: destination))
         XCTAssertEqual(host.panelEntries(in: destination), [entry])
-        host.assignPanelEntry(pluginID: "a", surface: .featurePanel, to: intermediate)
+        host.moveTestItem(pluginID: "a", kind: .row, to: intermediate)
         XCTAssertFalse(session.canUndo(in: host, panelID: destination), "Undo cannot overwrite another saved layout change")
         _ = session.begin(entry: entry, panelID: destination, ids: [entry.id])
         session.enterPanel(source, ids: [])
-        host.setPluginVisible(false, id: "a", on: .dashboard)
+        host.removeTestItem(pluginID: "a", kind: .widget)
         XCTAssertFalse(session.validate(in: host, panelID: source))
         XCTAssertNil(session.token)
     }
@@ -340,7 +340,7 @@ final class PanelLayoutEditorTests: XCTestCase {
         XCTAssertTrue(session.commit(move, in: host, panelID: destination))
         session.nativeDragSource.finish()
         try await settle()
-        XCTAssertEqual(host.panelEntries(in: destination), [MenuBarPanelEntry(pluginID: "a", surface: .dashboard)])
+        XCTAssertEqual(host.panelEntries(in: destination), [host.testEntry(pluginID: "a", kind: .widget)])
         XCTAssertTrue(session.canUndo(in: host, panelID: destination))
         XCTAssertTrue(model.isEditingLayout)
     }
@@ -350,48 +350,45 @@ final class PanelLayoutEditorTests: XCTestCase {
         super.tearDown()
     }
 
-    func testRenderedMovesMatchPreviewAndPreserveHiddenSlotsOnBothSurfaces() throws {
-        for surface in [PluginDisplaySurface.dashboard, .featurePanel] {
+    func testRenderedMovesPreserveUnavailableSlotsAndOtherPanelOrder() throws {
+        for kind in PluginPanelItemKind.allCases {
             for (source, offset) in [("a", 2), ("c", 1), ("c", -5), ("a", 10), ("b", 1), ("b", 2)] {
-                let plugins = ["runtime-leading", "a", "runtime-middle", "b", "preference-hidden", "c", "runtime-trailing"]
+                let plugins = ["runtime-leading", "a", "runtime-middle", "b", "removed", "c", "runtime-trailing"]
                     .enumerated().map { LayoutEditorTestPlugin($0.element, order: $0.offset) }
-                for plugin in plugins where plugin.metadata.id.hasPrefix("runtime-") {
-                    plugin.runtimeVisible = false
-                }
+                for plugin in plugins where plugin.metadata.id.hasPrefix("runtime-") { plugin.runtimeVisible = false }
                 let host = makeHost(plugins)
-                host.setPluginVisible(false, id: "preference-hidden", on: surface)
-                let ids = renderedIDs(host, surface: surface)
-                XCTAssertEqual(ids, ["a", "b", "c"])
+                host.removeTestItem(pluginID: "removed", kind: kind)
+                let ids = renderedIDs(host, surface: kind)
                 let preview = PanelLayoutDestination.moving(source, toOffset: offset, in: ids)
-                host.moveRenderedPlugin(id: source, toOffset: offset, on: surface)
-                XCTAssertEqual(renderedIDs(host, surface: surface), preview)
-                let stored = surface == .dashboard ? host.dashboardLayoutItems.map(\.id) : host.featurePanelLayoutItems.map(\.id)
-                XCTAssertEqual(stored, ["runtime-leading", preview[0], "runtime-middle", preview[1], preview[2], "runtime-trailing"])
-                host.setPluginVisible(true, id: "preference-hidden", on: surface)
-                let restored = surface == .dashboard ? host.dashboardLayoutItems.map(\.id) : host.featurePanelLayoutItems.map(\.id)
-                XCTAssertEqual(restored, ["runtime-leading", preview[0], "runtime-middle", preview[1], "preference-hidden", preview[2], "runtime-trailing"])
-                let otherSurface: PluginDisplaySurface = surface == .dashboard ? .featurePanel : .dashboard
-                XCTAssertEqual(renderedIDs(host, surface: otherSurface), ["a", "b", "preference-hidden", "c"])
+                host.reorderTestItem(pluginID: source, kind: kind, toOffset: offset)
+                XCTAssertEqual(renderedIDs(host, surface: kind), preview)
+                let saved = host.menuBarPanelStore.configuration.placementsByPanelID[kind.testPanelID, default: []]
+                XCTAssertEqual(saved.map(\.item.pluginID),
+                    ["runtime-leading", preview[0], "runtime-middle", preview[1], preview[2], "runtime-trailing"])
+                XCTAssertTrue(host.addPanelItem(.init(pluginID: "removed", itemID: kind.testItemID), to: kind.testPanelID))
+                XCTAssertEqual(renderedIDs(host, surface: kind), preview + ["removed"])
+                let other: PluginPanelItemKind = kind == .widget ? .row : .widget
+                XCTAssertEqual(renderedIDs(host, surface: other), ["a", "b", "removed", "c"])
             }
         }
     }
 
-    func testUnavailableRenderedSourceDoesNotChangeSavedOrder() {
-        for surface in [PluginDisplaySurface.dashboard, .featurePanel] {
+    func testUnavailableRenderedSourceDoesNotChangeSavedOrder() throws {
+        for kind in PluginPanelItemKind.allCases {
             let hidden = LayoutEditorTestPlugin("hidden", order: 0)
             hidden.runtimeVisible = false
             let host = makeHost([hidden, LayoutEditorTestPlugin("a", order: 1), LayoutEditorTestPlugin("b", order: 2)])
-            for source in ["hidden", "missing"] {
-                host.moveRenderedPlugin(id: source, toOffset: 3, on: surface)
-                XCTAssertEqual(renderedIDs(host, surface: surface), ["a", "b"])
-                let stored = surface == .dashboard ? host.dashboardLayoutItems.map(\.id) : host.featurePanelLayoutItems.map(\.id)
-                XCTAssertEqual(stored, ["hidden", "a", "b"])
-            }
+            let before = host.menuBarPanelStore.configuration
+            let placement = try XCTUnwrap(before.placementsByPanelID[kind.testPanelID]?.first)
+            let entry = MenuBarPanelEntry(placement: placement, kind: kind)
+            host.movePanelEntry(entry, panelID: kind.testPanelID, toOffset: 3)
+            XCTAssertEqual(host.menuBarPanelStore.configuration, before)
+            XCTAssertEqual(renderedIDs(host, surface: kind), ["a", "b"])
         }
     }
 
-    private func renderedIDs(_ host: PluginHost, surface: PluginDisplaySurface) -> [String] {
-        surface == .dashboard ? host.componentItems.map(\.id) : host.panelItems.map(\.id)
+    private func renderedIDs(_ host: PluginHost, surface: PluginPanelItemKind) -> [String] {
+        surface == .widget ? host.componentItems.map(\.pluginID) : host.panelItems.map(\.pluginID)
     }
 
     func testCardFirstAppearingDuringEditingRetainsWorkingDismissAfterDone() async throws {
@@ -410,12 +407,12 @@ final class PanelLayoutEditorTests: XCTestCase {
         try await settle()
         XCTAssertEqual(a.contexts.count, 1)
         XCTAssertEqual(h.contexts.count, 0)
-        view.rootView = AnyView(PanelLayoutEditor(pluginHost: host, surface: .dashboard, onDismiss: { dismissCount += 1 }).frame(width: 304, height: 480))
+        view.rootView = AnyView(PanelLayoutEditor(pluginHost: host, panelID: "components", onDismiss: { dismissCount += 1 }).frame(width: 304, height: 480))
         try await settle()
         h.runtimeVisible = true
         h.onStateChange?()
         try await settle()
-        XCTAssertEqual(host.componentItems.map(\.id), ["a", "conditional", "b"])
+        XCTAssertEqual(host.componentItems.map(\.pluginID), ["a", "conditional", "b"])
         XCTAssertEqual(h.contexts.count, 1, "The actual editor must have created the new card")
         view.rootView = AnyView(normal.frame(width: 304, height: 480))
         try await settle()
@@ -427,37 +424,38 @@ final class PanelLayoutEditorTests: XCTestCase {
     }
 
     func testDashboardSpanChangeDoesNotCancelFeatureDrag() async throws {
-        try await checkDrag(surface: .featurePanel, changeDashboardSpan: true)
+        try await checkDrag(surface: .row, changeDashboardSpan: true)
     }
 
     func testDashboardSpanChangeCancelsDashboardDrag() async throws {
-        try await checkDrag(surface: .dashboard, changeDashboardSpan: true)
+        try await checkDrag(surface: .widget, changeDashboardSpan: true)
     }
 
     func testFeatureItemDisappearanceCancelsFeatureDrag() async throws {
         let a = LayoutEditorTestPlugin("a", order: 1)
         let host = makeHost([a, LayoutEditorTestPlugin("b", order: 2)])
         let session = PanelLayoutEditingSession()
-        let window = mount(PanelLayoutEditor(pluginHost: host, surface: .featurePanel, onDismiss: {}, session: session))
+        let window = mount(PanelLayoutEditor(pluginHost: host, panelID: "features", onDismiss: {}, session: session))
         defer { window.close() }
         try await settle()
-        XCTAssertNotNil(session.begin(id: PluginDisplaySurface.featurePanel.panelEntryID(pluginID: "a"), ids: host.panelEntries(in: "features").map(\.id)))
+        XCTAssertNotNil(session.begin(id: host.testEntry(pluginID: "a", kind: .row).id, ids: host.panelEntries(in: "features").map(\.id)))
         a.runtimeVisible = false
         a.onStateChange?()
         try await settle()
-        XCTAssertEqual(host.panelItems.map(\.id), ["b"])
+        XCTAssertEqual(host.panelItems.map(\.pluginID), ["b"])
         XCTAssertNil(session.token)
     }
 
     func testRemovalRequiresConfirmationAndRemovesOnlyTheCurrentEntry() async throws {
-        for surface in [PluginDisplaySurface.dashboard, .featurePanel] {
+        for surface in [PluginPanelItemKind.widget, .row] {
             let host = makeHost([LayoutEditorTestPlugin("a", order: 0), LayoutEditorTestPlugin("b", order: 1)])
-            let window = mount(PanelLayoutEditor(pluginHost: host, surface: surface, onDismiss: {}))
+            let entryID = host.testEntry(pluginID: "a", kind: surface).id
+            let window = mount(PanelLayoutEditor(pluginHost: host, panelID: surface.testPanelID, onDismiss: {}))
             defer { window.close() }
             try await settle()
             let root = try XCTUnwrap(window.contentView)
             let source = try XCTUnwrap(descendants(root).compactMap { $0 as? PanelLayoutDragSourceView }
-                .first { $0.identifier?.rawValue == "panel.layout.drag.\(surface.panelEntryID(pluginID: "a"))" })
+                .first { $0.identifier?.rawValue == "panel.layout.drag.\(entryID)" })
             setHover(source, inside: true)
             try await settle()
             let location = source.convert(CGPoint(x: source.menuFrame.minX + PanelLayoutItemControlsLayout(size: source.bounds.size).buttonSide / 2, y: source.menuFrame.midY), to: nil)
@@ -465,7 +463,7 @@ final class PanelLayoutEditorTests: XCTestCase {
             sendMouse(.leftMouseDown, at: location, to: window)
             sendMouse(.leftMouseUp, at: location, to: window)
             try await settle()
-            XCTAssertEqual(host.panelEntries(in: surface.defaultPanelID).map(\.pluginID), ["a", "b"])
+            XCTAssertEqual(host.panelEntries(in: surface.testPanelID).map(\.pluginID), ["a", "b"])
             let confirmation = try XCTUnwrap(NSApp.windows.first {
                 $0.isVisible && MenuBarPanelWindowRegistry.isEditingPopover($0)
             })
@@ -477,34 +475,34 @@ final class PanelLayoutEditorTests: XCTestCase {
             XCTAssertTrue(confirmation.performKeyEquivalent(with: enter))
             try await settle()
             XCTAssertTrue(window.isVisible)
-            XCTAssertEqual(host.panelEntries(in: surface.defaultPanelID).map(\.pluginID), ["b"])
+            XCTAssertEqual(host.panelEntries(in: surface.testPanelID).map(\.pluginID), ["b"])
             XCTAssertFalse(descendants(root).compactMap { $0 as? PanelLayoutDragSourceView }.contains {
-                $0.identifier?.rawValue == "panel.layout.drag.\(surface.panelEntryID(pluginID: "a"))"
+                $0.identifier?.rawValue == "panel.layout.drag.\(entryID)"
             })
             XCTAssertTrue(PanelComponentLibraryItem.catalog(in: host).contains { $0.id == "a" })
-            let other: PluginDisplaySurface = surface == .dashboard ? .featurePanel : .dashboard
-            XCTAssertEqual(host.panelEntries(in: other.defaultPanelID).map(\.pluginID), ["a", "b"])
+            let other: PluginPanelItemKind = surface == .widget ? .row : .widget
+            XCTAssertEqual(host.panelEntries(in: other.testPanelID).map(\.pluginID), ["a", "b"])
         }
     }
 
     func testUndoRestoresPersistedPanelOrderAndPreservesHiddenSlots() throws {
-        for surface in [PluginDisplaySurface.dashboard, .featurePanel] {
+        for surface in [PluginPanelItemKind.widget, .row] {
             let host = makeHost(["a", "hidden", "b", "c"].enumerated().map { LayoutEditorTestPlugin($0.element, order: $0.offset) })
-            host.setPluginVisible(false, id: "hidden", on: surface)
+            host.removeTestItem(pluginID: "hidden", kind: surface)
             let session = PanelLayoutEditingSession()
-            let panelID = surface.defaultPanelID
+            let panelID = surface.testPanelID
             let before = host.panelEntries(in: panelID).map(\.id)
-            host.movePanelEntry(pluginID: "a", surface: surface, panelID: panelID, toOffset: 3)
+            host.reorderTestItem(pluginID: "a", kind: surface, toOffset: 3)
             let after = host.panelEntries(in: panelID).map(\.id)
-            session.didSave(.init(id: surface.panelEntryID(pluginID: "a"), offset: 3), beforeIDs: before, afterIDs: after)
+            session.didSave(.init(id: host.testEntry(pluginID: "a", kind: surface).id, offset: 3), beforeIDs: before, afterIDs: after)
             XCTAssertEqual(host.panelEntries(in: panelID).map(\.pluginID), ["b", "c", "a"])
             let move = try XCTUnwrap(session.takeUndo(ids: after))
-            host.movePanelEntry(pluginID: "a", surface: surface, panelID: panelID, toOffset: move.offset)
+            host.reorderTestItem(pluginID: "a", kind: surface, toOffset: move.offset)
             session.didUndo()
             XCTAssertEqual(host.panelEntries(in: panelID).map(\.id), before)
             XCTAssertFalse(session.canUndo(ids: before))
-            host.setPluginVisible(true, id: "hidden", on: surface)
-            XCTAssertEqual(host.panelEntries(in: panelID).map(\.pluginID), ["a", "hidden", "b", "c"])
+            host.addPanelItem(.init(pluginID: "hidden", itemID: surface.testItemID), to: surface.testPanelID)
+            XCTAssertEqual(host.panelEntries(in: panelID).map(\.pluginID), ["a", "b", "c", "hidden"])
         }
     }
 
@@ -514,7 +512,7 @@ final class PanelLayoutEditorTests: XCTestCase {
         plugin.spanWidth = 4
         plugin.spanHeight = 24
         let host = makeHost([plugin])
-        let window = mount(PanelLayoutEditor(pluginHost: host, surface: .dashboard, onDismiss: {}))
+        let window = mount(PanelLayoutEditor(pluginHost: host, panelID: "components", onDismiss: {}))
         defer { window.close() }
         window.makeKeyAndOrderFront(nil)
         try await settle()
@@ -537,7 +535,7 @@ final class PanelLayoutEditorTests: XCTestCase {
     }
 
     func testDragPreviewKeepsCardFramesAndDropCanvasStableUntilCommit() async throws {
-        for surface in [PluginDisplaySurface.dashboard, .featurePanel] {
+        for surface in [PluginPanelItemKind.widget, .row] {
             for direction in [LayoutDirection.leftToRight, .rightToLeft] {
                 let plugins = ["a", "b", "c"].enumerated().map {
                     LayoutEditorTestPlugin($0.element, order: $0.offset)
@@ -549,7 +547,7 @@ final class PanelLayoutEditorTests: XCTestCase {
                 plugins[2].spanWidth = 3
                 let host = makeHost(plugins)
                 let session = PanelLayoutEditingSession()
-                let window = mount(PanelLayoutEditor(pluginHost: host, surface: surface, onDismiss: {}, session: session)
+                let window = mount(PanelLayoutEditor(pluginHost: host, panelID: surface.testPanelID, onDismiss: {}, session: session)
                     .environment(\.layoutDirection, direction))
                 defer { window.close() }
                 try await settle()
@@ -568,12 +566,12 @@ final class PanelLayoutEditorTests: XCTestCase {
                 let frames = cardFrames()
                 XCTAssertEqual(frames.count, 3)
                 let canvasBounds = canvas.bounds
-                let ids = host.panelEntries(in: surface.defaultPanelID).map(\.id)
-                let last = try XCTUnwrap(frames["panel.layout.drag.\(surface.panelEntryID(pluginID: "c"))"])
+                let ids = host.panelEntries(in: surface.testPanelID).map(\.id)
+                let last = try XCTUnwrap(frames["panel.layout.drag.\(host.testEntry(pluginID: "c", kind: surface).id)"])
                 let target = CGPoint(x: direction == .rightToLeft ? last.minX + 8 : last.maxX - 8,
-                                     y: surface == .dashboard ? last.midY : last.maxY - 2)
+                                     y: surface == .widget ? last.midY : last.maxY - 2)
                 XCTAssertTrue(canvasBounds.contains(target))
-                if surface == .dashboard {
+                if surface == .widget {
                     let reordered = ComponentGridPlacementEngine.placements(for: [
                         host.componentItems[1], host.componentItems[2], host.componentItems[0]
                     ])
@@ -581,11 +579,11 @@ final class PanelLayoutEditorTests: XCTestCase {
                         + PanelLayoutDestination.dropTailHeight, "The fixture must exercise a shrinking preview")
                 }
 
-                _ = session.begin(id: surface.panelEntryID(pluginID: "a"), ids: ids)
+                _ = session.begin(id: host.testEntry(pluginID: "a", kind: surface).id, ids: ids)
                 session.preview(offset: 3, ids: ids)
                 try await settle()
-                XCTAssertEqual(session.previewIDs(currentIDs: ids), ["b", "c", "a"].map { surface.panelEntryID(pluginID: $0) })
-                XCTAssertEqual(host.panelEntries(in: surface.defaultPanelID).map(\.id), ids)
+                XCTAssertEqual(session.previewIDs(currentIDs: ids), ["b", "c", "a"].map { host.testEntry(pluginID: $0, kind: surface).id })
+                XCTAssertEqual(host.panelEntries(in: surface.testPanelID).map(\.id), ids)
                 XCTAssertEqual(cardFrames(), frames)
                 XCTAssertEqual(canvas.bounds, canvasBounds)
                 XCTAssertTrue(canvas.bounds.contains(target), "A stationary drop target must remain valid")
@@ -596,9 +594,9 @@ final class PanelLayoutEditorTests: XCTestCase {
                 XCTAssertEqual(canvas.bounds, canvasBounds)
                 session.preview(offset: 3, ids: ids)
                 let move = try XCTUnwrap(session.finish(ids: ids))
-                host.movePanelEntry(pluginID: "a", surface: surface, panelID: surface.defaultPanelID, toOffset: move.offset)
+                host.reorderTestItem(pluginID: "a", kind: surface, toOffset: move.offset)
                 try await settle()
-                XCTAssertEqual(host.panelEntries(in: surface.defaultPanelID).map(\.pluginID), ["b", "c", "a"])
+                XCTAssertEqual(host.panelEntries(in: surface.testPanelID).map(\.pluginID), ["b", "c", "a"])
                 XCTAssertNotEqual(cardFrames(), frames, "Cards should move after the drop is committed")
             }
         }
@@ -714,18 +712,18 @@ final class PanelLayoutEditorTests: XCTestCase {
         window.sendEvent(event)
     }
 
-    private func checkDrag(surface: PluginDisplaySurface, changeDashboardSpan: Bool) async throws {
+    private func checkDrag(surface: PluginPanelItemKind, changeDashboardSpan: Bool) async throws {
         let a = LayoutEditorTestPlugin("a", order: 1)
         let b = LayoutEditorTestPlugin("b", order: 2)
         let host = makeHost([a, b])
         let session = PanelLayoutEditingSession()
-        let editor = PanelLayoutEditor(pluginHost: host, surface: surface, onDismiss: {}, session: session)
+        let editor = PanelLayoutEditor(pluginHost: host, panelID: surface.testPanelID, onDismiss: {}, session: session)
         let window = mount(editor)
         defer { window.close() }
         try await settle()
-        let beforeIDs = host.panelEntries(in: surface.defaultPanelID).map(\.id)
+        let beforeIDs = host.panelEntries(in: surface.testPanelID).map(\.id)
         let beforePlacements = ComponentGridPlacementEngine.placements(for: host.componentItems)
-        let token = try XCTUnwrap(session.begin(id: surface.panelEntryID(pluginID: "a"), ids: beforeIDs))
+        let token = try XCTUnwrap(session.begin(id: host.testEntry(pluginID: "a", kind: surface).id, ids: beforeIDs))
         session.preview(offset: 2, ids: beforeIDs)
         try await settle()
         XCTAssertEqual(session.token, token, "The mounted editor is editing the injected session")
@@ -734,13 +732,13 @@ final class PanelLayoutEditorTests: XCTestCase {
         a.onStateChange?()
         try await settle()
         let afterPlacements = ComponentGridPlacementEngine.placements(for: host.componentItems)
-        XCTAssertEqual(host.panelEntries(in: surface.defaultPanelID).map(\.id), beforeIDs)
+        XCTAssertEqual(host.panelEntries(in: surface.testPanelID).map(\.id), beforeIDs)
         XCTAssertEqual(beforePlacements != afterPlacements, changeDashboardSpan)
-        if surface == .dashboard && changeDashboardSpan {
+        if surface == .widget && changeDashboardSpan {
             XCTAssertNil(session.token, "Changed Dashboard geometry must cancel its own drag")
         } else {
             XCTAssertEqual(session.token, token, "Unrelated updates must not cancel the drag")
-            XCTAssertEqual(session.finish(ids: beforeIDs), .init(id: surface.panelEntryID(pluginID: "a"), offset: 2))
+            XCTAssertEqual(session.finish(ids: beforeIDs), .init(id: host.testEntry(pluginID: "a", kind: surface).id, offset: 2))
         }
     }
 
@@ -760,7 +758,7 @@ final class PanelLayoutEditorTests: XCTestCase {
         suites.append(suite)
         let defaults = UserDefaults(suiteName: suite)!
         return PluginHost(plugins: plugins, shortcutStore: ShortcutStore(userDefaults: defaults),
-                          pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+                          pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
                           preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
                           globalShortcutManager: GlobalShortcutManager())
     }
@@ -786,15 +784,28 @@ private struct LibraryPopoverTestContent: View {
 }
 
 @MainActor
-private final class LayoutEditorTestPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginComponentPanel {
+private final class LayoutEditorTestPlugin: MacToolsPlugin {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+            .widget(id: "widget", initialPlacement: .dashboard,
+                    descriptor: descriptor, state: widgetState,
+                    content: { [weak self] context in
+                        self?.makeView(context: context) ?? AnyView(EmptyView())
+                    }),
+        ]
+    }
+
     let metadata: PluginMetadata
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(controlStyle: .switch, menuActionBehavior: .keepPresented)
-    var descriptor: PluginComponentDescriptor { .init(span: PluginComponentSpan(width: spanWidth, height: spanHeight)!) }
+    let rowDescriptor = PluginPanelRowDescriptor(controlStyle: .switch, menuActionBehavior: .keepPresented)
+    var descriptor: PluginPanelWidgetDescriptor { .init(span: PluginPanelWidgetSpan(width: spanWidth, height: spanHeight)!) }
     var runtimeVisible = true
     var spanWidth = 2
     var spanHeight = 12
     var subtitle = "Reading"
-    var contexts: [PluginComponentContext] = []
+    var contexts: [PluginPanelWidgetContext] = []
     var showsInteractionProbe = false
     var previewEnabledStates: [Bool] = []
     var controlInvocations = 0
@@ -806,16 +817,16 @@ private final class LayoutEditorTestPlugin: MacToolsPlugin, PluginPrimaryPanel, 
         metadata = PluginMetadata(id: id, title: id, iconName: "circle", iconTint: .blue, order: order, defaultDescription: id)
     }
 
-    var primaryPanelState: PluginPanelState {
-        .init(subtitle: subtitle, isOn: false, isExpanded: false, isEnabled: true, isVisible: runtimeVisible,
+    var rowState: PluginPanelRowState {
+        .init(subtitle: subtitle, isOn: false, isEnabled: true, isAvailable: runtimeVisible,
               detail: nil, errorMessage: nil)
     }
 
-    var componentPanelState: PluginComponentState {
-        .init(subtitle: subtitle, isActive: false, isEnabled: true, isVisible: runtimeVisible, errorMessage: nil)
+    var widgetState: PluginPanelWidgetState {
+        .init(subtitle: subtitle, isActive: false, isEnabled: true, isAvailable: runtimeVisible, errorMessage: nil)
     }
 
-    func makeView(context: PluginComponentContext) -> AnyView {
+    func makeView(context: PluginPanelWidgetContext) -> AnyView {
         contexts.append(context)
         if showsInteractionProbe { return AnyView(LayoutEditorInteractionProbe(plugin: self)) }
         return AnyView(Text(metadata.title).frame(maxWidth: .infinity, maxHeight: .infinity))

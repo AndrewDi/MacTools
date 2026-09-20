@@ -133,7 +133,7 @@ private final class InlineControlFixtureModel: ObservableObject {
     var rowFrames: [Int: [CGRect]] = [:]
     var selections: [String] = []
 
-    func item(_ index: Int) -> PluginPanelItem {
+    func item(_ index: Int) -> PluginPanelRowSnapshot {
         let detail = PluginPanelDetail(primaryControls: [PluginPanelControl(
             id: "duration", kind: .segmented,
             options: behaviorOptions ?? [
@@ -147,7 +147,7 @@ private final class InlineControlFixtureModel: ObservableObject {
             dateValue: nil, minimumDate: nil, displayedComponents: nil,
             datePickerStyle: nil, sectionTitle: behaviorOptions == nil ? nil : "Behavior", isEnabled: controlEnabled
         )], secondaryPanel: nil)
-        return PluginPanelItem(
+        return PluginPanelRowSnapshot(
             id: "fixture-\(index)", title: "Keep Awake", iconName: "cup.and.saucer",
             iconTint: .blue, controlStyle: .switch, menuActionBehavior: .keepPresented,
             description: enabled ? "No automatic stop" : "Keep your Mac awake",

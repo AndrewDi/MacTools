@@ -260,9 +260,9 @@ final class PanelLayoutEditingSessionTests: XCTestCase {
 
     func testGridInsertionMarkerUsesTheSameStableBoundaryInBothDirections() throws {
         let placements = ComponentGridPlacementEngine.placements(for: [
-            item("a", PluginComponentSpan(width: 2, height: 12)!),
-            item("b", PluginComponentSpan(width: 1, height: 24)!),
-            item("c", PluginComponentSpan(width: 4, height: 12)!)
+            item("a", PluginPanelWidgetSpan(width: 2, height: 12)!),
+            item("b", PluginPanelWidgetSpan(width: 1, height: 24)!),
+            item("c", PluginPanelWidgetSpan(width: 4, height: 12)!)
         ])
         for offset in 0...placements.count {
             let marker = try XCTUnwrap(PanelLayoutDestination.gridInsertionFrame(
@@ -293,8 +293,8 @@ final class PanelLayoutEditingSessionTests: XCTestCase {
                               typeIdentifier: PanelLayoutDragTransfer.type.identifier)
     }
 
-    private func item(_ id: String, _ span: PluginComponentSpan) -> PluginComponentItem {
-        PluginComponentItem(id: id, title: id, iconName: "circle", iconTint: .blue, description: "",
+    private func item(_ id: String, _ span: PluginPanelWidgetSpan) -> PluginPanelWidgetSnapshot {
+        PluginPanelWidgetSnapshot(id: id, title: id, iconName: "circle", iconTint: .blue, description: "",
                             helpText: "", descriptionTone: .secondary, span: span, isActive: false, isEnabled: true)
     }
 }

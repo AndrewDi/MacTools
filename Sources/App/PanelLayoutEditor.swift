@@ -29,12 +29,6 @@ struct PanelLayoutEditor: View {
         self._session = StateObject(wrappedValue: session())
     }
 
-    init(pluginHost: PluginHost, surface: PluginDisplaySurface, onDismiss: @escaping () -> Void,
-         session: @autoclosure @escaping () -> PanelLayoutEditingSession = PanelLayoutEditingSession(),
-         revealBottomRequest: UUID? = nil) {
-        self.init(pluginHost: pluginHost, panelID: surface.defaultPanelID, onDismiss: onDismiss, session: session(), revealBottomRequest: revealBottomRequest)
-    }
-
     private var entries: [MenuBarPanelEntry] { pluginHost.panelEntries(in: panelID) }
     private var ids: [String] { entries.map(\.id) }
 
@@ -130,7 +124,7 @@ struct PanelLayoutEditor: View {
                               height: PanelLayoutDestination.visibleContentHeight(itemHeight: layout.height),
                               retainedIDs: Set([session.sourceID, hover.focusedItemID].compactMap { $0 })) { id in
             if let item = layout.items[id], let index = indices[id] {
-                reorderItem(item, feature: layout.features[item.entry.pluginID], index: index, count: layout.ids.count)
+                reorderItem(item, feature: layout.features[item.entry.id], index: index, count: layout.ids.count)
                     .environment(\.layoutDirection, layoutDirection)
             }
         }
@@ -151,7 +145,7 @@ struct PanelLayoutEditor: View {
             .accessibilityIdentifier("panel.layout.empty")
     }
 
-    private func reorderItem(_ item: MenuBarPanelLayoutEntry, feature: PluginPanelItem?, index: Int, count: Int) -> some View {
+    private func reorderItem(_ item: MenuBarPanelLayoutEntry, feature: PluginPanelRowSnapshot?, index: Int, count: Int) -> some View {
         PanelLayoutReorderItem(
             id: item.id, title: item.item.title, icon: item.item.iconName, index: index, count: count,
             isDragging: session.sourceID == item.id, panels: pluginHost.menuBarPanels, panelID: panelID,
@@ -165,13 +159,13 @@ struct PanelLayoutEditor: View {
             },
             moveToPanel: { move(item.entry, to: $0) }
         ) {
-            if item.surface == .dashboard {
-                pluginHost.componentViewItem(for: item.item.id, dismiss: onDismiss).content
+            if item.entry.kind == .widget {
+                pluginHost.componentViewItem(for: item.entry.id, dismiss: onDismiss).content
             } else if let feature {
                 FeatureRowView(
                     item: feature,
-                    indicator: pluginHost.primaryPanelIndicatorsByID[feature.id],
-                    compactIndicator: pluginHost.primaryPanelCompactIndicatorsByID[feature.id],
+                    indicator: pluginHost.rowIndicator(for: feature.id),
+                    compactIndicator: pluginHost.rowCompactIndicator(for: feature.id),
                     onDisclosureToggle: { _ in }, onSelectionChange: { _, _ in },
                     onNavigationSelectionChange: { _, _ in }, onNavigationHoverChange: { _, _, _ in },
                     onNavigationRowFrameChange: { _, _, _ in }, onDateChange: { _, _ in },
@@ -224,7 +218,7 @@ struct PanelLayoutEditor: View {
 private struct PanelLayoutEditorSnapshot {
     let ids: [String]
     let items: [String: MenuBarPanelLayoutEntry]
-    let features: [String: PluginPanelItem]
+    let features: [String: PluginPanelRowSnapshot]
     let frames: [PanelLayoutEntryFrame]
     let height: CGFloat
 
@@ -276,13 +270,13 @@ struct PanelLayoutEntryFrame: Equatable, Identifiable {
     static func frames(entries: [MenuBarPanelEntry], placement: ConfiguredMenuBarPanelLayout.Placement) -> [Self] {
         let components = Dictionary(uniqueKeysWithValues: placement.components.map { ($0.id, $0) })
         return entries.compactMap { entry in
-            switch entry.surface {
-            case .dashboard:
-                guard let item = components[entry.presentationID] else { return nil }
+            switch entry.kind {
+            case .widget:
+                guard let item = components[entry.id] else { return nil }
                 return Self(entry: entry, frame: PanelLayoutDestination.frame(item))
-            case .featurePanel:
-                guard let y = placement.featureOffsets[entry.presentationID],
-                      let height = placement.featureHeights[entry.presentationID] else { return nil }
+            case .row:
+                guard let y = placement.featureOffsets[entry.id],
+                      let height = placement.featureHeights[entry.id] else { return nil }
                 return Self(entry: entry, frame: CGRect(x: 0, y: y, width: ComponentPanelLayout.gridWidth,
                                                        height: height))
             }
@@ -300,7 +294,7 @@ struct PanelLayoutEntryFrame: Equatable, Identifiable {
             return dx * dx + dy * dy
         }
         let nearest = frames.enumerated().min { distance($0.element.frame) < distance($1.element.frame) }!
-        let after = nearest.element.entry.surface == .featurePanel
+        let after = nearest.element.entry.kind == .row
             ? point.y >= nearest.element.frame.midY : point.x >= nearest.element.frame.midX
         return nearest.offset + (after ? 1 : 0)
     }
@@ -309,7 +303,7 @@ struct PanelLayoutEntryFrame: Equatable, Identifiable {
         guard !frames.isEmpty else { return CGRect(x: 0, y: 0, width: ComponentPanelLayout.gridWidth, height: 3) }
         let index = min(max(offset, 0), frames.count)
         let item = frames[min(index, frames.count - 1)]
-        if item.entry.surface == .featurePanel {
+        if item.entry.kind == .row {
             return CGRect(x: 0, y: index == frames.count ? item.frame.maxY : item.frame.minY,
                           width: item.frame.width, height: 3)
         }

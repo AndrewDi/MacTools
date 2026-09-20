@@ -30,4 +30,4 @@ Keep every event in the business snapshot and preserve persistence scheduling. P
 
 `PluginShortcutResetRequesting` (host 1.3.1+) accepts an optional host callback with plugin-local definition IDs. Invoke it before removing dynamic definitions so the host can resolve them. The host validates each reset, preserves binding-change notifications, and finishes registration changes before returning, rebuilding shared presentation once per batch. Unknown IDs are ignored and cannot target another plugin. A plugin outside the host may leave the callback unset.
 
-The capability is additive; it does not alter the stored layout of `PluginSettingsContext` or other existing PluginKit values. Update minimum-host inventory checks for new API consumers and run the frozen PluginKit v6 client when changing the shared framework.
+The capability is additive; it does not alter the stored layout of `PluginSettingsContext` or other existing PluginKit values. Update minimum-host inventory checks for new API consumers and run the frozen PluginKit v7 client when changing the shared framework.

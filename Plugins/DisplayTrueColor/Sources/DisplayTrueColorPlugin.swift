@@ -21,7 +21,15 @@ private struct DisplayTrueColorPluginProvider: PluginProvider {
 
 /// Controls True Tone through CoreBrightness's private `CBAdaptationClient`.
 @MainActor
-final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginActionProviding {
+final class DisplayTrueColorPlugin: MacToolsPlugin, PluginActionProviding {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     private enum ActionID {
         static let setEnabled = "set-enabled"
         static let toggle = "toggle"
@@ -29,7 +37,7 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAc
 
     let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+    let rowDescriptor = PluginPanelRowDescriptor(
         controlStyle: .switch,
         menuActionBehavior: .keepPresented
     )
@@ -65,13 +73,12 @@ final class DisplayTrueColorPlugin: MacToolsPlugin, PluginPrimaryPanel, PluginAc
         isTrueColorEnabled = isSupported ? (client.isEnabled ?? false) : false
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: subtitle,
             isOn: isTrueColorEnabled,
-            isExpanded: false,
             isEnabled: isSupported,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: nil
         )

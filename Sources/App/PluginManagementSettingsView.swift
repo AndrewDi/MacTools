@@ -816,13 +816,13 @@ private extension PluginManagementItem {
             return AppL10n.plugins("plugin.capability.unknown", defaultValue: "插件功能")
         }
 
-        switch (capabilities.componentPanel, capabilities.primaryPanel) {
+        switch (capabilities.panelItems.contains(.widget), capabilities.panelItems.contains(.row)) {
         case (true, true):
-            return AppL10n.plugins("plugin.capability.both", defaultValue: "仪表盘与功能面板")
+            return AppL10n.plugins("plugin.capability.both", defaultValue: "卡片与功能行")
         case (true, false):
-            return AppL10n.plugins("plugin.capability.dashboard", defaultValue: "仪表盘")
+            return AppL10n.plugins("plugin.capability.widget", defaultValue: "卡片")
         case (false, true):
-            return AppL10n.plugins("plugin.capability.featurePanel", defaultValue: "功能面板")
+            return AppL10n.plugins("plugin.capability.row", defaultValue: "功能行")
         case (false, false):
             return AppL10n.plugins("plugin.capability.settingsOnly", defaultValue: "仅设置")
         }

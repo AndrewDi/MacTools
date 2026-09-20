@@ -58,12 +58,15 @@ enum MouseEnhancerHostCompatibility {
 
 @MainActor
 final class MouseEnhancerPlugin:
-    MacToolsPlugin,
-    PluginPrimaryPanel,
-    AccessibilityPermissionRefreshing,
-    PluginApplicationActivityStateHandling,
-    DisplayTopologyRefreshing,
-    PluginSettingsPresenting {
+    MacToolsPlugin, AccessibilityPermissionRefreshing, PluginApplicationActivityStateHandling, DisplayTopologyRefreshing, PluginSettingsPresenting {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     private enum PermissionID {
         static let accessibility = "accessibility"
         static let inputMonitoring = "input-monitoring"
@@ -83,7 +86,7 @@ final class MouseEnhancerPlugin:
     }
 
     let metadata: PluginMetadata
-    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
+    let rowDescriptor: PluginPanelRowDescriptor
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
@@ -137,7 +140,7 @@ final class MouseEnhancerPlugin:
         self.inputMonitoringAuthorizationStatus = inputMonitoringAuthorizationStatus
         self.openURL = openURL
         self.isAccessibilityGranted = accessibilityTrusted()
-        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        self.rowDescriptor = PluginPanelRowDescriptor(
             controlStyle: .button,
             menuActionBehavior: .keepPresented,
             buttonTitleProvider: { localization.string("panel.button.settings", defaultValue: "设置") }
@@ -195,13 +198,12 @@ final class MouseEnhancerPlugin:
         session.displayTopologyDidChange()
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: panelSubtitle,
             isOn: false,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: lastErrorMessage
         )

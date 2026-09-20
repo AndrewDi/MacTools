@@ -68,17 +68,21 @@ private struct AppHotkeyPluginProvider: PluginProvider {
 
 @MainActor
 final class AppHotkeyPlugin:
-    MacToolsPlugin,
-    PluginPrimaryPanel,
-    PluginActionProviding,
-    PluginLegacyActionShortcutProviding
-{
+    MacToolsPlugin, PluginActionProviding, PluginLegacyActionShortcutProviding {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
 
     // MARK: Metadata
 
     let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+    let rowDescriptor = PluginPanelRowDescriptor(
         controlStyle: .switch,
         menuActionBehavior: .keepPresented
     )
@@ -171,15 +175,14 @@ final class AppHotkeyPlugin:
         ])
     }
 
-    // MARK: PluginPrimaryPanel
+    // MARK: - Panel row
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: panelSubtitle,
             isOn: isEnabled,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: nil
         )

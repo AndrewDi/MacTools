@@ -25,11 +25,15 @@ private struct LaunchpadPluginProvider: PluginProvider {
 
 @MainActor
 final class LaunchpadPlugin:
-    MacToolsPlugin,
-    PluginPrimaryPanel,
-    PluginActionProviding,
-    PluginLegacyActionShortcutProviding
-{
+    MacToolsPlugin, PluginActionProviding, PluginLegacyActionShortcutProviding {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     private enum ControlID {
         static let execute = "execute"
     }
@@ -42,7 +46,7 @@ final class LaunchpadPlugin:
 
     let metadata: PluginMetadata
 
-    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
+    let rowDescriptor: PluginPanelRowDescriptor
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
@@ -76,7 +80,7 @@ final class LaunchpadPlugin:
                 defaultValue: "唤出应用网格，搜索并启动"
             )
         )
-        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        self.rowDescriptor = PluginPanelRowDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
             buttonTitleProvider: { localization.string("panel.button.open", defaultValue: "打开") }
@@ -193,13 +197,12 @@ final class LaunchpadPlugin:
         ])
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: metadata.defaultDescription,
             isOn: false,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: nil
         )

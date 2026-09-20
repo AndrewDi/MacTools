@@ -3,8 +3,7 @@
   "plugins": [
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": false,
+        "panelItems": [],
         "settings": "workspace"
       },
       "category": "system",
@@ -273,8 +272,10 @@
     },
     {
       "capabilities": {
-        "componentPanel": true,
-        "primaryPanel": true,
+        "panelItems": [
+          "row",
+          "widget"
+        ],
         "settings": "form"
       },
       "category": "monitoring",
@@ -628,8 +629,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": true,
-        "primaryPanel": false,
+        "panelItems": [
+          "widget"
+        ],
         "settings": "form"
       },
       "category": "monitoring",
@@ -843,8 +845,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -1136,8 +1139,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "audio",
@@ -1491,8 +1495,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "display",
@@ -1919,8 +1924,7 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": false,
+        "panelItems": [],
         "settings": "workspace"
       },
       "category": "productivity",
@@ -2240,8 +2244,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "display",
@@ -2592,8 +2597,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "display",
@@ -3022,8 +3028,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -3474,8 +3481,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "system",
@@ -4056,8 +4064,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": true,
-        "primaryPanel": false,
+        "panelItems": [
+          "widget"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -4296,8 +4305,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -5019,8 +5029,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "storage",
@@ -5286,8 +5297,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "workspace"
       },
       "category": "productivity",
@@ -5589,8 +5601,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": true,
-        "primaryPanel": false,
+        "panelItems": [
+          "widget"
+        ],
         "settings": "form"
       },
       "category": "monitoring",
@@ -5801,8 +5814,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "workspace"
       },
       "category": "storage",
@@ -6091,8 +6105,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "display",
@@ -6550,8 +6565,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "display",
@@ -6900,8 +6916,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "display",
@@ -7168,8 +7185,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "display",
@@ -7516,8 +7534,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -7762,8 +7781,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "display",
@@ -8145,8 +8165,7 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": false,
+        "panelItems": [],
         "settings": "form"
       },
       "category": "monitoring",
@@ -8364,8 +8383,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "storage",
@@ -8633,8 +8653,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "storage",
@@ -8904,8 +8925,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "system",
@@ -9258,8 +9280,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -9530,8 +9553,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "display",
@@ -9875,8 +9899,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "workspace"
       },
       "category": "system",
@@ -10335,8 +10360,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "workspace"
       },
       "category": "productivity",
@@ -10581,8 +10607,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "workspace"
       },
       "category": "monitoring",
@@ -10977,8 +11004,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "system",
@@ -11399,8 +11427,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "workspace"
       },
       "category": "productivity",
@@ -11832,8 +11861,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "system",
@@ -12100,8 +12130,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "system",
@@ -12369,8 +12400,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "workspace"
       },
       "category": "system",
@@ -13115,8 +13147,10 @@
     },
     {
       "capabilities": {
-        "componentPanel": true,
-        "primaryPanel": true,
+        "panelItems": [
+          "row",
+          "widget"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -13442,8 +13476,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "audio",
@@ -13785,8 +13820,7 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": false,
+        "panelItems": [],
         "settings": "form"
       },
       "category": "productivity",
@@ -14089,8 +14123,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -14330,8 +14365,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "display",
@@ -14673,8 +14709,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "display",
@@ -14978,8 +15015,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "productivity",
@@ -15244,8 +15282,7 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": false,
+        "panelItems": [],
         "settings": "form"
       },
       "category": "productivity",
@@ -15482,8 +15519,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "workspace"
       },
       "category": "productivity",
@@ -15771,8 +15809,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -16195,8 +16234,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "display",
@@ -16615,8 +16655,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -16892,8 +16933,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "display",
@@ -17237,8 +17279,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "audio",
@@ -17580,8 +17623,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "none"
       },
       "category": "system",
@@ -18012,8 +18056,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "system",
@@ -18286,8 +18331,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": true,
-        "primaryPanel": false,
+        "panelItems": [
+          "widget"
+        ],
         "settings": "form"
       },
       "category": "monitoring",
@@ -18565,8 +18611,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -18806,8 +18853,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "form"
       },
       "category": "productivity",
@@ -19169,8 +19217,7 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": false,
+        "panelItems": [],
         "settings": "form"
       },
       "category": "productivity",
@@ -21759,8 +21806,7 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": false,
+        "panelItems": [],
         "settings": "form"
       },
       "category": "productivity",
@@ -22148,8 +22194,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "workspace"
       },
       "category": "storage",
@@ -22421,8 +22468,9 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": true,
+        "panelItems": [
+          "row"
+        ],
         "settings": "workspace"
       },
       "category": "productivity",

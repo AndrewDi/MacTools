@@ -24,13 +24,15 @@ typealias ScreenshotRegionCapturerFactory = @MainActor (@escaping () -> Bool) ->
 
 @MainActor
 final class TranslatorPlugin:
-    MacToolsPlugin,
-    PluginPrimaryPanel,
-    PluginSettingsPresenting,
-    PluginActionProviding,
-    PluginActionPermissionProviding,
-    PluginLegacyActionShortcutProviding
-{
+    MacToolsPlugin, PluginSettingsPresenting, PluginActionProviding, PluginActionPermissionProviding, PluginLegacyActionShortcutProviding {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: rowDescriptor, state: rowState,
+                 action: { [weak self] in self?.handleAction($0) }),
+        ]
+    }
+
     private enum APIKeyState: Equatable {
         case unknown
         case present
@@ -40,7 +42,7 @@ final class TranslatorPlugin:
 
     let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+    let rowDescriptor = PluginPanelRowDescriptor(
         controlStyle: .switch,
         menuActionBehavior: .keepPresented
     )
@@ -135,13 +137,12 @@ final class TranslatorPlugin:
         }
     }
 
-    var primaryPanelState: PluginPanelState {
-        PluginPanelState(
+    var rowState: PluginPanelRowState {
+        PluginPanelRowState(
             subtitle: panelSubtitle,
             isOn: isShortcutEnabled,
-            isExpanded: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: nil
         )

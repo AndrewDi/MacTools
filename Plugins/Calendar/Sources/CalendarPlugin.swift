@@ -28,7 +28,21 @@ private struct CalendarPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSurfaceLifecycleHandling {
+final class CalendarPlugin: MacToolsPlugin {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .widget(id: "widget", initialPlacement: .dashboard,
+                    descriptor: descriptor, state: widgetState,
+                    content: { [weak self] context in
+                        self?.makeView(context: context) ?? AnyView(EmptyView())
+                    })
+                .onVisibilityChange { [weak self] visible in
+                    if visible { self?.panelItemDidBecomeVisible("widget") }
+                    else { self?.panelItemDidBecomeHidden("widget") }
+                },
+        ]
+    }
+
     private enum PermissionID {
         static let calendarEvents = "calendar-events"
         static let calendarAutomation = "calendar-automation"
@@ -44,9 +58,9 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
 
     let metadata: PluginMetadata
 
-    var descriptor: PluginComponentDescriptor {
-        PluginComponentDescriptor(
-            span: PluginComponentSpan(
+    var descriptor: PluginPanelWidgetDescriptor {
+        PluginPanelWidgetDescriptor(
+            span: PluginPanelWidgetSpan(
                 width: 4,
                 height: componentSpanHeight
             )!
@@ -61,7 +75,7 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
     private var measuredComponentSpanHeight: Int?
 
     private var componentSpanHeight: Int {
-        measuredComponentSpanHeight ?? PluginComponentPanelLayoutMetrics.default.heightSpan(
+        measuredComponentSpanHeight ?? PluginPanelWidgetLayoutMetrics.default.heightSpan(
             fittingContentHeight: CalendarComponentLayout.estimatedContentHeight(
                 showsRecentAgenda: settingsStore.showsRecentAgenda && viewModel.hasAgendaContent,
                 dayCount: viewModel.agendaDays.count,
@@ -112,12 +126,12 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
-    var componentPanelState: PluginComponentState {
-        PluginComponentState(
+    var widgetState: PluginPanelWidgetState {
+        PluginPanelWidgetState(
             subtitle: metadata.defaultDescription,
             isActive: false,
             isEnabled: true,
-            isVisible: true,
+            isAvailable: true,
             errorMessage: nil
         )
     }
@@ -241,7 +255,7 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
         ]
     }
 
-    func makeView(context: PluginComponentContext) -> AnyView {
+    func makeView(context: PluginPanelWidgetContext) -> AnyView {
         AnyView(
             CalendarComponentView(
                 context: context,
@@ -252,7 +266,7 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
                     self?.handleCalendarEventsPermissionAction()
                 },
                 onContentHeightChange: { [weak self] height in
-                    guard context.isPanelVisible else { return }
+                    guard !context.isPreview else { return }
                     self?.componentContentHeightDidChange(height)
                 }
             )
@@ -262,7 +276,7 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
     func componentContentHeightDidChange(_ height: CGFloat) {
         guard height.isFinite, height > 0 else { return }
 
-        let spanHeight = PluginComponentPanelLayoutMetrics.default.heightSpan(fittingContentHeight: height)
+        let spanHeight = PluginPanelWidgetLayoutMetrics.default.heightSpan(fittingContentHeight: height)
         guard spanHeight != measuredComponentSpanHeight else { return }
         measuredComponentSpanHeight = spanHeight
         onStateChange?()
@@ -270,16 +284,16 @@ final class CalendarPlugin: MacToolsPlugin, PluginComponentPanel, PluginPanelSur
 
     func refresh() { viewModel.refreshIfVisible() }
 
-    func panelSurfaceDidBecomeVisible(_ surface: PluginPanelSurface) {
-        guard surface == .component else {
+    func panelItemDidBecomeVisible(_ surface: String) {
+        guard surface == "widget" else {
             return
         }
 
         viewModel.start()
     }
 
-    func panelSurfaceDidBecomeHidden(_ surface: PluginPanelSurface) {
-        guard surface == .component else {
+    func panelItemDidBecomeHidden(_ surface: String) {
+        guard surface == "widget" else {
             return
         }
 

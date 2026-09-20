@@ -28,7 +28,7 @@ Example.mactoolsplugin/
 
 `plugin.json` is read before loading executable code:
 
-PluginKit v6 first ships in MacTools 1.3.0. Every v6 package must declare `minHostVersion` of at least `1.3.0`; raise it again when using APIs introduced in a later host. Older ABI packages remain discoverable for updates but cannot load into the v6 host.
+This branch uses PluginKit v7 with a minimum host version of `1.3.1`. Rebuild packages for this ABI; older packages remain discoverable for updates but cannot load into the v7 host. Released v6 hosts retain their own catalog.
 
 ```json
 {
@@ -46,13 +46,12 @@ PluginKit v6 first ships in MacTools 1.3.0. Every v6 package must declare `minHo
     }
   },
   "version": "1.0.0",
-  "minHostVersion": "1.3.0",
-  "pluginKitVersion": 6,
+  "minHostVersion": "1.3.1",
+  "pluginKitVersion": 7,
   "bundleRelativePath": "Example.bundle",
   "factoryClass": "Example.ExamplePluginFactory",
   "capabilities": {
-    "primaryPanel": true,
-    "componentPanel": false,
+    "panelItems": ["row"],
     "settings": "form"
   },
   "permissions": [],
@@ -144,13 +143,13 @@ When a change touches `Sources/MacToolsPluginKit/`, it is package-relevant for e
 
 Users can remove every widget or add multiple copies of the same plugin. A widget is a presentation entry, not a new plugin instance: installation, activation, shortcuts, and independently enabled background services remain plugin-owned.
 
-Use `PluginPanelSurfaceLifecycleHandling` for work required by the currently visible panel. The host sends one visibility transition per plugin and surface, regardless of copy count; switching between panels containing the same surface keeps that consumer alive. Removing the last visible copy releases it. Plugins with multiple foreground surfaces should track a set of consumers, as System Status does.
+Declare multiple named views with `MacToolsPlugin.panelItems`; see [Panel items](panel-items.md) for IDs, renderer types, defaults, and migration. Use each item’s `onVisibilityChange` for work required by the presented panel. Copies of the same item share one visibility transition, while distinct items are separate consumers. Switching panels containing the same item does not restart its work.
 
-Component views are mounted near the scroll viewport and can be recycled. Keep durable selection state and business tasks in a plugin-owned model; reserve view-local state for transient interaction. Do not start polling or refresh business data from each copy's `onAppear`. Library previews receive `PluginComponentContext.isPanelVisible == false`: they must not acquire foreground consumers or change live layout measurements. That context distinguishes preview creation from live content; lifecycle callbacks are the authority for subsequent panel visibility changes.
+Component views are mounted near the scroll viewport and can be recycled. Keep durable selection state and business tasks in a plugin-owned model; reserve view-local state for transient interaction. Do not start polling or refresh business data from each copy's `onAppear`. Library previews receive `PluginPanelWidgetContext.isPreview == true`: they must not acquire foreground consumers or change live layout measurements. That context distinguishes preview creation from live content; lifecycle callbacks are the authority for subsequent panel visibility changes.
 
 ## Settings UI
 
-Plugin settings are hosted by MacTools. PluginKit 6 exposes one `settingsPage` entry point with two explicit layouts:
+Plugin settings are hosted by MacTools. PluginKit 7 exposes one `settingsPage` entry point with two explicit layouts:
 
 - `PluginSettingsPage.form` is the default. Describe standard controls with `PluginSettingsSection`, `PluginSettingsRow`, and `PluginSettingsControl`; the host renders the native grouped form, search entries, validation, permissions, and shortcuts.
 - Reserve segmented pickers for a few short labels; use `.menu` when options are longer or localization can make the row overflow. Declarative sliders should provide `valueFormat` for a live host-rendered readout. Custom settings use `PluginSettingsSlider` to keep stepped values without drawing dense tick marks.

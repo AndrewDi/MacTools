@@ -989,7 +989,7 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         PluginHost(
             plugins: plugins,
             shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             automaticPreferencesBackupCoordinator: coordinator,
             globalShortcutManager: GlobalShortcutManager(),

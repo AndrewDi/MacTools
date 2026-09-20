@@ -16,7 +16,7 @@ final class EmptyTrashPluginTests: XCTestCase {
 
         let requestCount = await counter.requestCountValue()
         XCTAssertEqual(requestCount, 0)
-        XCTAssertFalse(plugin.primaryPanelState.isEnabled)
+        XCTAssertFalse(plugin.rowState.isEnabled)
     }
 
     func testPrimaryPanelVisibilityRefreshesTrashCount() async {
@@ -26,13 +26,13 @@ final class EmptyTrashPluginTests: XCTestCase {
             countRefreshDelay: .zero
         )
 
-        plugin.panelSurfaceDidBecomeVisible(.primary)
+        plugin.panelItemDidBecomeVisible("control")
 
         await waitForRequestCount(1, counter: counter)
         let requestCount = await counter.requestCountValue()
         XCTAssertEqual(requestCount, 1)
-        XCTAssertTrue(plugin.primaryPanelState.isEnabled)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "3 个项目")
+        XCTAssertTrue(plugin.rowState.isEnabled)
+        XCTAssertEqual(plugin.rowState.subtitle, "3 个项目")
     }
 
     func testVisibleCountRefreshesAreDebounced() async {
@@ -42,7 +42,7 @@ final class EmptyTrashPluginTests: XCTestCase {
             countRefreshDelay: .zero
         )
 
-        plugin.panelSurfaceDidBecomeVisible(.primary)
+        plugin.panelItemDidBecomeVisible("control")
         plugin.refresh()
         plugin.refresh()
 
@@ -83,7 +83,7 @@ final class EmptyTrashPluginTests: XCTestCase {
         XCTAssertEqual(result, .succeeded())
         let emptyCount = await emptyProbe.emptyCount()
         XCTAssertEqual(emptyCount, 1)
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "废纸篓为空")
+        XCTAssertEqual(plugin.rowState.subtitle, "废纸篓为空")
     }
 
     func testCanonicalActionFailsWhenTrashCannotBeCounted() async throws {

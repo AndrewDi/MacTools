@@ -2,7 +2,7 @@
 
 MacTools dynamic plugins use one catalog-driven flow for both production distribution and local development.
 
-- PluginKit 2 production builds read the legacy `catalog.json` URL. PluginKit 3 and later builds read versioned URLs. MacTools through 1.1.6 remains on the immutable PluginKit v4 catalog at `v4/catalog.json`; MacTools 1.2.0 remains on the PluginKit v5/schema-2 catalog at `v5/catalog.json`; MacTools 1.3.0 and later use PluginKit v6/schema 3 at `v6/catalog.json`.
+- PluginKit 2 production builds read the legacy `catalog.json` URL. PluginKit 3 and later builds read versioned URLs. MacTools through 1.1.6 remains on the immutable PluginKit v4 catalog at `v4/catalog.json`; MacTools 1.2.0 remains on the PluginKit v5/schema-2 catalog at `v5/catalog.json`; Released PluginKit v6 builds retain `v6/catalog.json`; this branch uses PluginKit v7/schema 3 at `v7/catalog.json`.
 - Each catalog contains packages for one PluginKit ABI line. The legacy v2 catalog is kept unchanged when a new ABI is released, so older app builds continue to work.
 - `minimumHostVersion` at the catalog root is the oldest host that can parse that catalog schema. Each entry declares its own install requirement; older hosts keep the catalog available and show newer entries as incompatible instead of rejecting the whole marketplace.
 - Local development reads a Debug-only `file://` catalog, usually configured with `MACTOOLS_PLUGIN_CATALOG_URL`.
@@ -16,7 +16,7 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
   "catalogID": "com.ggbond.mactools.plugins",
   "generatedAt": "2026-05-16T12:00:00Z",
   "minimumHostVersion": "1.2.1",
-  "pluginKitVersion": 6,
+  "pluginKitVersion": 7,
   "plugins": [
     {
       "id": "com.ggbond.mactools.demo",
@@ -33,11 +33,10 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
         }
       },
       "version": "1.0.0",
-      "minimumHostVersion": "1.3.0",
-      "pluginKitVersion": 6,
+      "minimumHostVersion": "1.3.1",
+      "pluginKitVersion": 7,
       "capabilities": {
-        "primaryPanel": true,
-        "componentPanel": false,
+        "panelItems": ["row"],
         "settings": "form"
       },
       "permissions": [],
@@ -63,7 +62,7 @@ MacTools dynamic plugins use one catalog-driven flow for both production distrib
 
 Catalog schema 2 follows PluginKit 4 and later manifests: `capabilities.settings` is `none`, `form`, or `workspace`. Schema 1 and its boolean `configuration` capability remain in older ABI catalogs and are not rewritten. A newer host may decode an installed package from an older ABI only far enough to identify and update it; it never loads or renders an incompatible settings API.
 
-Catalog schema 3 is additive. It preserves every schema-2 package field and may also project `presentation`, `discovery`, `requirements`, `privacy`, `actions`, `setup`, and `relationships` from the checked-in source manifest. Schema-3 hosts accept both schema 2 and schema 3, so existing sparse catalogs and caches continue to work. The schema-3 catalog keeps its schema parsing floor of 1.2.1. PluginKit v6 entries require MacTools 1.3.0 or later and are published at a separate v6 endpoint, leaving the released 1.2.0 endpoint unchanged. The catalog signature covers every enriched field.
+Catalog schema 3 is additive. It preserves every schema-2 package field and may also project `presentation`, `discovery`, `requirements`, `privacy`, `actions`, `setup`, and `relationships` from the checked-in source manifest. Schema-3 hosts accept both schema 2 and schema 3, so existing sparse catalogs and caches continue to work. The schema-3 catalog keeps its schema parsing floor of 1.2.1. PluginKit v7 entries require MacTools 1.3.1 or later and use a separate v7 endpoint. Released v4, v5, and v6 endpoints remain unchanged. The catalog signature covers every enriched field.
 
 ## Product and Capability Metadata
 
@@ -126,6 +125,7 @@ PluginKit 3 -> https://mactools.ggbond.app/plugins/v3/catalog.json
 PluginKit 4 -> https://mactools.ggbond.app/plugins/v4/catalog.json
 PluginKit 5 / schema 2 -> https://mactools.ggbond.app/plugins/v5/catalog.json
 PluginKit 6 / schema 3 -> https://mactools.ggbond.app/plugins/v6/catalog.json
+PluginKit 7 / schema 3 -> https://mactools.ggbond.app/plugins/v7/catalog.json
 PluginKit N -> https://mactools.ggbond.app/plugins/vN/catalog.json
 ```
 
@@ -235,7 +235,7 @@ Recommended production flow is an incremental batch plugin release:
 7. If package-relevant files changed inside a plugin or shared PluginKit code changed but that plugin version did not increase, the workflow fails before signing or uploading. A `pluginKitVersion` change automatically becomes a full `mode=all` rebuild and replaces the catalog for that ABI line; other exceptional shared paths can still be supplied explicitly with `--shared-path`.
 8. The workflow builds, signs, zips, and uploads only the selected plugin packages.
 9. For an ABI migration, the workflow generates a complete catalog from all rebuilt packages. For later releases within an ABI line, it generates a delta catalog and merges it into that line's catalog, keeping unchanged entries pointing at their existing assets.
-10. The signed catalog is committed to its compatibility path. The released PluginKit v5/schema-2 catalog remains at `docs/plugins/v5/catalog.json`; PluginKit v6/schema 3 is written to `docs/plugins/v6/catalog.json`.
+10. The signed catalog is committed to its compatibility path. The released PluginKit v5/schema-2 catalog remains at `docs/plugins/v5/catalog.json`; Released PluginKit v6/schema 3 remains at `docs/plugins/v6/catalog.json`; new PluginKit v7 packages go to `docs/plugins/v7/catalog.json`.
 11. `Deploy Pages` publishes the signed catalog to GitHub Pages.
 
 The batch tag is stored per plugin entry through `package.url` and `releaseNotesURL`, so one catalog can point different plugins to different release tags without changing host code.
@@ -255,7 +255,7 @@ GitHub Release: plugins-1.0.1
 
 Unchanged plugin entries remain valid because the catalog preserves their previous URLs, checksums, and versions. They are not shown as updates in the app unless their catalog version is higher than the installed version.
 
-The v6 migration sets only the host ABI version and each source manifest's `pluginKitVersion` and `minHostVersion`. Keep individual package `version` fields unchanged until `make release` prepares the plugin batch. It selects every plugin, bumps versions that have not already advanced, and uses the immutable v5 catalog only as a comparison baseline. Do not hand-generate a v6 catalog before that release. After the signed catalog is committed and deployed, prepare the 1.3.0 app release; the helper owns its build number and compiled changelog.
+The v7 migration changes the host ABI and source manifests’ `pluginKitVersion`, `minHostVersion`, and panel capabilities. Keep package versions unchanged until `make release` prepares a complete rebuilt batch. Do not hand-generate or overwrite signed catalogs. Publish the v7 batch and catalog, wait for deployment verification, and only then prepare the matching app release; release tooling owns version bumps and compiled changelogs.
 
 `pluginKitVersion` is the PluginKit ABI boundary. When it changes, every plugin package must be rebuilt and each plugin's manifest version must increase during release so installed users see an update. The standard `make release` flow handles these manifest bumps automatically. The new host reads the new catalog and updates all installed plugins before loading any dynamic bundle. The catalog merge step rejects mixed PluginKit versions.
 
