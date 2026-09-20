@@ -1,6 +1,7 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import OSLog
 import SwiftUI
 import MacToolsPluginKit
 
@@ -385,7 +386,7 @@ final class DisplayVolumePlugin:
             onStateChange?()
         case let .setSlider(controlID, value, phase):
             guard let displayID = Self.parseDisplayID(from: controlID) else {
-                DisplayVolumeLog.plugin.error(
+                Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayVolumePlugin").error(
                     "invalid slider control id \(controlID, privacy: .public)"
                 )
                 return

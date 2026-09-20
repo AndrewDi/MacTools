@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import MacToolsPluginKit
+import OSLog
 
 private extension NSLock {
     func withLock<T>(_ body: () throws -> T) rethrows -> T {
@@ -71,7 +72,7 @@ final class SystemDisplayVolumeBackendBuilder: DisplayVolumeBackendBuilding {
             return nil
         }
 
-        DisplayVolumeLog.backend.debug(
+        Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayVolumeBackend").debug(
             "selected DDC volume backend for \(display.name, privacy: .public)"
         )
         return backend

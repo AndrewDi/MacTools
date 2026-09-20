@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import MacToolsPluginKit
+import OSLog
 
 private final class WeakVolumeControllerRef: @unchecked Sendable {
     weak var value: DisplayVolumeController?
@@ -62,7 +63,7 @@ final class DisplayVolumeController: DisplayVolumeControlling {
     private let displayProvider: DisplayProviding
     private let backendBuilder: DisplayVolumeBackendBuilding
     private let localization: PluginLocalization
-    private let logger = DisplayVolumeLog.controller
+    private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayVolumeController")
     private let shortWriteDelay: TimeInterval
     private let minimumWriteInterval: TimeInterval
     private let writeTimeout: Duration

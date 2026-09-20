@@ -4,6 +4,7 @@ import IOKit
 import IOKit.graphics
 import IOKit.i2c
 import MacToolsPluginKit
+import OSLog
 
 private enum DDCVolumeControl {
     static let volume: UInt8 = 0x62
@@ -40,7 +41,7 @@ final class Arm64DDCTransport: DDCVolumeTransport, @unchecked Sendable {
         guard
             let service = matchedService ?? PrivateDDCBridge.createService(for: display.id)
         else {
-            DisplayVolumeLog.backend.info(
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayVolumeBackend").info(
                 "DDC ARM64 transport unavailable for \(display.name, privacy: .public): no IOAV service"
             )
             return nil
@@ -48,7 +49,7 @@ final class Arm64DDCTransport: DDCVolumeTransport, @unchecked Sendable {
 
         self.display = display
         self.service = service
-        DisplayVolumeLog.backend.debug(
+        Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayVolumeBackend").debug(
             "DDC ARM64 transport ready for \(display.name, privacy: .public)"
         )
     }
@@ -797,7 +798,7 @@ private enum PrivateDDCBridge {
     static func createService(for displayID: CGDirectDisplayID) -> CFTypeRef? {
         guard let service = framebufferService(for: displayID), let createWithService else {
             if createWithService == nil {
-                DisplayVolumeLog.backend.info("DDC private symbol IOAVServiceCreateWithService is unavailable")
+                Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayVolumeBackend").info("DDC private symbol IOAVServiceCreateWithService is unavailable")
             }
             return nil
         }
@@ -807,7 +808,7 @@ private enum PrivateDDCBridge {
 
     static func framebufferService(for displayID: CGDirectDisplayID) -> io_service_t? {
         guard let cgsServiceForDisplay else {
-            DisplayVolumeLog.backend.info("DDC private symbol CGSServiceForDisplayNumber is unavailable")
+            Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "DisplayVolumeBackend").info("DDC private symbol CGSServiceForDisplayNumber is unavailable")
             return nil
         }
 
