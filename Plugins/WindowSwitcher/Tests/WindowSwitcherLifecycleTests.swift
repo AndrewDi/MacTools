@@ -26,13 +26,18 @@ private final class ControlledSwitcherCatalog: WindowSwitcherCatalog {
     var onChange: (() -> Void)?
     var focusedWindowID: String? = "a"
     var isInitialDiscoveryComplete = true
+    var invocationReady: Bool?
+    var isInvocationReady: Bool { invocationReady ?? isInitialDiscoveryComplete }
+    var prepareInvocation: (() -> Void)?
+    func prepareForInvocation() { prepareInvocation?() }
     var windows: [WindowSwitcherAppEntry] = []
     var activated: [String] = []
     var activationResult: WindowSwitcherActionResult = .succeeded
     var isRunning = false
     func start() { isRunning = true }
     func stop() { isRunning = false }
-    func refresh() {}
+    var refreshCount = 0
+    func refresh() { refreshCount += 1 }
     func entries(sortMode: WindowSwitcherSortMode) -> [WindowSwitcherAppEntry] { windows }
     func activate(_ entry: WindowSwitcherAppEntry, intent: WindowSwitcherActivationIntent) async -> WindowSwitcherActionResult {
         activated.append(entry.id)
@@ -44,6 +49,33 @@ private final class ControlledSwitcherCatalog: WindowSwitcherCatalog {
 
 @MainActor
 final class WindowSwitcherLifecycleTests: XCTestCase {
+    func testDisplayTopologyChangeRefreshesCatalogWithoutRestartingShortcuts() {
+        let catalog = ControlledSwitcherCatalog(), tap = ControlledSwitcherTap()
+        let plugin = plugin(catalog: catalog, tap: tap)
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        plugin.refreshDisplayTopology()
+        XCTAssertEqual(catalog.refreshCount, 1)
+        XCTAssertTrue(tap.isRunning)
+    }
+
+    func testQuickReleaseWaitsForFreshNonemptyInvocationAndKeepsNavigation() async {
+        let catalog = ControlledSwitcherCatalog(), tap = ControlledSwitcherTap()
+        catalog.windows = [entry("a"), entry("b"), entry("c")]
+        catalog.prepareInvocation = { catalog.invocationReady = false }
+        let plugin = plugin(catalog: catalog, tap: tap)
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        tap.onShortcutPressed(false, false, false)
+        tap.onShortcutPressed(false, false, true)
+        tap.onShortcutReleased()
+        XCTAssertNotNil(plugin.pendingInvocation)
+        XCTAssertTrue(catalog.activated.isEmpty)
+        catalog.windows = [entry("a"), entry("d"), entry("e")]
+        catalog.invocationReady = true
+        catalog.onChange?()
+        await eventually { !catalog.activated.isEmpty }
+        XCTAssertEqual(catalog.activated, ["e"])
+        XCTAssertNil(plugin.pendingInvocation)
+    }
 
     func testBackgroundCatalogUpdatesDoNotInvalidateHostSettings() {
         let catalog = ControlledSwitcherCatalog(), tap = ControlledSwitcherTap()
@@ -145,10 +177,10 @@ final class WindowSwitcherLifecycleTests: XCTestCase {
         plugin.activate(context: PluginRuntimeContext(pluginID: WindowSwitcherConstants.pluginID, storage: WindowSwitcherMemoryStorage()))
         return plugin
     }
-    private func eventually(_ predicate: () -> Bool) async {
+    private func eventually(_ predicate: () -> Bool, file: StaticString = #filePath, line: UInt = #line) async {
         let deadline = ContinuousClock.now + .seconds(2)
         while !predicate(), ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(5)) }
-        XCTAssertTrue(predicate())
+        XCTAssertTrue(predicate(), file: file, line: line)
     }
 
     func testLegacySessionRestoresSavedKeyAndKeepsItWhenCatalogRefreshes() async {
@@ -190,6 +222,7 @@ final class WindowSwitcherLifecycleTests: XCTestCase {
         tap.onShortcutPressed(false, false, false)
         XCTAssertEqual(plugin.session?.selectedID, "b")
         await eventually { overlay.isVisible }
+        XCTAssertNotNil(plugin.session, "The session must remain open until a user selection")
         XCTAssertEqual(NSWorkspace.shared.frontmostApplication?.processIdentifier, previousApplicationPID)
         overlay.onSelect?(catalog.windows[1])
         await eventually { catalog.activated == ["b"] }

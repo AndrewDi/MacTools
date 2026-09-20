@@ -97,7 +97,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
             requestWindowActivation: { _, _, _ in true }, windowIsRevealable: { _, _ in true }, windowIsOnScreen: { _, _ in
                 access.update { $0.onScreenReads += 1 }
                 return access.read { $0.onScreenReads >= 3 }
-            }, windowIsOnActiveSpace: { _ in nil }, invalidated: {})
+            }, windowIsOnActiveSpace: { _ in nil }, invalidated: { _ in })
         defer { worker.stop() }
         let result = await worker.focusOffSpaceWindow(.init(number: 7, element: element), cancellation: .init())
         XCTAssertEqual(result, .succeeded)
@@ -114,7 +114,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
         }
         let worker = WindowSwitcherProcessWorker(pid: 42, launchDate: nil, access: access,
             requestWindowActivation: { _, _, _ in true }, windowIsRevealable: { _, _ in true },
-            windowIsOnScreen: { _, _ in true }, windowIsOnActiveSpace: { _ in nil }, invalidated: {})
+            windowIsOnScreen: { _, _ in true }, windowIsOnActiveSpace: { _ in nil }, invalidated: { _ in })
         defer { worker.stop() }
         let result = await worker.focusOffSpaceWindow(.init(number: 7, element: AXUIElementCreateApplication(42)), cancellation: .init())
         XCTAssertEqual(result, .succeeded)
@@ -130,7 +130,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
         }
         let worker = WindowSwitcherProcessWorker(pid: 42, launchDate: nil, access: access,
             requestWindowActivation: { _, _, _ in true }, windowIsRevealable: { _, _ in true },
-            windowIsOnScreen: { _, _ in true }, windowIsOnActiveSpace: { _ in true }, invalidated: {})
+            windowIsOnScreen: { _, _ in true }, windowIsOnActiveSpace: { _ in true }, invalidated: { _ in })
         defer { worker.stop() }
         let result = await worker.focusOffSpaceWindow(.init(number: 7, element: AXUIElementCreateApplication(42)), cancellation: .init())
         XCTAssertEqual(result, .failed)
@@ -145,7 +145,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
                 access.update { $0.actions.append("exactFront") }
                 return access.read { !$0.minimized && $0.minimizedReadFailures == 0 }
             }, windowIsRevealable: { _, _ in true }, windowIsOnScreen: { _, _ in true },
-            windowIsOnActiveSpace: { _ in true }, invalidated: {})
+            windowIsOnActiveSpace: { _ in true }, invalidated: { _ in })
         defer { worker.stop() }
         let result = await worker.focusOffSpaceWindow(.init(number: 7, element: AXUIElementCreateApplication(42)), cancellation: .init())
         XCTAssertEqual(result, .succeeded)
@@ -159,7 +159,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
         let worker = WindowSwitcherProcessWorker(pid: 42, launchDate: nil, access: access,
             requestWindowActivation: { _, _, _ in access.update { $0.actions.append("exactFront") }; return true },
             windowIsRevealable: { _, _ in true }, windowIsOnScreen: { _, _ in true },
-            windowIsOnActiveSpace: { _ in true }, invalidated: {})
+            windowIsOnActiveSpace: { _ in true }, invalidated: { _ in })
         defer { worker.stop() }
         let result = await worker.focusOffSpaceWindow(.init(number: 7, element: AXUIElementCreateApplication(42)), cancellation: cancellation)
         XCTAssertEqual(result, .cancelled)
@@ -170,7 +170,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
         let access = ControlledWindowAXAccess()
         access.update { $0.windowNumber = 7 }
         let worker = WindowSwitcherProcessWorker(pid: 42, launchDate: nil, access: access,
-            requestWindowActivation: { _, _, _ in true }, windowIsRevealable: { _, _ in false }, windowIsOnScreen: { _, _ in true }, windowIsOnActiveSpace: { _ in nil }, invalidated: {})
+            requestWindowActivation: { _, _, _ in true }, windowIsRevealable: { _, _ in false }, windowIsOnScreen: { _, _ in true }, windowIsOnActiveSpace: { _ in nil }, invalidated: { _ in })
         defer { worker.stop() }
         let result = await worker.focusOffSpaceWindow(.init(number: 7, element: AXUIElementCreateApplication(42)), cancellation: .init())
         XCTAssertEqual(result, .unavailable)
@@ -185,7 +185,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
             requestWindowActivation: { _, _, _ in true }, windowIsRevealable: { _, _ in true }, windowIsOnScreen: { _, _ in
                 cancellation.cancel()
                 return false
-            }, windowIsOnActiveSpace: { _ in nil }, invalidated: {})
+            }, windowIsOnActiveSpace: { _ in nil }, invalidated: { _ in })
         defer { worker.stop() }
         let result = await worker.focusOffSpaceWindow(.init(number: 7, element: AXUIElementCreateApplication(42)), cancellation: cancellation)
         XCTAssertEqual(result, .cancelled)
@@ -201,7 +201,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
             windowIsOnScreen: { _, _ in true }, windowIsOnActiveSpace: { _ in
                 access.update { $0.onScreenReads += 1 }
                 return access.read { $0.onScreenReads >= 3 }
-            }, invalidated: {})
+            }, invalidated: { _ in })
         defer { worker.stop() }
         let result = await worker.focusOffSpaceWindow(.init(number: 7, element: AXUIElementCreateApplication(42)), cancellation: .init())
         XCTAssertEqual(result, .succeeded)
@@ -225,7 +225,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)] }
         let clock = WindowSwitcherTestClock()
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, uptime: { clock.now }, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, uptime: { clock.now }, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         access.update { $0.delayRead = { clock.advance(1) } }
@@ -242,7 +242,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
             $0.windows = [AXUIElementCreateApplication(201)]; $0.minimized = true
             $0.restoreRequested = { intent.cancel() }
         }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let result = await worker.perform(try XCTUnwrap(initial.windows.first?.id), close: false, cancellation: intent)
@@ -250,16 +250,9 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(access.read { $0.actions }, [kAXMinimizedAttribute])
     }
 
-    func testObserverDoesNotRescanAppsForEveryDragFrame() {
-        XCTAssertFalse(WindowSwitcherProcessWorker.windowNotifications.contains(kAXMovedNotification))
-        XCTAssertFalse(WindowSwitcherProcessWorker.windowNotifications.contains(kAXResizedNotification))
-        XCTAssertTrue(WindowSwitcherProcessWorker.windowNotifications.contains(kAXUIElementDestroyedNotification))
-        XCTAssertTrue(WindowSwitcherProcessWorker.windowNotifications.contains(kAXTitleChangedNotification))
-    }
-
     func testSupersededForegroundRequestWaitingBehindReadNeverActivates() async {
         let access = ControlledWindowAXAccess()
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let entered = expectation(description: "slow AX read began")
         let release = DispatchSemaphore(value: 0)
@@ -280,7 +273,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
 
     func testForegroundRequestIsSubmittedOnceAndStoppedWorkerDoesNotActivate() async {
         let access = ControlledWindowAXAccess()
-        let worker = WindowSwitcherProcessWorker(pid: 101, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 101, launchDate: nil, access: access, invalidated: { _ in })
         let result = await worker.requestApplicationActivation()
         XCTAssertEqual(result, .success)
         XCTAssertEqual(access.read { $0.actions }, [kAXFrontmostAttribute])
@@ -298,7 +291,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
                 $0.windows = [AXUIElementCreateApplication(201)]
                 $0.raiseSucceeds = false; $0.focusAfterRaise = focusAfterRaise
             }
-            let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+            let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
             let initial = await worker.scan()
             let result = await worker.perform(try XCTUnwrap(initial.windows.first?.id), close: false)
             XCTAssertEqual(result, focusAfterRaise ? .succeeded : .failed)
@@ -314,7 +307,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
             $0.minimized = true
             $0.restoreReadFailures = 3
         }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let result = await worker.perform(try XCTUnwrap(initial.windows.first?.id), close: false)
@@ -332,7 +325,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
             $0.restoreReadFailures = 20
             $0.restoreRequested = { restored.fulfill() }
         }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let id = try XCTUnwrap(initial.windows.first?.id)
@@ -347,7 +340,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testTransientReadFailureDuringActivationSettlesWithoutRepeatingActions() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)]; $0.minimizedReadFailures = 1 }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let result = await worker.perform(try XCTUnwrap(initial.windows.first?.id), close: false)
@@ -358,7 +351,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testFailedReadRetainsIdentityWhileSuccessfulEmptyReadRemovesIt() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201), AXUIElementCreateApplication(202)] }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         XCTAssertEqual(initial.windows.count, 2)
@@ -377,7 +370,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testApplicationRootInWindowListIsUnavailableRatherThanEmpty() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)] }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         access.update { $0.windows = [AXUIElementCreateApplication(200)] }
@@ -391,7 +384,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testMetadataFailureDoesNotRemoveKnownWindowOrInventWindowlessApp() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)] }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         access.update { $0.metadataAvailable = false }
@@ -404,7 +397,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testCancelledActionWaitingBehindSlowReadNeverSubmits() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)] }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let id = try XCTUnwrap(initial.windows.first?.id)
@@ -427,8 +420,8 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
         let slow = ControlledWindowAXAccess(), fast = ControlledWindowAXAccess()
         slow.update { $0.windows = [AXUIElementCreateApplication(201)] }
         fast.update { $0.windows = [AXUIElementCreateApplication(301)] }
-        let slowWorker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: slow, invalidated: {})
-        let fastWorker = WindowSwitcherProcessWorker(pid: 300, launchDate: nil, access: fast, invalidated: {})
+        let slowWorker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: slow, invalidated: { _ in })
+        let fastWorker = WindowSwitcherProcessWorker(pid: 300, launchDate: nil, access: fast, invalidated: { _ in })
         defer { slowWorker.stop(); fastWorker.stop() }
         let entered = expectation(description: "slow process is blocked")
         let completed = expectation(description: "other process completes before slow process resumes")
@@ -445,7 +438,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testRaiseOnlyAppDoesNotRequireWritingMinimizedStateAndIsVerified() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)]; $0.restoreSucceeds = false }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let result = await worker.perform(try XCTUnwrap(initial.windows.first?.id), close: false)
@@ -457,7 +450,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testDelayedFocusAcknowledgementAfterRaiseDoesNotFailEarly() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)]; $0.focusReadFailuresAfterRaise = 5 }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let result = await worker.perform(try XCTUnwrap(initial.windows.first?.id), close: false)
@@ -468,7 +461,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testUnconfirmedFocusRetriesObservationWithoutResubmittingRaise() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)]; $0.focusAfterRaise = false }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let result = await worker.perform(try XCTUnwrap(initial.windows.first?.id), close: false)
@@ -479,7 +472,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testPreflightRetriesUnavailableListButRejectsConfirmedClosure() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)] }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let id = try XCTUnwrap(initial.windows.first?.id)
@@ -501,7 +494,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
                 $0.windowListReadFailuresAfterRaise = failures
                 $0.closesAfterRaise = closes
             }
-            let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+            let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
             let initial = await worker.scan()
             let result = await worker.perform(try XCTUnwrap(initial.windows.first?.id), close: false)
             XCTAssertEqual(result, expected)
@@ -513,7 +506,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testClosedTargetAndFailedRestoreNeverRaiseAnotherWindow() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)]; $0.minimized = true; $0.restoreSucceeds = false }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let id = try XCTUnwrap(initial.windows.first?.id)
@@ -529,7 +522,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
     func testCloseRequestDoesNotOptimisticallyDeleteWindow() async throws {
         let access = ControlledWindowAXAccess()
         access.update { $0.windows = [AXUIElementCreateApplication(201)] }
-        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 200, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let initial = await worker.scan()
         let id = try XCTUnwrap(initial.windows.first?.id)
@@ -542,7 +535,7 @@ final class WindowSwitcherProcessWorkerTests: XCTestCase, @unchecked Sendable {
         let access = ControlledWindowAXAccess()
         let window = AXUIElementCreateApplication(42)
         access.update { $0.windows = [window]; $0.windowNumber = 123 }
-        let worker = WindowSwitcherProcessWorker(pid: 99, launchDate: nil, access: access, invalidated: {})
+        let worker = WindowSwitcherProcessWorker(pid: 99, launchDate: nil, access: access, invalidated: { _ in })
         defer { worker.stop() }
         let first = await worker.scan()
         XCTAssertEqual(first.windows.first?.windowNumber, 123)

@@ -24,7 +24,7 @@ private struct WindowSwitcherPluginProvider: PluginProvider {
 }
 
 @MainActor
-final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing,
+final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing, DisplayTopologyRefreshing,
     PluginShortcutEventHandling, PluginShortcutBindingChangeHandling, PluginFocusedWindowTargetConsuming,
     PluginActionProviding, PluginActionPermissionProviding, PluginInlineShortcutSettingsContextConsuming {
     private enum SettingsID {
@@ -414,6 +414,10 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
         onStateChange?()
     }
 
+    func refreshDisplayTopology() {
+        appCatalog.refresh()
+    }
+
     func permissionState(for permissionID: String) -> PluginPermissionState {
         guard permissionID == WindowSwitcherConstants.accessibilityPermissionID else {
             return PluginPermissionState(isGranted: true, footnote: nil)
@@ -646,8 +650,9 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
         skippedSingleWindow = false
         shortcutTap.setSessionActive(true)
         invocationPID = targetPID ?? NSWorkspace.shared.frontmostApplication?.processIdentifier
+        appCatalog.prepareForInvocation()
         let entries = appCatalog.entries(sortMode: store.configuration.sortMode)
-        if entries.isEmpty || !appCatalog.isInitialDiscoveryComplete {
+        if entries.isEmpty || !appCatalog.isInvocationReady {
             pendingInvocation = (reversed, currentApp, persistent)
             pendingSteps = persistent ? 0 : (reversed ? -1 : 1)
             shortcutTap.setEditing(false)
@@ -660,7 +665,6 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
                 lastErrorMessage = localization.string("error.discoveryTimeout", defaultValue: "尚未读取到可切换窗口，请稍后重试。")
                 onStateChange?()
             }
-            appCatalog.refresh()
             return
         }
         present(entries, reversed: reversed, currentApp: currentApp, persistent: persistent)
@@ -691,7 +695,7 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
         session = value
         shortcutTap.setEditing(directKeys)
         let generation = sessionGeneration
-        // Quick tap/release commits from the cached snapshot without flashing UI.
+        // A quick release after invocation reconciliation commits without flashing UI.
         showTask?.cancel()
         showTask = Task { [weak self] in
             if !persistent { try? await Task.sleep(for: .milliseconds(140)) }
@@ -706,7 +710,7 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
         refreshAccessibilityPermission()
         guard isAccessibilityGranted, pendingInvocation != nil || session != nil else { return }
         let entries = appCatalog.entries(sortMode: store.configuration.sortMode)
-        if let pending = pendingInvocation, appCatalog.isInitialDiscoveryComplete, !entries.isEmpty {
+        if let pending = pendingInvocation, appCatalog.isInvocationReady, !entries.isEmpty {
             pendingInvocation = nil
             present(entries, reversed: pending.reversed, currentApp: pending.currentApp, persistent: pending.persistent, steps: pendingSteps)
             pendingSteps = 0

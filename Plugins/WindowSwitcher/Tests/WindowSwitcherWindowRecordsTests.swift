@@ -10,8 +10,97 @@ private final class WindowRecordResponse: @unchecked Sendable {
     func get() -> [WindowSwitcherWindowRecord]? { lock.lock(); defer { lock.unlock() }; return value }
 }
 
+private final class BlockingWindowRecords: @unchecked Sendable {
+    private let lock = NSLock()
+    private var calls = 0
+    private var completions = 0
+    private var blocked = true
+    let release = DispatchSemaphore(value: 0)
+
+    var counts: (started: Int, completed: Int) {
+        lock.lock(); defer { lock.unlock() }
+        return (calls, completions)
+    }
+
+    func unblock() { lock.lock(); blocked = false; lock.unlock() }
+
+    func read() -> [WindowSwitcherWindowRecord]? {
+        lock.lock()
+        calls += 1
+        let number = calls
+        let shouldWait = blocked
+        lock.unlock()
+        if shouldWait { _ = release.wait(timeout: .now() + 3) }
+        lock.lock(); completions += 1; lock.unlock()
+        return [.init(windowNumber: UInt32(number), processIdentifier: 42, title: "Fixture", isOnScreen: true,
+                      bounds: CGRect(x: 0, y: 30, width: 800, height: 600))]
+    }
+}
+
 @MainActor
 final class WindowSwitcherWindowRecordsTests: XCTestCase {
+    func testCancellingOneWaiterDoesNotCancelOtherWaiters() async throws {
+        let provider = BlockingWindowRecords()
+        let reader = WindowSwitcherWindowRecords(windowRecordRefreshTimeout: 2, windowRecordProvider: { provider.read() })
+        defer { provider.release.signal(); reader.stop() }
+        let first = Task { await reader.freshWindowRecordSnapshot() }
+        let second = Task { await reader.freshWindowRecordSnapshot() }
+        try await waitUntil { provider.counts.started == 1 }
+        first.cancel()
+        let cancelled = await first.value
+        XCTAssertFalse(cancelled.isFresh)
+        provider.release.signal()
+        let snapshot = await second.value
+        XCTAssertTrue(snapshot.isFresh)
+        XCTAssertEqual(provider.counts.started, 1)
+        XCTAssertEqual(snapshot.records.map(\.windowNumber), [1])
+    }
+
+    func testTimeoutKeepsPhysicalQueriesBoundedAndIgnoresTheirLateResults() async throws {
+        let provider = BlockingWindowRecords()
+        let reader = WindowSwitcherWindowRecords(windowRecordRefreshTimeout: 0.03, windowRecordProvider: { provider.read() })
+        defer { provider.release.signal(); provider.release.signal(); reader.stop() }
+        let first = await reader.freshWindowRecordSnapshot()
+        let second = await reader.freshWindowRecordSnapshot()
+        let blocked = await reader.freshWindowRecordSnapshot()
+        XCTAssertFalse(first.isFresh)
+        XCTAssertFalse(second.isFresh)
+        XCTAssertFalse(blocked.isFresh)
+        XCTAssertEqual(provider.counts.started, 2)
+        provider.unblock()
+        provider.release.signal()
+        provider.release.signal()
+        try await waitUntil { provider.counts.completed == 2 }
+        // Allow the completion messages, not just the provider calls, to return.
+        await Task.yield()
+        let current = await reader.freshWindowRecordSnapshot()
+        XCTAssertTrue(current.isFresh)
+        XCTAssertEqual(current.records.map(\.windowNumber), [3])
+    }
+
+    func testStopResumesWaitersWithoutWaitingForSystemQuery() async throws {
+        let provider = BlockingWindowRecords()
+        let reader = WindowSwitcherWindowRecords(windowRecordRefreshTimeout: 2, windowRecordProvider: { provider.read() })
+        defer { provider.release.signal(); reader.stop() }
+        let task = Task { await reader.freshWindowRecordSnapshot() }
+        try await waitUntil { provider.counts.started == 1 }
+        reader.stop()
+        let stopped = await task.value
+        XCTAssertFalse(stopped.isFresh)
+        XCTAssertTrue(stopped.records.isEmpty)
+        XCTAssertEqual(provider.counts.completed, 0)
+        provider.unblock()
+        let current = await reader.freshWindowRecordSnapshot()
+        XCTAssertTrue(current.isFresh)
+        XCTAssertEqual(current.records.map(\.windowNumber), [2])
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !condition(), ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertTrue(condition())
+    }
+
     func testInventorySharesTopologyAndRefreshesItOnNextScan() {
         let records = (1...3).map {
             WindowSwitcherWindowRecord(windowNumber: UInt32($0), processIdentifier: 42, title: "Fixture",

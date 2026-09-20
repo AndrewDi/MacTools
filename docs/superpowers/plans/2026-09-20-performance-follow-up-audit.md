@@ -279,3 +279,57 @@ A 15-second Time Profiler recording near the attempted dashboard open contained 
 The URL-triggered dashboard request was not confirmed visible by either WindowServer probe, and there were no matching route-rejection diagnostics. Therefore this trace is **not evidence of foreground scrolling, visible-panel frame rate, or a successful manual interaction test**. The real SwiftUI hosting test verifies the presentation subscription/state behavior; human scrolling and switching still need a comparable interactive trial.
 
 Local diagnostic artifacts are under `/private/tmp/mactools-performance-*`: the functional and benchmark `.xcresult` bundles, final Activity Bar result, script/ABI logs, before/after `top` samples and visibility probes, and the final time-profile XML/summary. Earlier measurements above remain historical and must not be substituted for measurements of this patch.
+
+## Follow-up: current Energy Impact remains high
+
+The user reported high Activity Monitor Energy Impact after commit `35a1d98f`. This follow-up sampled the existing processes without rebuilding, restarting, disabling plugins, or changing preferences. Dev was still PID 36591, version 1.3.1 (70). Nightly had subsequently been started as PID 60547, version 1.3.1 (33.1); the earlier single-instance condition no longer applied. WindowServer probes before and after Dev profiling found no on-screen Dev windows.
+
+### Current process measurements
+
+A separate 40-second observation used `proc_pid_rusage(RUSAGE_INFO_V4)` at two-second intervals. CPU time was converted using this machine's `mach_timebase_info` ratio (125/3 ns per tick), with one core equal to 100%. These were live-machine observations, not replayed workloads or a controlled comparison between the two builds.
+
+| Process | Mean CPU | Two-second CPU range | Interrupt wakeups/s | Physical footprint |
+| --- | ---: | ---: | ---: | ---: |
+| Dev | 13.31% | 3.97–39.61% | 17.66 | 237.85–241.42 MiB |
+| Nightly | 97.61% | 94.34–99.01% | 42.35 | 168.28–168.42 MiB |
+
+A later independent `top` observation (ten two-second intervals after discarding the initial sample, with no profiler attached) measured Dev at 9.34% mean CPU, ranging from 2.2% to 33.1%. The two intervals demonstrate variable sustained work, not a fixed idle percentage. Its output is retained as `/private/tmp/mactools-energy-dev-confirmation.top.txt`.
+
+Dev's disk-read, disk-write, and logical-write counters did not advance during this interval. No power assertion owned by Dev or Nightly appeared in `pmset -g assertions`. This does not exclude intermittent I/O, indirect system-service work, or GPU energy outside the sampled interval. Interrupt wakeups are not equivalent to full-package wakeups or timer firings; package-idle wakeup counters did not advance while the machine was busy.
+
+Apple defines [Energy Impact](https://support.apple.com/guide/activity-monitor/view-energy-consumption-actmntr43697/mac) as a relative measure of current consumption, distinct from the 12-hour average. Its [energy measurement guide](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/power_efficiency_guidelines_osx/MonitoringEnergyUsage.html) identifies CPU, network activity, and disk I/O among its inputs. The user's reported current impact should therefore not be dismissed as a stale historical average. Direct `powermetrics` per-process energy output was unavailable without an administrator password; no power-in-watts claim is made.
+
+### Dev CPU attribution
+
+A subsequent 20-second Time Profiler capture contained 1,149 ms of Running sample weight, including 961 ms on the main thread. The following groups are exclusive, with host work taking precedence over plugin calls made inside that work. These percentages describe sampled CPU stacks, not shares of energy or guaranteed optimization savings.
+
+| Group | Running sample weight | Share |
+| --- | ---: | ---: |
+| Window Switcher discovery/publication | 730 ms | 63.53% |
+| Scheduled PluginHost updates | 307 ms | 26.72% |
+| App Volume | 41 ms | 3.57% |
+| System Status | 19 ms | 1.65% |
+| Activity Bar | 14 ms | 1.22% |
+| Other / unresolved | 38 ms | 3.31% |
+
+1. **Window Switcher is the largest current Dev hotspot.** `WindowSwitcherAppCatalog.start()` retains a one-second background scan. `DiscoveryEnvironment.applications` reads `NSWorkspace.runningApplications`, filters every entry using `isTerminated`, and reads bundle identity, bundle path, launch date, and activation policy. The application-inventory path accounts for 430 ms; `isTerminated` alone appears in 207 ms and LaunchServices information calls in 354 ms, with overlapping inclusive counts. These are synchronous main-actor reads even though AX window reads run on worker queues. `rebuildPublication()` contributes another 105 ms and is called after individual application scans as well as the all-Spaces scan. The prior fix eliminated unused helper presentation reads, but did not eliminate repeated inventory reads or repeated full publication.
+2. **Host updates remain unnecessarily broad.** The scheduled rebuild plus shortcut synchronization accounts for 307 ms. `dirtyPluginIDs` limits panel snapshot getters, while shared descriptor construction, ordering, localization, action registration, migration input construction, and shortcut processing still traverse many plugins. Logs contain 39 registry synchronizations between 14:26:46 and 14:28:33, each with 52 providers and 287 catalog entries; this is observed logging, not proof of every callback's origin. Binding callbacks re-enter the host resolver, whose descriptor lookup can scan all plugins again. The trace includes both Window Switcher binding reconfiguration and legacy Screenshot/Translator migration getters in that path.
+3. **Audio polling is secondary in this capture.** App Volume scans Core Audio process state once per second, accounting for 41 ms. System Status and Activity Bar are substantially smaller here. The short trace does not rank less frequent collectors or prove they are free of problems.
+
+The dominant remaining work is background discovery and shared host computation. Around 84% of the sampled Running work is on the main thread, which also competes with user interaction when a panel is opened. This capture does not measure foreground scrolling latency or establish that retained SwiftUI rendering is the current bottleneck.
+
+### Nightly is a separate high-load process
+
+A separate ten-second `sample` of Nightly found 694 of 1,247 main-thread observations (55.7%) under `NSStatusItem._updateReplicantsUnlessMenuIsTracking`, including snapshot drawing and appearance updates. Its app symbols were stripped, so the exact initiating app function was not established. This is a different hotspot from the Dev profile and is consistent with the earlier status-item investigation. Nightly's load adds substantial whole-machine energy usage but must not be reported as Dev's process CPU or as proof that it caused Dev's score.
+
+### Next bounded optimization priorities
+
+- Window Switcher: retain a process-lifetime inventory with explicit launch/exit invalidation and bounded reconciliation; avoid repeated static identity lookups; coalesce complete-list publication across scan completions. Preserve helper ownership, PID reuse protection, Space changes, permission revocation, missed-notification recovery, and invocation freshness. Change fallback frequency only after validating notification coverage and activation behavior.
+- PluginHost: reuse descriptor/localization/ordering snapshots within an update, separate structural catalog changes from ordinary state updates, and avoid unchanged binding callbacks and already-completed migration reads. Keep live action availability and shortcut conflict checks authoritative, and invalidate caches for language changes, plugin replacement/isolation, ordering, and configuration changes.
+- Recheck one installed build and one active instance under the same plugin set. Measure no-window idle, user-input activity, and visible-panel interaction separately. A release-optimized build comparison can quantify Debug overhead; it cannot excuse the source-confirmed repeated work.
+
+Artifacts: `/private/tmp/mactools-energy-dual-rusage.ndjson`, `mactools-energy-dual-summary.json`, `mactools-energy-dev-live.trace`, `mactools-energy-dev-live.xml`, `mactools-energy-dev-live-summary.json`, `mactools-energy-dev-registry.ndjson`, and `mactools-energy-nightly-live.sample.txt`. The raw usage counters are retained alongside converted CPU values. No production code changed during this investigation.
+
+The subsequent [Window Switcher performance plan](2026-09-20-window-switcher-performance-plan.md) records the cache, notification recovery, invocation-freshness, and cross-Space requirements for reducing repeated discovery work.
+
+The [Plugin Host performance plan](2026-09-20-plugin-host-performance-plan.md) records the next host-focused implementation batch, its 213-test regression run, and installed Dev measurements. Its results supersede this investigation's host-cost observations for that newer build; the original measurements above remain historical evidence.
