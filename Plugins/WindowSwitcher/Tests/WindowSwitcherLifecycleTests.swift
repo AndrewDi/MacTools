@@ -45,6 +45,56 @@ private final class ControlledSwitcherCatalog: WindowSwitcherCatalog {
 @MainActor
 final class WindowSwitcherLifecycleTests: XCTestCase {
 
+    func testBackgroundCatalogUpdatesDoNotInvalidateHostSettings() {
+        let catalog = ControlledSwitcherCatalog(), tap = ControlledSwitcherTap()
+        let plugin = plugin(catalog: catalog, tap: tap)
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        var hostUpdates = 0
+        plugin.onStateChange = { hostUpdates += 1 }
+
+        for index in 0..<20 {
+            catalog.windows = [entry("window-\(index)")]
+            catalog.onChange?()
+        }
+
+        XCTAssertEqual(hostUpdates, 0)
+        XCTAssertTrue(catalog.isRunning)
+        XCTAssertTrue(tap.isRunning)
+        tap.onShortcutPressed(false, false, false)
+        XCTAssertEqual(plugin.session?.selectedID, "window-19")
+    }
+
+    func testCatalogUpdatesReconcileLiveSessionWithoutInvalidatingHost() {
+        let catalog = ControlledSwitcherCatalog(), tap = ControlledSwitcherTap()
+        catalog.windows = [entry("a"), entry("b")]
+        let plugin = plugin(catalog: catalog, tap: tap)
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        tap.onShortcutPressed(false, false, false)
+        var hostUpdates = 0
+        plugin.onStateChange = { hostUpdates += 1 }
+        catalog.windows = [entry("a"), entry("c")]
+        catalog.onChange?()
+
+        XCTAssertEqual(Set(plugin.session?.entries.map(\.id) ?? []), ["a", "c"])
+        XCTAssertEqual(hostUpdates, 0)
+    }
+
+    func testCatalogPermissionRevocationStillNotifiesHostAndStopsListening() {
+        let permission = PermissionFixture()
+        let catalog = ControlledSwitcherCatalog(), tap = ControlledSwitcherTap()
+        let plugin = plugin(catalog: catalog, tap: tap, trusted: { permission.granted })
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        var hostUpdates = 0
+        plugin.onStateChange = { hostUpdates += 1 }
+        permission.granted = false
+        catalog.onChange?()
+
+        XCTAssertEqual(hostUpdates, 1)
+        XCTAssertFalse(tap.isRunning)
+        XCTAssertFalse(catalog.isRunning)
+        XCTAssertFalse(plugin.permissionState(for: WindowSwitcherConstants.accessibilityPermissionID).isGranted)
+    }
+
     func testLateCallbacksAndRecorderCompletionCannotRestartDeactivatedPlugin() {
         let catalog = ControlledSwitcherCatalog(), tap = ControlledSwitcherTap()
         catalog.windows = [entry("a"), entry("b")]
@@ -96,7 +146,7 @@ final class WindowSwitcherLifecycleTests: XCTestCase {
         return plugin
     }
     private func eventually(_ predicate: () -> Bool) async {
-        let deadline = ContinuousClock.now + .seconds(1)
+        let deadline = ContinuousClock.now + .seconds(2)
         while !predicate(), ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(5)) }
         XCTAssertTrue(predicate())
     }

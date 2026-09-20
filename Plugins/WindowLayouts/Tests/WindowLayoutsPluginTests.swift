@@ -5,6 +5,25 @@ import MacToolsPluginKit
 
 @MainActor
 final class WindowLayoutsPluginTests: XCTestCase {
+    func testPermissionMembershipTracksCustomCommandsAndRejectsUnknownProviders() throws {
+        let plugin = makePlugin()
+        plugin.performActionShortcutReplacementTransaction = { _, _, commit in commit() }
+        plugin.handleSettingsAction(.invoke(controlID: "add-custom"))
+        let definition = try XCTUnwrap(plugin.actionDefinitions.first {
+            $0.key.actionID.hasPrefix("custom.")
+        })
+        let id = try XCTUnwrap(UUID(uuidString: String(definition.key.actionID.dropFirst("custom.".count))))
+
+        XCTAssertEqual(plugin.permissionRequirementIDs(for: definition.key), ["accessibility"])
+        XCTAssertTrue(plugin.permissionRequirementIDs(for: .init(providerID: "another-plugin",
+            actionID: definition.key.actionID)).isEmpty)
+        XCTAssertTrue(plugin.permissionRequirementIDs(for: .init(providerID: plugin.metadata.id,
+            actionID: "unknown-action")).isEmpty)
+        XCTAssertTrue(plugin.deleteCustomCommand(id))
+        XCTAssertTrue(plugin.permissionRequirementIDs(for: definition.key).isEmpty)
+        XCTAssertFalse(plugin.actionShortcutSettingsConfiguration.actionIDs.contains(definition.key.actionID))
+    }
+
     func testPublishesEveryRaycastParityActionWithCanonicalSafetyPolicy() {
         let executor = MockWindowLayoutExecutor()
         let plugin = makePlugin(executor: executor)

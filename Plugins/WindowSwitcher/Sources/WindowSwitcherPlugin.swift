@@ -702,8 +702,9 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
     }
 
     private func catalogDidChange() {
+        guard isActive else { return }
         refreshAccessibilityPermission()
-        guard isAccessibilityGranted else { return }
+        guard isAccessibilityGranted, pendingInvocation != nil || session != nil else { return }
         let entries = appCatalog.entries(sortMode: store.configuration.sortMode)
         if let pending = pendingInvocation, appCatalog.isInitialDiscoveryComplete, !entries.isEmpty {
             pendingInvocation = nil
@@ -716,7 +717,8 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
             self.session = session
             if overlayController.isVisible { overlayController.update(session) }
         }
-        onStateChange?()
+        // Window contents and recency belong to the switcher session. Permission
+        // and settings changes notify the host through their own mutation paths.
     }
 
     private func select(_ entry: WindowSwitcherAppEntry) {
@@ -792,8 +794,10 @@ final class WindowSwitcherPlugin: MacToolsPlugin, AccessibilityPermissionRefresh
             return false
         }
 
+        let hadError = lastErrorMessage != nil
         lastErrorMessage = nil
         syncShortcutTap()
+        if hadError { onStateChange?() }
         return true
     }
 

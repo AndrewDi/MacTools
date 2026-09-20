@@ -19,6 +19,7 @@ struct CalendarAgendaView: View {
             HStack(spacing: 6) {
                 Label(localization.string("agenda.title", defaultValue: "近期日程"), systemImage: "calendar.badge.clock")
                     .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(theme.text.primary)
                 Spacer(minLength: 4)
                 Text(CalendarAgendaPresentation.rangeText(dates: dates))
                     .font(.system(size: 10, weight: .medium, design: .rounded))
@@ -54,7 +55,7 @@ struct CalendarAgendaView: View {
                 ScrollView(.vertical) {
                     agendaContent
                 }
-                .scrollIndicators(.automatic)
+                .scrollIndicators(.never)
                 .onChange(of: dates) { _, _ in
                     if let firstDay = days.first { proxy.scrollTo(firstDay.id, anchor: .top) }
                 }
@@ -79,15 +80,19 @@ struct CalendarAgendaView: View {
             HStack(spacing: 8) {
                 Text(day.dayNumber)
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(day.isToday ? theme.dataSeries.primary : theme.text.primary)
+                    .foregroundStyle(theme.text.primary)
                     .frame(width: 30, height: 30)
                     .background(
-                        day.isToday ? theme.interaction.selection(theme.dataSeries.primary) : theme.surfaces.nested,
+                        day.isToday ? .clear : theme.surfaces.nested,
                         in: RoundedRectangle(cornerRadius: 8)
                     )
+                    .overlay {
+                        if day.isToday { CalendarTodayOutline() }
+                    }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(CalendarAgendaPresentation.dayTitle(day.date, today: today, localization: localization))
                         .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(theme.text.primary)
                     let subtitle = CalendarDayPresentation.dateSubtitle(
                         for: day, includesOverflowCount: false, localization: localization
                     )

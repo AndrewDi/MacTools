@@ -91,15 +91,9 @@ final class MenuBarStatusItemController: NSObject {
     private var animationFrameIndex = 0
     private var animationFrameDuration: TimeInterval = 1.0 / MenuBarIconProcessing.animationFramesPerSecond
     private var currentFallbackPayload: MenuBarIconImagePayload?
-    private var lastPluginIconKey: PluginIconKey?
+    private let iconPresentation = MenuBarStatusIconPresentation()
+    private var isIconUpdateScheduled = false
     private var iconAppearanceObserver: MenuBarIconAppearanceObserverView?
-
-    private struct PluginIconKey: Equatable {
-        let generation: UUID?
-        let revision: UInt64
-        let context: PluginMenuBarIconRenderContext
-        let runningAutomationCount: Int
-    }
 
     init(
         pluginHost: PluginHost,
@@ -156,10 +150,6 @@ final class MenuBarStatusItemController: NSObject {
         pluginHost.statusItemButtonFrameProvider = { [weak self] in
             self?.statusItemButtonScreenRect()
         }
-        windowRouter.setPanelPresentationActions(
-            showDashboard: { [weak self] in self?.showDashboard() },
-            showFeaturePanel: { [weak self] in self?.showFeaturePanel() }
-        )
         windowRouter.setProgrammaticSettingsPresentationAction { [weak self] in
             self?.requestPanelClose()
         }
@@ -277,14 +267,16 @@ final class MenuBarStatusItemController: NSObject {
         button.action = #selector(handleStatusItemAction(_:))
         button.sendAction(on: [.leftMouseDown, .rightMouseDown])
         button.toolTip = AppMetadata.appName
-        lastPluginIconKey = nil
+        statusItem.length = NSStatusItem.variableLength
+        button.imagePosition = .imageOnly
+        iconPresentation.reset()
 
         iconAppearanceObserver?.onChange = nil
         iconAppearanceObserver?.removeFromSuperview()
         let observer = MenuBarIconAppearanceObserverView(frame: .zero)
         observer.setAccessibilityElement(false)
         observer.onChange = { [weak self] in
-            DispatchQueue.main.async { [weak self] in self?.updateStatusIcon() }
+            self?.scheduleStatusIconUpdate()
         }
         button.addSubview(observer)
         iconAppearanceObserver = observer
@@ -296,13 +288,6 @@ final class MenuBarStatusItemController: NSObject {
     }
 
     private func observePluginHost() {
-        pluginHost.$hasActivePlugin
-            .removeDuplicates()
-            .sink { [weak self] _ in
-                self?.updateStatusIcon()
-            }
-            .store(in: &cancellables)
-
         pluginHost.automationController.$activeRunIDs
             .map(\.count)
             .removeDuplicates()
@@ -326,9 +311,17 @@ final class MenuBarStatusItemController: NSObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            DispatchQueue.main.async {
-                self?.updateStatusIcon()
-            }
+            Task { @MainActor [weak self] in self?.scheduleStatusIconUpdate() }
+        }
+    }
+
+    private func scheduleStatusIconUpdate() {
+        guard !isIconUpdateScheduled else { return }
+        isIconUpdateScheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            isIconUpdateScheduled = false
+            updateStatusIcon()
         }
     }
 
@@ -340,43 +333,49 @@ final class MenuBarStatusItemController: NSObject {
             appearance: button.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light
         )
         if let snapshot = pluginHost.menuBarIconCoordinator.snapshot(context: context) {
-            let key = PluginIconKey(
-                generation: pluginHost.menuBarIconCoordinator.primaryIconGeneration,
-                revision: snapshot.revision,
+            let key = MenuBarStatusIconPresentation.Key(
+                source: .plugin(
+                    generation: pluginHost.menuBarIconCoordinator.primaryIconGeneration,
+                    revision: snapshot.revision
+                ),
                 context: context,
                 runningAutomationCount: pluginHost.automationController.activeRunIDs.count
             )
-            guard key != lastPluginIconKey else { return }
-            if let image = snapshot.image.copy() as? NSImage {
-                lastPluginIconKey = key
+            if iconPresentation.present(
+                on: button, key: key,
+                tooltip: "\(automationActivityTooltip)\n\(snapshot.tooltip)",
+                accessibilityDescription: "\(automationActivityTooltip)\n\(snapshot.accessibilityDescription)",
+                makeImage: {
+                    guard let image = snapshot.image.copy() as? NSImage else { return nil }
+                    // Never mutate a provider's shared image.
+                    image.size = context.pointSize
+                    image.isTemplate = snapshot.isTemplate
+                    return statusImage(image, isTemplate: snapshot.isTemplate)
+                }
+            ) {
                 currentFallbackPayload = nil
                 animationTimer?.cancel()
                 animationTimer = nil
                 animationFrames = []
-                // Copy only changed frames; never mutate a provider's shared image.
-                image.size = context.pointSize
-                image.isTemplate = snapshot.isTemplate
-                statusItem.length = NSStatusItem.variableLength
-                button.image = statusImage(image, isTemplate: snapshot.isTemplate)
-                button.imagePosition = .imageOnly
-                button.toolTip = "\(automationActivityTooltip)\n\(snapshot.tooltip)"
-                button.setAccessibilityLabel("\(automationActivityTooltip)\n\(snapshot.accessibilityDescription)")
                 return
             }
         }
-        lastPluginIconKey = nil
         let payload = iconSettings.imagePayload(for: button.effectiveAppearance)
-        payload.image.isTemplate = payload.isTemplate
         if currentFallbackPayload != payload {
             currentFallbackPayload = payload
             configureAnimationIfNeeded(payload)
         }
-        let frame = animationFrames.indices.contains(animationFrameIndex) ? animationFrames[animationFrameIndex] : payload.image
-        statusItem.length = NSStatusItem.variableLength
-        button.image = statusImage(frame, isTemplate: payload.isTemplate)
-        button.imagePosition = .imageOnly
-        button.toolTip = automationActivityTooltip
-        button.setAccessibilityLabel(automationActivityTooltip)
+        iconPresentation.present(
+            on: button,
+            key: .init(source: .fallback(payload: payload, frameIndex: animationFrameIndex),
+                       context: context, runningAutomationCount: pluginHost.automationController.activeRunIDs.count),
+            tooltip: automationActivityTooltip,
+            accessibilityDescription: automationActivityTooltip
+        ) {
+            let frame = animationFrames.indices.contains(animationFrameIndex) ? animationFrames[animationFrameIndex] : payload.image
+            frame.isTemplate = payload.isTemplate
+            return statusImage(frame, isTemplate: payload.isTemplate)
+        }
     }
 
     private var automationActivityTooltip: String {
@@ -498,7 +497,7 @@ final class MenuBarStatusItemController: NSObject {
     private func advanceAnimationFrame() {
         guard
             !animationFrames.isEmpty,
-            let button = statusItem.button
+            statusItem.button != nil
         else {
             animationTimer?.cancel()
             animationTimer = nil
@@ -506,9 +505,7 @@ final class MenuBarStatusItemController: NSObject {
         }
 
         animationFrameIndex = (animationFrameIndex + 1) % animationFrames.count
-        let frame = animationFrames[animationFrameIndex]
-        button.image = statusImage(frame, isTemplate: frame.isTemplate)
-        button.needsDisplay = true
+        updateStatusIcon()
     }
 
     @objc

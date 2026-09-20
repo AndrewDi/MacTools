@@ -7,8 +7,6 @@ import MacToolsPluginKit
 enum FeatureSettingsPane: Hashable {
     case actionsAndShortcuts
     case automation
-    case dashboardLayout
-    case featurePanelLayout
     case marketplace
     case configuration(String)
 }
@@ -126,10 +124,8 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         switch self {
         case .openSettings, .openCommandPalette:
             .general
-        case .toggleDashboard:
-            .feature(.dashboardLayout)
-        case .toggleFeaturePanel:
-            .feature(.featurePanelLayout)
+        case .toggleDashboard, .toggleFeaturePanel:
+            .feature(.actionsAndShortcuts)
         }
     }
 
@@ -142,34 +138,6 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
         }
     }
 
-}
-
-private extension FeatureSettingsPane {
-    init(landingPage: PluginSettingsLandingPage) {
-        switch landingPage {
-        case .dashboard:
-            self = .dashboardLayout
-        case .featurePanel:
-            self = .featurePanelLayout
-        case .marketplace:
-            self = .marketplace
-        }
-    }
-
-    var landingPage: PluginSettingsLandingPage? {
-        switch self {
-        case .actionsAndShortcuts, .automation:
-            nil
-        case .dashboardLayout:
-            .dashboard
-        case .featurePanelLayout:
-            .featurePanel
-        case .marketplace:
-            .marketplace
-        case .configuration:
-            nil
-        }
-    }
 }
 
 struct PluginHostCapabilities: Equatable, Sendable {
@@ -786,11 +754,12 @@ final class PluginHost: ObservableObject {
             } else {
                 dynamicPluginManager.prepareInstalledPluginsWithoutLoading()
             }
-            self.dynamicPluginCapabilitiesByID = dynamicPluginManager.installedCapabilitiesByID()
-            self.dynamicPluginCategoriesByID = dynamicPluginManager.installedCategoriesByID()
-            self.dynamicPluginReleaseChannelsByID = dynamicPluginManager.installedReleaseChannelsByID()
-            self.dynamicPluginManifestsByID = dynamicPluginManager.installedManifestsByID()
-            self.dynamicPluginInstalledAtByID = dynamicPluginManager.installedAtByID()
+            let installedMetadata = dynamicPluginManager.installedMetadata()
+            self.dynamicPluginCapabilitiesByID = installedMetadata.capabilitiesByID
+            self.dynamicPluginCategoriesByID = installedMetadata.categoriesByID
+            self.dynamicPluginReleaseChannelsByID = installedMetadata.releaseChannelsByID
+            self.dynamicPluginManifestsByID = installedMetadata.manifestsByID
+            self.dynamicPluginInstalledAtByID = installedMetadata.installedAtByID
             self.pluginManagementItems = dynamicPluginManager.pluginManagementItems
             self.pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
             configureCallbacks(for: self.dynamicPlugins)
@@ -2287,39 +2256,10 @@ final class PluginHost: ObservableObject {
         appPresentationHandler?(.settings(.feature(.actionsAndShortcuts)))
     }
 
-    /// Chooses the entry page for a normal Plugins-tab selection. Explicit
-    /// navigation to Marketplace or a plugin configuration bypasses this so
-    /// the requested destination is always respected.
-    func pluginSettingsLandingPage() -> FeatureSettingsPane {
-        let dashboardIsAvailable = !dashboardLayoutItems.isEmpty || !dashboardHiddenLayoutItems.isEmpty
-        let featurePanelIsAvailable = !featurePanelLayoutItems.isEmpty || !featurePanelHiddenLayoutItems.isEmpty
-
-        let landingPage: PluginSettingsLandingPage
-        if !dashboardIsAvailable && !featurePanelIsAvailable {
-            landingPage = .marketplace
-        } else if let savedPage = pluginDisplayPreferencesStore.lastPluginSettingsLandingPage(),
-                  isAvailable(savedPage, dashboardIsAvailable: dashboardIsAvailable, featurePanelIsAvailable: featurePanelIsAvailable) {
-            landingPage = savedPage
-        } else if dashboardIsAvailable {
-            landingPage = .dashboard
-        } else {
-            landingPage = .featurePanel
-        }
-
-        // This automatic route must not replace the user's saved choice. For
-        // example, temporarily having only settings-only plugins should not
-        // make Marketplace their permanent landing page after they install a
-        // layout-capable plugin again.
-        return FeatureSettingsPane(landingPage: landingPage)
-    }
-
     @discardableResult
     func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) -> Bool {
         switch pane {
-        case .actionsAndShortcuts, .automation, .dashboardLayout, .featurePanelLayout, .marketplace:
-            if let landingPage = pane.landingPage {
-                pluginDisplayPreferencesStore.setLastPluginSettingsLandingPage(landingPage)
-            }
+        case .actionsAndShortcuts, .automation, .marketplace:
             return true
         case let .configuration(pluginID):
             guard pluginSettingsItems.contains(where: { $0.id == pluginID }) else {
@@ -2785,8 +2725,8 @@ final class PluginHost: ObservableObject {
     }
 
     func refreshPluginCatalog() async {
-        await pluginCatalogManager?.refreshCatalog()
-        syncPluginManagementState()
+        let installedMetadata = await pluginCatalogManager?.refreshCatalog()
+        syncPluginManagementState(installedMetadata: installedMetadata)
     }
 
     private func startCloudPreferencesSyncIfReady() {
@@ -3610,12 +3550,13 @@ final class PluginHost: ObservableObject {
         syncGlobalShortcuts()
     }
 
-    private func syncPluginManagementState() {
-        dynamicPluginCapabilitiesByID = dynamicPluginManager?.installedCapabilitiesByID() ?? [:]
-        dynamicPluginCategoriesByID = dynamicPluginManager?.installedCategoriesByID() ?? [:]
-        dynamicPluginReleaseChannelsByID = dynamicPluginManager?.installedReleaseChannelsByID() ?? [:]
-        dynamicPluginManifestsByID = dynamicPluginManager?.installedManifestsByID() ?? [:]
-        dynamicPluginInstalledAtByID = dynamicPluginManager?.installedAtByID() ?? [:]
+    private func syncPluginManagementState(installedMetadata: InstalledPluginMetadata? = nil) {
+        let metadata = installedMetadata ?? dynamicPluginManager?.installedMetadata()
+        dynamicPluginCapabilitiesByID = metadata?.capabilitiesByID ?? [:]
+        dynamicPluginCategoriesByID = metadata?.categoriesByID ?? [:]
+        dynamicPluginReleaseChannelsByID = metadata?.releaseChannelsByID ?? [:]
+        dynamicPluginManifestsByID = metadata?.manifestsByID ?? [:]
+        dynamicPluginInstalledAtByID = metadata?.installedAtByID ?? [:]
         pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
     }
@@ -3997,6 +3938,9 @@ final class PluginHost: ObservableObject {
         synchronizeActionRegistry()
 
         let shortcutDescriptors = shortcutDescriptors()
+        let globalShortcutConflicts = globalShortcutRegistrationSelection(
+            for: shortcutDescriptors
+        ).conflictOwners
         var shortcutMutationMetadataByRowID: [String: ShortcutMutationMetadata] = [:]
         shortcutItems = shortcutDescriptors.flatMap { descriptor -> [ShortcutSettingsItem] in
             // Ordinary global shortcuts backed by canonical Actions are managed only in
@@ -4025,6 +3969,9 @@ final class PluginHost: ObservableObject {
                     usesDefaultValue: customization == .inheritDefault,
                     errorMessage: shortcutErrors[descriptor.itemID]
                         ?? eventShortcutConflictError(for: descriptor)
+                        ?? globalShortcutConflicts[descriptor.itemID].map {
+                            ShortcutValidationError.duplicate(ownerDescription: $0).localizedDescription
+                        }
                         ?? binding.flatMap {
                             MacToolsReservedShortcutBindings.validationError(for: $0)?
                                 .localizedDescription
@@ -5107,13 +5054,15 @@ final class PluginHost: ObservableObject {
         missingPermissionCardIDs: Set<String>,
         shortcutItems: [ShortcutSettingsItem]
     ) -> [PluginSettingsPageItem] {
-        orderedPluginDescriptors().compactMap { descriptor in
+        let permissionCardsByPluginID = Dictionary(grouping: permissionCards, by: \.pluginID)
+        let shortcutItemsByPluginID = Dictionary(grouping: shortcutItems, by: \.pluginID)
+        return orderedPluginDescriptors().compactMap { descriptor in
             let pluginID = descriptor.metadata.id
-            let matchingPermissionCards = permissionCards.filter { $0.pluginID == pluginID }
+            let matchingPermissionCards = permissionCardsByPluginID[pluginID] ?? []
             let matchingMissingPermissionCardIDs = missingPermissionCardIDs.intersection(
                 matchingPermissionCards.map(\.id)
             )
-            let matchingShortcutItems = shortcutItems.filter { $0.pluginID == pluginID }
+            let matchingShortcutItems = shortcutItemsByPluginID[pluginID] ?? []
             let shortcutSettingsGroups: [PluginShortcutSettingsGroupConfiguration]
             if descriptor.hasSettings,
                let provider = descriptor.plugin as? any PluginGroupedShortcutSettingsProviding,
@@ -5608,21 +5557,6 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func isAvailable(
-        _ landingPage: PluginSettingsLandingPage,
-        dashboardIsAvailable: Bool,
-        featurePanelIsAvailable: Bool
-    ) -> Bool {
-        switch landingPage {
-        case .dashboard:
-            dashboardIsAvailable
-        case .featurePanel:
-            featurePanelIsAvailable
-        case .marketplace:
-            true
-        }
-    }
-
     private func shortcutDescriptor(for shortcutID: String) -> ShortcutDescriptor? {
         shortcutDescriptors().first(where: { $0.itemID == shortcutID })
     }
@@ -6109,6 +6043,18 @@ final class PluginHost: ObservableObject {
                     ownerDescription: conflict.title
                 )
             }
+
+            if let conflict = shortcutAssignmentService.assignments.first(where: {
+                consumedShortcutBindings(candidate, for: descriptor).contains($0.binding)
+            }) {
+                let reference = conflict.reference
+                let title = actionRegistry.catalogEntries.first(where: { $0.reference == reference })?.title
+                    ?? actionRegistry.definition(for: reference.key)?.title
+                    ?? reference.key.actionID
+                throw ShortcutValidationError.duplicate(
+                    ownerDescription: "\(actionOwnerTitle(providerID: reference.key.providerID)) · \(title)"
+                )
+            }
         }
     }
 
@@ -6240,28 +6186,50 @@ final class PluginHost: ObservableObject {
         return (registrations, ownerDescriptions)
     }
 
+    private func globalShortcutRegistrationSelection(
+        for descriptors: [ShortcutDescriptor]
+    ) -> (registrations: [GlobalShortcutManager.Registration], conflictOwners: [String: String]) {
+        let candidates = descriptors.enumerated().compactMap { index, descriptor
+            -> (index: Int, descriptor: ShortcutDescriptor, binding: ShortcutBinding, isCustom: Bool)? in
+            guard descriptor.definition.scope == .global,
+                  actionReference(for: descriptor) == nil,
+                  let binding = resolvedBinding(for: descriptor),
+                  MacToolsReservedShortcutBindings.validationError(for: binding) == nil else {
+                return nil
+            }
+            let isCustom: Bool = if case .custom = shortcutStore.customization(for: descriptor.itemID) {
+                true
+            } else {
+                false
+            }
+            return (index, descriptor, binding, isCustom)
+        }.sorted { lhs, rhs in
+            lhs.isCustom == rhs.isCustom ? lhs.index < rhs.index : lhs.isCustom
+        }
+
+        var claimedBindings: [ShortcutBinding: ShortcutDescriptor] = [:]
+        var registrations: [GlobalShortcutManager.Registration] = []
+        var conflictOwners: [String: String] = [:]
+        for candidate in candidates {
+            if let owner = claimedBindings[candidate.binding],
+               !canShareShortcutBinding(candidate.descriptor, with: owner) {
+                conflictOwners[candidate.descriptor.itemID] =
+                    "\(owner.pluginTitle) · \(owner.definition.title)"
+                continue
+            }
+            claimedBindings[candidate.binding] = candidate.descriptor
+            registrations.append(GlobalShortcutManager.Registration(
+                shortcutID: candidate.descriptor.itemID,
+                binding: candidate.binding
+            ))
+        }
+        return (registrations, conflictOwners)
+    }
+
     private func syncGlobalShortcuts() {
         let previousShortcutBindingRevision = shortcutBindingRevision
         let descriptors = shortcutDescriptors()
-        let registrations = descriptors.compactMap { descriptor -> GlobalShortcutManager.Registration? in
-            guard descriptor.definition.scope == .global,
-                  actionReference(for: descriptor) == nil else {
-                return nil
-            }
-
-            guard let binding = resolvedBinding(for: descriptor) else {
-                return nil
-            }
-
-            guard MacToolsReservedShortcutBindings.validationError(for: binding) == nil else {
-                return nil
-            }
-
-            return GlobalShortcutManager.Registration(
-                shortcutID: descriptor.itemID,
-                binding: binding
-            )
-        }
+        let registrations = globalShortcutRegistrationSelection(for: descriptors).registrations
 
         let ownerDescriptions = Dictionary(
             descriptors.filter { actionReference(for: $0) == nil }.map {

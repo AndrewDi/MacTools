@@ -213,6 +213,7 @@ final class WindowSwitcherSessionTests: XCTestCase {
     }
 
     func testPreviewZoomShortcutsAndCachedSelectionReset() async throws {
+        let existingWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
         let preview = WindowSwitcherPreview(hasPermission: { true }, capture: { _ in NSImage(size: NSSize(width: 400, height: 300)) })
         let controller = WindowSwitcherOverlayController(preview: preview)
         var first = entry("one"), second = entry("two")
@@ -220,7 +221,11 @@ final class WindowSwitcherSessionTests: XCTestCase {
         var session = WindowSwitcherSession(entries: [first, second], selectedID: "one", isPersistent: true, originalWindowID: nil)
         controller.show(session, currentPID: 100, showsPreview: true)
         defer { controller.hide() }
-        let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
+        let panel = try XCTUnwrap(NSApp.windows.first {
+            !existingWindows.contains(ObjectIdentifier($0))
+                && $0.identifier?.rawValue == "WindowSwitcherChooser"
+                && $0.isVisible
+        })
         func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
         let stage = try XCTUnwrap(descendants(panel.contentView!).compactMap { $0 as? WindowSwitcherPreviewStage }.first)
         let deadline = ContinuousClock.now + .seconds(2)
@@ -311,8 +316,14 @@ final class WindowSwitcherSessionTests: XCTestCase {
         func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
         let content = try XCTUnwrap(panel.contentView)
         let screen = try XCTUnwrap(panel.screen)
-        XCTAssertEqual(compact, WindowSwitcherSession.panelFrame(visibleFrame: screen.visibleFrame,
-            preview: false, count: 9), "Automatic sizing must use this display, not the developer's display")
+        let expected = WindowSwitcherSession.panelFrame(visibleFrame: screen.visibleFrame,
+            preview: false, count: 9)
+        XCTAssertEqual(compact.size, expected.size,
+                       "Automatic sizing must use this display, not the developer's display")
+        // AppKit can align the window origin to the display's backing pixels.
+        let pixel = 1 / screen.backingScaleFactor
+        XCTAssertEqual(compact.minX, expected.minX, accuracy: pixel)
+        XCTAssertEqual(compact.minY, expected.minY, accuracy: pixel)
         for (name, suffix) in [(NSAppearance.Name.aqua, "light"), (.darkAqua, "dark")] {
             panel.appearance = NSAppearance(named: name)
             content.layoutSubtreeIfNeeded()

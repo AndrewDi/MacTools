@@ -29,7 +29,7 @@ struct MenuBarPanelRemovalConfirmation: View {
     let onCancel: () -> Void
     let onConfirm: () -> String?
     @State private var errorMessage: String?
-    @State private var presentationFocus = MenuBarPanelConfirmationFocus()
+    @State private var presentationFocus = MenuBarPanelPopoverFocus()
     @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
@@ -77,16 +77,16 @@ struct MenuBarPanelRemovalConfirmation: View {
         .padding(14)
         .frame(width: 264)
         .background(theme.surfaces.panel)
-        .background(MenuBarPanelConfirmationFocusLifecycle(focus: presentationFocus).allowsHitTesting(false))
+        .background(MenuBarPanelPopoverFocusLifecycle(focus: presentationFocus).allowsHitTesting(false))
         .foregroundStyle(theme.text.primary)
         .accessibilityIdentifier("\(identifier).confirmation")
     }
 }
 
-/// End focus while the confirmation's SwiftUI responder proxies are still alive.
+/// End focus while the popover's SwiftUI responder proxies are still alive.
 /// AppKit can retain a popover's key view in its parent window's responder chain.
 @MainActor
-private final class MenuBarPanelConfirmationFocus {
+final class MenuBarPanelPopoverFocus {
     weak var window: NSWindow?
 
     func end() {
@@ -98,19 +98,19 @@ private final class MenuBarPanelConfirmationFocus {
     }
 }
 
-private struct MenuBarPanelConfirmationFocusLifecycle: NSViewRepresentable {
-    let focus: MenuBarPanelConfirmationFocus
-    func makeNSView(context: Context) -> ConfirmationView { ConfirmationView(focus: focus) }
-    func updateNSView(_ view: ConfirmationView, context: Context) {}
+struct MenuBarPanelPopoverFocusLifecycle: NSViewRepresentable {
+    let focus: MenuBarPanelPopoverFocus
+    func makeNSView(context: Context) -> FocusView { FocusView(focus: focus) }
+    func updateNSView(_ view: FocusView, context: Context) {}
 
-    static func dismantleNSView(_ view: ConfirmationView, coordinator: ()) {
+    static func dismantleNSView(_ view: FocusView, coordinator: ()) {
         view.focus.end()
     }
 
-    final class ConfirmationView: NSView {
-        let focus: MenuBarPanelConfirmationFocus
+    final class FocusView: NSView {
+        let focus: MenuBarPanelPopoverFocus
 
-        init(focus: MenuBarPanelConfirmationFocus) {
+        init(focus: MenuBarPanelPopoverFocus) {
             self.focus = focus
             super.init(frame: .zero)
             NotificationCenter.default.addObserver(self, selector: #selector(popoverWillClose(_:)),

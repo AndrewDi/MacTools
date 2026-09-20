@@ -80,11 +80,11 @@ struct DeviceBatteryComponentView: View {
         switch viewModel.snapshot.accessState {
         case .permissionDenied:
             return localization.string("empty.title.permissionDenied", defaultValue: "需要输入监控权限")
-        case .scanning:
+        case .idle, .scanning:
             return localization.string("empty.title.scanning", defaultValue: "正在读取电量")
         case .failed:
             return localization.string("empty.title.failed", defaultValue: "读取失败")
-        case .idle, .ready, .noDevices:
+        case .ready, .noDevices:
             return localization.string("empty.title.noDevices", defaultValue: "暂无设备电量")
         }
     }
@@ -95,9 +95,9 @@ struct DeviceBatteryComponentView: View {
             return localization.string("empty.subtitle.permissionDenied", defaultValue: "授权后可读取厂商 HID 鼠标")
         case .failed(let message):
             return message
-        case .scanning:
+        case .idle, .scanning:
             return localization.string("empty.subtitle.scanning", defaultValue: "正在查询系统电源与蓝牙设备")
-        case .idle, .ready, .noDevices:
+        case .ready, .noDevices:
             return localization.string("empty.subtitle.noDevices", defaultValue: "连接蓝牙设备或厂商 HID 鼠标")
         }
     }

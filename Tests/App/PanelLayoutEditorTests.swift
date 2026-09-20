@@ -8,6 +8,46 @@ import MacToolsPluginKit
 final class PanelLayoutEditorTests: XCTestCase {
     private var suites: [String] = []
 
+    func testMoveToMenuKeepsDestinationIconsVisible() async throws {
+        let host = makeHost([LayoutEditorTestPlugin("a", order: 0)])
+        _ = try XCTUnwrap(host.addMenuBarPanel())
+        let window = mount(PanelLayoutEditor(pluginHost: host, surface: .dashboard, onDismiss: {}))
+        defer { window.close() }
+        try await settle()
+        let source = try XCTUnwrap(descendants(try XCTUnwrap(window.contentView))
+            .compactMap { $0 as? PanelLayoutDragSourceView }.first)
+        setHover(source, inside: true)
+        try await settle()
+        let menuOpened = expectation(description: "Move To menu opens")
+        let destinationCount = host.menuBarPanels.count - 1
+        let observer = NotificationCenter.default.addObserver(
+            forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
+        ) { notification in
+            MainActor.assumeIsolated {
+                guard let menu = notification.object as? NSMenu else { return }
+                let destinationItems = menu.items.filter { $0.image != nil }
+                XCTAssertEqual(destinationItems.count, destinationCount)
+                if #available(macOS 27.0, *) {
+                    for item in destinationItems {
+                        // Keep this test buildable with the macOS 26 SDK used by CI.
+                        let visibility = item.value(forKey: "preferredImageVisibility") as? NSNumber
+                        XCTAssertEqual(visibility?.intValue, 1)
+                    }
+                }
+                menuOpened.fulfill()
+                let timer = Timer(timeInterval: 0.05, repeats: false) { _ in
+                    MainActor.assumeIsolated { menu.cancelTrackingWithoutAnimation() }
+                }
+                RunLoop.main.add(timer, forMode: .common)
+            }
+        }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        let point = source.convert(CGPoint(x: source.menuFrame.midX, y: source.menuFrame.midY), to: nil)
+        sendMouse(.leftMouseDown, at: point, to: window)
+        sendMouse(.leftMouseUp, at: point, to: window)
+        await fulfillment(of: [menuOpened], timeout: 1)
+    }
+
     func testRepeatedAdditionsMoveRemoveAndRestoreIndependently() throws {
         for surface in PluginDisplaySurface.allCases {
             let unavailable = LayoutEditorTestPlugin("unavailable", order: 9)
@@ -110,6 +150,51 @@ final class PanelLayoutEditorTests: XCTestCase {
         XCTAssertEqual(PanelComponentLibraryLayout.columns(for: [source, source, source, source], columnWidth: width),
                        [[0, 2], [1, 3]], "Equal-height columns place the next preview on the left")
         XCTAssertEqual(PanelComponentLibraryLayout.columns(for: [], columnWidth: width), [[], []])
+    }
+
+    func testLibraryCanReopenAfterDismissingFocusedSearch() async throws {
+        let host = makeHost([LayoutEditorTestPlugin("a", order: 0)])
+        let presentation = LibraryPopoverTestPresentation()
+        let anchorWindow = mount(Color.clear)
+        let anchor = try XCTUnwrap(anchorWindow.contentView)
+        let panel = NSPopover()
+        panel.behavior = .applicationDefined
+        panel.animates = false
+        panel.contentViewController = NSHostingController(rootView:
+            LibraryPopoverTestContent(host: host, presentation: presentation))
+        panel.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .maxX)
+        defer { panel.close(); anchorWindow.close() }
+        try await settle()
+        let panelWindow = try XCTUnwrap(panel.contentViewController?.view.window)
+
+        for cycle in 0..<3 {
+            presentation.isPresented = true
+            try await settle()
+            let libraryWindow = try XCTUnwrap(panelWindow.childWindows?.first { $0.isVisible })
+            libraryWindow.makeKey()
+            let search = try XCTUnwrap(descendants(try XCTUnwrap(libraryWindow.contentView))
+                .compactMap { $0 as? NSTextField }.first { $0.isEditable })
+            XCTAssertTrue(libraryWindow.makeFirstResponder(search))
+            XCTAssertTrue(libraryWindow.firstResponder is NSTextView, "Exercise an active search field editor")
+
+            if cycle == 1 {
+                presentation.isPresented = false
+            } else {
+                let escape = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero,
+                    modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: libraryWindow.windowNumber, context: nil,
+                    characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+                    isARepeat: false, keyCode: 53))
+                libraryWindow.sendEvent(escape)
+                XCTAssertFalse(libraryWindow.firstResponder is NSTextView,
+                    "Release the search editor before the dismissal tears down SwiftUI content")
+            }
+            try await settle()
+            XCTAssertFalse(presentation.isPresented)
+            XCTAssertFalse(libraryWindow.isVisible)
+            XCTAssertFalse(libraryWindow.firstResponder is NSTextView, "A closed library must release its field editor")
+            XCTAssertTrue(panel.isShown, "Closing the library must leave panel editing open")
+        }
     }
 
     func testLibraryMountsOnlySelectedPreviewAndClickAddsWithoutInvokingItsControls() async throws {
@@ -227,7 +312,9 @@ final class PanelLayoutEditorTests: XCTestCase {
             model.update(selectedTab: tab, contentHeight: 400, maximumFeatureListHeight: 400, isPanelVisible: true)
         }
         model.beginLayoutEditing(visibleItemCount: 1)
-        let window = mount(MenuBarUnifiedPanelContent(pluginHost: host, appUpdater: AppUpdater(startingUpdater: false),
+        let window = mount(MenuBarUnifiedPanelContent(pluginHost: host,
+            presentation: MenuBarPanelPresentationModel(host: host, isVisible: true),
+            appUpdater: AppUpdater(startingUpdater: false),
             menuBarPanelThemeStore: MenuBarPanelThemeStore(userDefaults: defaults), model: model,
             onDismiss: { XCTFail("Dragging cannot dismiss editing") }, onOpenUpdate: {}, onOpenSettings: {},
             onPresentDiskCleanConfiguration: {}, onPresentLaunchControlConfiguration: {}))
@@ -316,6 +403,7 @@ final class PanelLayoutEditorTests: XCTestCase {
         var dismissCount = 0
         let normal = ComponentPanelContent(pluginHost: host, contentBodyHeight: 480,
                                            isPanelVisible: true, onDismiss: { dismissCount += 1 })
+            .environmentObject(MenuBarPanelPresentationModel(host: host, isVisible: true))
         let window = mount(normal)
         defer { window.close() }
         let view = try XCTUnwrap(window.contentView as? NSHostingView<AnyView>)
@@ -678,6 +766,23 @@ final class PanelLayoutEditorTests: XCTestCase {
     }
 
 
+}
+
+@MainActor
+private final class LibraryPopoverTestPresentation: ObservableObject {
+    @Published var isPresented = false
+}
+
+private struct LibraryPopoverTestContent: View {
+    let host: PluginHost
+    @ObservedObject var presentation: LibraryPopoverTestPresentation
+
+    var body: some View {
+        Color.clear.frame(width: 304, height: 180)
+            .popover(isPresented: $presentation.isPresented, arrowEdge: .trailing) {
+                PanelComponentLibrary(pluginHost: host, panelID: "components", onAdd: { _ in true })
+            }
+    }
 }
 
 @MainActor

@@ -84,7 +84,8 @@ enum ConfiguredMenuBarPanelLayout {
 }
 
 struct ConfiguredMenuBarPanelsContent: View {
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
+    @EnvironmentObject private var presentation: MenuBarPanelPresentationModel
     @ObservedObject var model: MenuBarUnifiedPanelModel
     let contentBodyHeight: CGFloat
     let onDismiss: () -> Void
@@ -94,6 +95,7 @@ struct ConfiguredMenuBarPanelsContent: View {
     @State private var visited: Set<String> = []
 
     var body: some View {
+        let _ = presentation.revision
         ZStack(alignment: .topLeading) {
             ForEach(pluginHost.menuBarPanels.filter { visited.contains($0.id) || $0.id == model.selectedTab.id }) {
                 panel in
@@ -121,7 +123,8 @@ struct ConfiguredMenuBarPanelsContent: View {
 }
 
 private struct ConfiguredMenuBarPanelContent: View {
-    @ObservedObject var pluginHost: PluginHost
+    let pluginHost: PluginHost
+    @EnvironmentObject private var presentation: MenuBarPanelPresentationModel
     let panelID: String
     let availableBodyHeight: CGFloat
     let maximumFeatureListHeight: CGFloat
@@ -139,6 +142,7 @@ private struct ConfiguredMenuBarPanelContent: View {
     }
 
     var body: some View {
+        let _ = presentation.revision
         let components = pluginHost.componentItems(in: panelID)
         let features = pluginHost.panelItems(in: panelID)
         let mixed = !components.isEmpty && !features.isEmpty

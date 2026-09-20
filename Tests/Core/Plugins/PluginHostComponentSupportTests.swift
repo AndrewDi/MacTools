@@ -711,6 +711,14 @@ final class PluginHostComponentSupportTests: XCTestCase {
             plugins: [componentPanelPlugin],
             pluginStateChangeRebuildDelay: .milliseconds(20)
         )
+        let navigation = SettingsNavigationPresentationModel(host: host)
+        let marketplace = PluginMarketplacePresentationModel(host: host)
+        XCTAssertEqual(navigation.configurationItems.map(\.id), ["component"])
+        XCTAssertEqual(marketplace.configurationPluginIDs, ["component"])
+        var navigationUpdates = 0
+        var marketplaceUpdates = 0
+        let navigationSubscription = navigation.objectWillChange.sink { navigationUpdates += 1 }
+        let marketplaceSubscription = marketplace.objectWillChange.sink { marketplaceUpdates += 1 }
 
         _ = host.pluginSettingsContentViewItem(for: "component", sectionID: "custom")
         XCTAssertEqual(configurationCounter.callCount, 1)
@@ -733,6 +741,39 @@ final class PluginHostComponentSupportTests: XCTestCase {
         _ = host.pluginSettingsContentViewItem(for: "component", sectionID: "custom")
 
         XCTAssertEqual(configurationCounter.callCount, 2)
+        XCTAssertEqual(navigationUpdates, 0, "Live plugin changes must not invalidate navigation")
+        XCTAssertEqual(marketplaceUpdates, 0, "Live plugin changes must not invalidate the marketplace")
+        withExtendedLifetime((navigationSubscription, marketplaceSubscription)) {}
+    }
+
+    func testSettingsPresentationTracksPageAvailabilityWithoutSuppressingContentChanges() async {
+        let plugin = MutableComponentPanelPlugin(
+            id: "component",
+            settingsPage: customSettingsPage(counter: SettingsRenderCounter())
+        )
+        let host = makeHost(plugins: [plugin])
+        let navigation = SettingsNavigationPresentationModel(host: host)
+        let marketplace = PluginMarketplacePresentationModel(host: host)
+        var navigationSnapshots: [[String]] = []
+        var marketplaceSnapshots: [Set<String>] = []
+        let navigationSubscription = navigation.$configurationItems.sink {
+            navigationSnapshots.append($0.map(\.id))
+        }
+        let marketplaceSubscription = marketplace.$configurationPluginIDs.sink {
+            marketplaceSnapshots.append($0)
+        }
+
+        plugin.settingsPage = nil
+        plugin.triggerStateChange()
+        await host.waitForScheduledPluginStateRebuildForTests()
+        XCTAssertTrue(host.pluginSettingsItems.isEmpty)
+
+        plugin.settingsPage = customSettingsPage(counter: SettingsRenderCounter())
+        plugin.triggerStateChange()
+        await host.waitForScheduledPluginStateRebuildForTests()
+        XCTAssertEqual(navigationSnapshots, [["component"], [], ["component"]])
+        XCTAssertEqual(marketplaceSnapshots, [["component"], [], ["component"]])
+        withExtendedLifetime((navigationSubscription, marketplaceSubscription)) {}
     }
 
     func testPluginStateChangesOnlyReadDirtyPanelState() async throws {
@@ -1471,7 +1512,8 @@ final class PluginHostComponentSupportTests: XCTestCase {
                                             maximumFeatureListHeight: 200, isPanelVisible: true)
         let root = NSHostingView(rootView: ConfiguredMenuBarPanelsContent(
             pluginHost: host, model: model, contentBodyHeight: 200, onDismiss: {}, onOpenSettings: {},
-            onPresentDiskCleanConfiguration: {}, onPresentLaunchControlConfiguration: {}))
+            onPresentDiskCleanConfiguration: {}, onPresentLaunchControlConfiguration: {})
+            .environmentObject(MenuBarPanelPresentationModel(host: host, isVisible: true)))
         let window = NSWindow(contentRect: CGRect(x: 100, y: 100, width: 304, height: 200),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
@@ -1727,7 +1769,7 @@ private final class MockComponentPanelPlugin: MacToolsPlugin, PluginComponentPan
 private final class MutableComponentPanelPlugin: MacToolsPlugin, PluginComponentPanel {
     let metadata: PluginMetadata
     let descriptor = PluginComponentDescriptor(span: .oneByOne)
-    let settingsPage: PluginSettingsPage?
+    var settingsPage: PluginSettingsPage?
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?

@@ -47,6 +47,36 @@ final class DynamicPluginManagerTests: XCTestCase {
         XCTAssertTrue(plugin.deactivationReasons.isEmpty)
     }
 
+    func testInstalledMetadataSharesManagementSnapshotAndRefreshesAfterPackageChanges() throws {
+        let id = "com.example.demo"
+        let store = makeStore()
+        _ = try store.installPackage(from: makePackage(id: id, releaseChannel: "beta"))
+        let manager = DynamicPluginManager(
+            packageStore: store,
+            pluginLoader: StubDynamicPluginLoader { _ in [] }
+        )
+
+        let initial = manager.rebuildManagementItems(catalogSnapshot: nil)
+        XCTAssertEqual(initial.manifestsByID[id]?.version, "1.0.0")
+        XCTAssertEqual(initial.releaseChannelsByID[id], "beta")
+        XCTAssertNotNil(initial.capabilitiesByID[id])
+        XCTAssertNotNil(initial.installedAtByID[id])
+        XCTAssertEqual(manager.pluginManagementItems.map(\.id), [id])
+
+        _ = try store.updatePackage(from: makePackage(id: id, version: "2.0.0"))
+        let updated = manager.installedMetadata()
+        XCTAssertEqual(updated.manifestsByID[id]?.version, "2.0.0")
+        XCTAssertEqual(updated.installedAtByID[id], initial.installedAtByID[id])
+        XCTAssertEqual(initial.manifestsByID[id]?.version, "1.0.0", "A shared snapshot must stay immutable")
+
+        try manager.uninstallPlugin(pluginID: id)
+        let removed = manager.rebuildManagementItems(catalogSnapshot: nil)
+        XCTAssertTrue(removed.manifestsByID.isEmpty)
+        XCTAssertTrue(removed.capabilitiesByID.isEmpty)
+        XCTAssertTrue(removed.installedAtByID.isEmpty)
+        XCTAssertTrue(manager.pluginManagementItems.isEmpty)
+    }
+
     func testFutureHostCatalogEntryIsVisibleButCannotBeInstalled() throws {
         let store = makeStore()
         let manager = DynamicPluginManager(

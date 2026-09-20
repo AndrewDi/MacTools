@@ -13,6 +13,8 @@ struct PanelLayoutEditor: View {
     @StateObject private var scroller = PanelLayoutDragScroller()
     @State private var hover = PanelLayoutHoverState()
     @State private var entryToRemove: MenuBarPanelLayoutEntry?
+    @State private var removalSourceRect = CGRect.zero
+    @Namespace private var popoverCoordinateSpace
     @Environment(\.menuBarPanelTheme) private var theme
     @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -82,7 +84,9 @@ struct PanelLayoutEditor: View {
                     }
                 })
             }
-            .popover(item: $entryToRemove, arrowEdge: .trailing) { item in
+            .coordinateSpace(name: popoverCoordinateSpace)
+            .popover(item: $entryToRemove, attachmentAnchor: removalAttachment(in: geometry.size),
+                     arrowEdge: .trailing) { item in
                 MenuBarPanelRemovalConfirmation(
                     title: FeatureL10n.string("移除组件？"),
                     message: FeatureL10n.format("将从此面板移除“%@”。你可以从添加组件中重新添加。", item.item.title),
@@ -107,6 +111,15 @@ struct PanelLayoutEditor: View {
                 announce(feedback.message)
             }
         }
+    }
+
+    private func removalAttachment(in size: CGSize) -> PopoverAttachmentAnchor {
+        guard removalSourceRect.height > 0, size.width > 0, size.height > 0 else { return .rect(.bounds) }
+        // Keep the popover beside the viewport, at the clicked control's height.
+        // AppKit handles screen-edge avoidance; no window coordinates are needed.
+        let height = min(removalSourceRect.height, size.height)
+        let y = min(max(removalSourceRect.minY, 0), size.height - height)
+        return .rect(.rect(CGRect(x: 0, y: y, width: size.width, height: height)))
     }
 
     private func visibleContent(_ layout: PanelLayoutEditorSnapshot) -> some View {
@@ -144,8 +157,12 @@ struct PanelLayoutEditor: View {
             isDragging: session.sourceID == item.id, panels: pluginHost.menuBarPanels, panelID: panelID,
             hover: hover, hoverState: hover.state(for: item.id),
             nativeSource: session.nativeDragSource,
+            popoverCoordinateSpace: popoverCoordinateSpace,
             move: { commit(.init(id: item.id, offset: $0)) },
-            remove: { entryToRemove = item },
+            remove: { sourceRect in
+                removalSourceRect = sourceRect
+                entryToRemove = item
+            },
             moveToPanel: { move(item.entry, to: $0) }
         ) {
             if item.surface == .dashboard {
@@ -325,8 +342,9 @@ private struct PanelLayoutReorderItem<Content: View>: View {
     let hover: PanelLayoutHoverState
     @ObservedObject var hoverState: PanelLayoutItemHoverState
     let nativeSource: PanelLayoutNativeDragSource
+    let popoverCoordinateSpace: Namespace.ID
     let move: (Int) -> Void
-    let remove: () -> Void
+    let remove: (CGRect) -> Void
     let moveToPanel: (String) -> Void
     @ViewBuilder let content: Content
     let beginDrag: () -> String?
@@ -360,7 +378,12 @@ private struct PanelLayoutReorderItem<Content: View>: View {
                     ? AnyLayout(VStackLayout(spacing: metrics.spacing))
                     : AnyLayout(HStackLayout(spacing: metrics.spacing))
                 layout {
-                    Button(action: remove) {
+                    Button {
+                        // Read geometry only when invoked, including keyboard activation.
+                        let controls = PanelLayoutItemControlsLayout.frame(in: proxy.frame(in: .named(popoverCoordinateSpace)))
+                        remove(CGRect(x: controls.minX, y: controls.minY,
+                                      width: metrics.buttonSide, height: metrics.buttonSide))
+                    } label: {
                         controlIcon("trash", side: metrics.buttonSide)
                     }
                     .buttonStyle(.plain)
@@ -374,8 +397,8 @@ private struct PanelLayoutReorderItem<Content: View>: View {
                         Divider()
                         ForEach(panels.filter { $0.id != panelID }) { panel in
                             Button { moveToPanel(panel.id) } label: {
-                                Image(systemName: PluginSystemImage.resolvedName(panel.systemImage))
-                                    .accessibilityLabel(panel.title)
+                                Label(panel.title, systemImage: PluginSystemImage.resolvedName(panel.systemImage))
+                                    .labelStyle(.iconOnly)
                             }
                         }
                     } label: {
