@@ -8,8 +8,8 @@ final class DuoStatusPluginTests: XCTestCase {
     func testSettingsOnlyPluginStartsOnlyOnActivationAndRoutesClickToSettings() throws {
         let fixture = Fixture()
         let plugin = fixture.plugin
-        XCTAssertNil(plugin.primaryPanel)
-        XCTAssertNil(plugin.componentPanel)
+        XCTAssertFalse(plugin.panelItems.contains { $0.kind == .row })
+        XCTAssertFalse(plugin.panelItems.contains { $0.kind == .widget })
         XCTAssertTrue(plugin.permissionRequirements.isEmpty)
         XCTAssertEqual(plugin.settingsPage?.body.layout, .form)
         XCTAssertEqual(fixture.monitor.startCount, 0)
@@ -138,8 +138,7 @@ final class DuoStatusPluginTests: XCTestCase {
         let manifest = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
         let capabilities = try XCTUnwrap(manifest["capabilities"] as? [String: Any])
         XCTAssertEqual(manifest["id"] as? String, plugin.metadata.id)
-        XCTAssertEqual(capabilities["primaryPanel"] as? Bool, plugin.primaryPanel != nil)
-        XCTAssertEqual(capabilities["componentPanel"] as? Bool, plugin.componentPanel != nil)
+        XCTAssertEqual(capabilities["panelItems"] as? [String], plugin.panelItems.map { $0.kind.rawValue })
         XCTAssertEqual(capabilities["settings"] as? String, "form")
         XCTAssertEqual(manifest["permissions"] as? [String], [])
         XCTAssertFalse(plugin is any PluginActionProviding)

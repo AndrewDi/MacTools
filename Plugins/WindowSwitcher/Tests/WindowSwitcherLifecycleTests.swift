@@ -530,6 +530,37 @@ final class WindowSwitcherLifecycleTests: XCTestCase {
         XCTAssertFalse(tap.isEditing, "Persistent result navigation must still accept custom scope shortcuts")
     }
 
+    func testClosingSearchRestoresCyclingAndModifierRelease() async throws {
+        for releasedWhileSearching in [false, true] {
+            let catalog = ControlledSwitcherCatalog(), tap = ControlledSwitcherTap()
+            let overlay = WindowSwitcherOverlayController()
+            catalog.windows = [entry("a"), entry("b")]
+            let plugin = plugin(catalog: catalog, tap: tap, overlay: overlay)
+            defer { plugin.deactivate(reason: .hostShutdown) }
+            tap.onShortcutPressed(false, false, false)
+            await eventually { overlay.isVisible }
+            let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
+            func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+            let button = try XCTUnwrap(descendants(panel.contentView!).first {
+                $0.identifier?.rawValue == "window-switcher-enter-search"
+            } as? NSButton)
+            button.performClick(nil)
+            XCTAssertEqual(plugin.session?.isPersistent, true)
+            XCTAssertTrue(tap.isEditing)
+            if releasedWhileSearching { tap.onShortcutReleased() }
+            button.performClick(nil)
+            XCTAssertEqual(plugin.session?.isPersistent, false)
+            XCTAssertEqual(plugin.session?.invocationModifiers, .option)
+            XCTAssertFalse(tap.isEditing)
+            XCTAssertTrue(catalog.activated.isEmpty)
+            if releasedWhileSearching { tap.onShortcutPressed(false, false, false) }
+            let selectedID = try XCTUnwrap(plugin.session?.selectedID)
+            tap.onShortcutReleased()
+            await eventually { catalog.activated == [selectedID] }
+            XCTAssertNil(plugin.session)
+        }
+    }
+
     func testPermissionRevocationCancelsOpenSessionAndStopsWorkers() {
         let catalog = ControlledSwitcherCatalog(), tap = ControlledSwitcherTap()
         catalog.windows = [entry("a"), entry("b")]

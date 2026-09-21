@@ -20,6 +20,7 @@ import DisplayBrightnessPlugin
 import DisplayResolutionPlugin
 import DisplaySleepPlugin
 import DisplayTrueColorPlugin
+import DisplayVolumePlugin
 import DockLockPlugin
 import EjectDiskPlugin
 import EmptyTrashPlugin
@@ -309,6 +310,7 @@ final class PluginRuntimeActionSnapshotTests: XCTestCase {
         .init(pluginID: "display-resolution", makeProvider: DisplayResolutionPluginFactory.makeProvider),
         .init(pluginID: "display-sleep", makeProvider: DisplaySleepPluginFactory.makeProvider),
         .init(pluginID: "display-true-color", makeProvider: DisplayTrueColorPluginFactory.makeProvider),
+        .init(pluginID: "display-volume", makeProvider: DisplayVolumePluginFactory.makeProvider),
         .init(pluginID: "dock-lock", makeProvider: DockLockPluginFactory.makeProvider),
         .init(pluginID: "eject-disk", makeProvider: EjectDiskPluginFactory.makeProvider),
         .init(pluginID: "empty-trash", makeProvider: EmptyTrashPluginFactory.makeProvider),

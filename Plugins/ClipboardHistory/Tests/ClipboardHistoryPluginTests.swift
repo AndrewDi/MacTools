@@ -749,7 +749,7 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         let host = PluginHost(
             plugins: [plugin],
             shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager(registrar: registrar)
         )
@@ -972,7 +972,7 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         let host = PluginHost(
             plugins: [actionPlugin, plugin],
             shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: manager
         )
@@ -1017,7 +1017,7 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         let host = PluginHost(
             plugins: [actionPlugin, plugin],
             shortcutStore: ShortcutStore(userDefaults: hostDefaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: hostDefaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: hostDefaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: hostDefaults),
             globalShortcutManager: manager
         )
@@ -1585,8 +1585,8 @@ final class ClipboardHistoryPluginTests: XCTestCase {
                 "clipboard-essential-settings",
             ]
         )
-        XCTAssertNotNil(plugin.primaryPanel)
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .button)
+        XCTAssertTrue(plugin.panelItems.contains { $0.kind == .row })
+        XCTAssertEqual(plugin.rowDescriptor.controlStyle, .button)
     }
 
     func testEmbeddedShortcutSearchRevealsActualCustomSettingsSections() async throws {
@@ -3069,7 +3069,7 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         plugin.controller.start()
         await waitUntilLoaded(plugin.controller)
         XCTAssertNotNil(plugin.controller.errorMessage)
-        XCTAssertFalse(plugin.primaryPanelState.isOn)
+        XCTAssertFalse(plugin.rowState.isOn)
 
         let actionIDs = [
             ClipboardHistoryPlugin.ActionID.pauseCollection,

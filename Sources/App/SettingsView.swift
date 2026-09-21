@@ -4180,23 +4180,16 @@ struct PluginMixedShortcutFormSection: View {
 
     var body: some View {
         Section {
-            if collapsesAllContent {
-                SettingsFullWidthDisclosure(isExpanded: $isExpanded) {
-                    mixedRows
-                } label: {
-                    Text(AppL10n.settings(
-                        "plugins.configuration.shortcuts.show",
-                        defaultValue: "Show Shortcuts"
-                    ))
-                    .font(PluginSettingsTheme.Typography.rowTitle)
-                }
-                .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
-                .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
+            sectionContent
                 .settingsGroupedFormRowWidth(layoutWidths.sectionLayout)
-            } else {
-                mixedRows
-            }
-
+                .pluginSettingsSearchAnchor(
+                    pluginID: pluginID,
+                    entryID: Self.searchTarget(pluginID: pluginID, groupID: configuration.id).entryID
+                )
+                .onChange(of: searchTarget, initial: true) { _, target in
+                    Self.reveal(target: target, pluginID: pluginID,
+                                groupID: configuration.id, isExpanded: &isExpanded)
+                }
         } header: {
             SettingsGroupedFormSectionHeader(
                 title: configuration.title,
@@ -4209,13 +4202,24 @@ struct PluginMixedShortcutFormSection: View {
                     .frame(width: layoutWidths.sectionLayout, alignment: .leading)
             }
         }
-        .pluginSettingsSearchAnchor(
-            pluginID: pluginID,
-            entryID: Self.searchTarget(pluginID: pluginID, groupID: configuration.id).entryID
-        )
-        .onChange(of: searchTarget, initial: true) { _, target in
-            Self.reveal(target: target, pluginID: pluginID,
-                        groupID: configuration.id, isExpanded: &isExpanded)
+    }
+
+    @ViewBuilder
+    private var sectionContent: some View {
+        if collapsesAllContent {
+            SettingsFullWidthDisclosure(isExpanded: $isExpanded) {
+                mixedRows
+            } label: {
+                Text(AppL10n.settings(
+                    "plugins.configuration.shortcuts.show",
+                    defaultValue: "Show Shortcuts"
+                ))
+                .font(PluginSettingsTheme.Typography.rowTitle)
+            }
+            .padding(.horizontal, PluginSettingsTheme.Spacing.rowHorizontal)
+            .padding(.vertical, PluginSettingsTheme.Spacing.rowVertical)
+        } else {
+            mixedRows
         }
     }
 
@@ -4254,7 +4258,6 @@ struct PluginMixedShortcutFormSection: View {
                 shortcutRows
             }
         }
-        .settingsGroupedFormRowWidth(layoutWidths.sectionLayout)
     }
 
     private var actionRows: some View {
@@ -4289,30 +4292,24 @@ private struct PluginActionShortcutFormSection: View {
                 actionIDs: configuration.actionIDs
             )
             .settingsGroupedFormRowWidth(layoutWidths.sectionLayout)
+            // Keep search decoration on the row so Form can lay out the
+            // section header and footer outside its native card.
+            .pluginSettingsSearchAnchor(
+                pluginID: pluginID,
+                entryID: PluginActionShortcutSettingsConfiguration.settingsSearchEntryID
+            )
         } header: {
             SettingsGroupedFormSectionHeader(
                 title: configuration.title,
                 systemImage: configuration.systemImage,
                 layoutWidth: layoutWidths.readableContent
-            ) {
-                Button {
-                    pluginHost.presentActionsAndShortcutsSettings()
-                } label: {
-                    Label(FeatureL10n.string("操作与快捷键"), systemImage: "arrow.up.right")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-            }
+            )
         } footer: {
             if let description = configuration.description {
                 Text(description)
                     .frame(width: layoutWidths.sectionLayout, alignment: .leading)
             }
         }
-        .pluginSettingsSearchAnchor(
-            pluginID: pluginID,
-            entryID: PluginActionShortcutSettingsConfiguration.settingsSearchEntryID
-        )
     }
 }
 
@@ -4332,6 +4329,20 @@ private struct PluginFormSection: View {
     let layoutWidths: SettingsGroupedFormWidths
 
     var body: some View {
+        if !isEmptyPlacementAnchor {
+            formSection
+        }
+    }
+
+    private var isEmptyPlacementAnchor: Bool {
+        guard section.title == nil, section.footer == nil, section.headerAccessory == nil,
+              case let .rows(rows) = section.content else { return false }
+        return !rows.contains(where: \.isVisible)
+    }
+
+    // Empty sections can still position host-owned shortcut groups. Keep them
+    // in the page's ordering, but do not give them native Form chrome or spacing.
+    private var formSection: some View {
         Section {
             switch section.content {
             case let .rows(rows):

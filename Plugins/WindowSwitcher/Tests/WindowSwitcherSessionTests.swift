@@ -8,6 +8,12 @@ import XCTest
 @MainActor
 final class WindowSwitcherSessionTests: XCTestCase {
 
+    private final class KeyPropagationProbe: NSView {
+        var receivedKeys = 0
+        override func keyDown(with event: NSEvent) { receivedKeys += 1 }
+        override func performKeyEquivalent(with event: NSEvent) -> Bool { receivedKeys += 1; return false }
+    }
+
     private final class MagnifyEvent: NSEvent, @unchecked Sendable {
         var target: NSWindow?
         var point = NSPoint.zero
@@ -495,6 +501,8 @@ final class WindowSwitcherSessionTests: XCTestCase {
         let button = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-enter-search" } as? NSButton)
         let initialPlaceholder = search.placeholderString
         let cyclingTitle = mode.stringValue
+        XCTAssertTrue(search.isHiddenOrHasHiddenAncestor)
+        XCTAssertFalse(button.isHiddenOrHasHiddenAncestor)
         XCTAssertTrue(hint.stringValue.contains("⌃⌥"))
         var opened = false
         controller.onSelect = { _ in opened = true }
@@ -506,10 +514,12 @@ final class WindowSwitcherSessionTests: XCTestCase {
         XCTAssertEqual(search.placeholderString, initialPlaceholder)
         controller.noteCyclingInput()
         XCTAssertEqual(search.placeholderString, initialPlaceholder)
-        panel.makeFirstResponder(search)
+        button.performClick(nil)
         XCTAssertEqual(controller.session?.isPersistent, true)
         XCTAssertNotEqual(mode.stringValue, cyclingTitle)
-        XCTAssertTrue(button.isHidden)
+        XCTAssertFalse(search.isHiddenOrHasHiddenAncestor)
+        XCTAssertNotNil(search.currentEditor())
+        XCTAssertFalse(button.isHidden)
         XCTAssertTrue(hint.stringValue.contains("⌃⌥"))
         // The expiry task and this test resume independently on the main actor.
         // Wait for the visible transition rather than assuming 100 ms of scheduler
@@ -528,6 +538,206 @@ final class WindowSwitcherSessionTests: XCTestCase {
         controller.show(session, currentPID: 100, showsPreview: false)
         try await Task.sleep(nanoseconds: 50_000_000)
         XCTAssertEqual(search.placeholderString, initialPlaceholder)
+        XCTAssertFalse(search.isHiddenOrHasHiddenAncestor)
+        XCTAssertTrue(button.isHiddenOrHasHiddenAncestor)
+    }
+
+    func testDirectKeySearchExpandsWithoutMovingToolbarAndResetsOnReopen() async throws {
+        let controller = WindowSwitcherOverlayController()
+        var session = WindowSwitcherSession(entries: [entry("one", title: "Project"), entry("two", title: "Notes")],
+            selectedID: "one", isPersistent: true, originalWindowID: nil, usesDirectKeys: true)
+        session.entries[0].shortcutToken = "a"
+        controller.show(session, currentPID: 100, showsPreview: false)
+        defer { controller.hide() }
+        let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
+        let content = try XCTUnwrap(panel.contentView)
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+        let views = descendants(content)
+        let search = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-search" } as? NSTextField)
+        let button = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-enter-search" } as? NSButton)
+        let more = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-options" } as? NSButton)
+        let layout = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-layout" } as? NSSegmentedControl)
+        let scope = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-scope" })
+        XCTAssertTrue(button.superview === scope.superview)
+        XCTAssertTrue(more.superview === scope.superview)
+        XCTAssertTrue(layout.superview === scope.superview)
+        var opened = false
+        controller.onSelect = { selected in
+            XCTAssertEqual(selected.id, "one")
+            opened = true
+        }
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            panel.appearance = NSAppearance(named: appearance)
+            for width in [CGFloat(560), CGFloat(840)] {
+                controller.hide()
+                controller.show(session, currentPID: 100, showsPreview: false)
+                panel.setContentSize(NSSize(width: width, height: 400))
+                content.layoutSubtreeIfNeeded()
+                XCTAssertTrue(search.isHiddenOrHasHiddenAncestor)
+                let buttonFrame = button.convert(button.bounds, to: content)
+                let moreFrame = more.convert(more.bounds, to: content)
+                let layoutFrame = layout.convert(layout.bounds, to: content)
+                let panelFrame = panel.frame
+                let searchLabel = button.accessibilityLabel()
+                button.performClick(nil)
+                try await Task.sleep(for: .milliseconds(250))
+                content.layoutSubtreeIfNeeded()
+                XCTAssertFalse(search.isHiddenOrHasHiddenAncestor)
+                XCTAssertNotNil(search.currentEditor())
+                XCTAssertEqual(controller.session?.usesDirectKeys, false)
+                XCTAssertEqual(controller.session?.isPersistent, true)
+                XCTAssertNotEqual(button.accessibilityLabel(), searchLabel)
+                XCTAssertEqual(panel.frame, panelFrame)
+                XCTAssertEqual(button.convert(button.bounds, to: content), buttonFrame)
+                XCTAssertEqual(more.convert(more.bounds, to: content), moreFrame)
+                XCTAssertEqual(layout.convert(layout.bounds, to: content), layoutFrame)
+                let fieldFrame = search.convert(search.bounds, to: content)
+                XCTAssertGreaterThan(fieldFrame.width, 100, "Search surface: \(String(describing: search.superview?.frame))")
+                XCTAssertLessThan(fieldFrame.maxX, buttonFrame.minX)
+                let editor = try XCTUnwrap(search.currentEditor() as? NSTextView)
+                editor.insertText("Notes", replacementRange: NSRange(location: NSNotFound, length: 0))
+                XCTAssertEqual(controller.session?.query, "Notes")
+                XCTAssertEqual(controller.session?.results.map(\.id), ["two"])
+                if let directory = ProcessInfo.processInfo.environment["MACTOOLS_SEARCH_LAYOUT_ARTIFACT_DIR"] {
+                    let image = try XCTUnwrap(content.bitmapImageRepForCachingDisplay(in: content.bounds))
+                    content.cacheDisplay(in: content.bounds, to: image)
+                    let url = URL(fileURLWithPath: directory).appendingPathComponent("inline-search-\(appearance.rawValue)-\(Int(width)).png")
+                    try image.representation(using: .png, properties: [:])?.write(to: url)
+                }
+                let clear = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-clear-search" } as? NSButton)
+                clear.performClick(nil)
+                XCTAssertEqual(controller.session?.query, "")
+                XCTAssertNotNil(search.currentEditor())
+                editor.setMarkedText("Notes", selectedRange: NSRange(location: 5, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+                button.performClick(nil)
+                content.layoutSubtreeIfNeeded()
+                XCTAssertTrue(search.isHiddenOrHasHiddenAncestor)
+                XCTAssertNil(search.currentEditor())
+                XCTAssertEqual(search.stringValue, "")
+                XCTAssertEqual(controller.session?.query, "")
+                XCTAssertEqual(controller.session?.results.count, 2)
+                XCTAssertEqual(controller.session?.isPersistent, true)
+                XCTAssertEqual(controller.session?.usesDirectKeys, true)
+                XCTAssertEqual(button.accessibilityLabel(), searchLabel)
+                XCTAssertFalse(opened)
+                XCTAssertTrue(panel.firstResponder is WindowSwitcherCardCollection)
+                let find = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                    windowNumber: panel.windowNumber, context: nil, characters: "f", charactersIgnoringModifiers: "f",
+                    isARepeat: false, keyCode: UInt16(kVK_ANSI_F)))
+                button.performClick(nil)
+                XCTAssertFalse(search.isHiddenOrHasHiddenAncestor)
+                XCTAssertNotNil(search.currentEditor())
+                XCTAssertNotEqual(button.accessibilityLabel(), searchLabel)
+                XCTAssertTrue(controller.handleChooserShortcut(find), "Find keeps an open search field focused")
+                XCTAssertFalse(search.isHiddenOrHasHiddenAncestor)
+                button.performClick(nil)
+                XCTAssertTrue(search.isHiddenOrHasHiddenAncestor)
+                XCTAssertEqual(controller.session?.usesDirectKeys, true)
+            }
+        }
+        let directKey = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+            windowNumber: panel.windowNumber, context: nil, characters: "a", charactersIgnoringModifiers: "a",
+            isARepeat: false, keyCode: UInt16(kVK_ANSI_A)))
+        XCTAssertTrue(controller.handleChooserShortcut(directKey))
+        XCTAssertTrue(opened)
+        controller.hide()
+        session.usesDirectKeys = false
+        controller.show(session, currentPID: 100, showsPreview: false)
+        XCTAssertFalse(search.isHiddenOrHasHiddenAncestor)
+        XCTAssertTrue(button.isHiddenOrHasHiddenAncestor)
+        XCTAssertTrue(panel.makeFirstResponder(search))
+    }
+
+    func testCommandFFocusesDirectKeySearchAndConsumesPanelEvents() throws {
+        for layout in [WindowSwitcherLayout.grid, .list] {
+            for held in [NSEvent.ModifierFlags(), .command] {
+                let controller = WindowSwitcherOverlayController()
+                var window = entry("one", title: "Project"); window.shortcutToken = "cmd+f"
+                controller.show(WindowSwitcherSession(entries: [window], selectedID: window.id, isPersistent: true,
+                    originalWindowID: nil, usesDirectKeys: true, invocationModifiers: held),
+                    currentPID: 100, showsPreview: false, preferredLayout: layout)
+                defer { controller.hide() }
+                let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
+                func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+                let views = descendants(try XCTUnwrap(panel.contentView))
+                let search = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-search" } as? NSTextField)
+                let button = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-enter-search" } as? NSButton)
+                let probe = KeyPropagationProbe()
+                let nextResponder = panel.nextResponder
+                panel.nextResponder = probe
+                defer { panel.nextResponder = nextResponder }
+                var activated = false
+                controller.onSelect = { _ in activated = true }
+                let find = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+                    timestamp: 0, windowNumber: panel.windowNumber, context: nil, characters: "f",
+                    charactersIgnoringModifiers: "f", isARepeat: false, keyCode: UInt16(kVK_ANSI_F)))
+                XCTAssertTrue(panel.performKeyEquivalent(with: find), "Find must be consumed before menu or responder fallback")
+                XCTAssertFalse(search.isHiddenOrHasHiddenAncestor)
+                XCTAssertEqual(controller.session?.query, "")
+                XCTAssertEqual(controller.session?.isPersistent, true)
+                XCTAssertEqual(controller.session?.usesDirectKeys, false)
+                let editor = try XCTUnwrap(search.currentEditor() as? NSTextView)
+                editor.insertText("Project", replacementRange: NSRange(location: NSNotFound, length: 0))
+                panel.sendEvent(find)
+                XCTAssertTrue(search.currentEditor() === editor)
+                XCTAssertEqual(controller.session?.query, "Project", "Repeated Find must not insert F or collapse search")
+                editor.setMarkedText("pin", selectedRange: NSRange(location: 3, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+                XCTAssertTrue(panel.performKeyEquivalent(with: find))
+                XCTAssertTrue(editor.hasMarkedText(), "Find must preserve input-method composition")
+                XCTAssertFalse(button.isHiddenOrHasHiddenAncestor)
+                button.performClick(nil)
+                XCTAssertEqual(controller.session?.isPersistent, true)
+                XCTAssertEqual(controller.session?.usesDirectKeys, true)
+                panel.sendEvent(find)
+                XCTAssertFalse(search.isHiddenOrHasHiddenAncestor)
+                XCTAssertNotNil(search.currentEditor())
+                XCTAssertEqual(controller.session?.query, "")
+                XCTAssertFalse(activated)
+                XCTAssertEqual(probe.receivedKeys, 0)
+            }
+        }
+    }
+
+    func testInlineSearchSharesNarrowFilterRowAndClosingPreservesFilters() async throws {
+        var first = entry("first", title: "Project"); first.windowNumber = 1
+        first.displayID = 1; first.displayNameContext = "Built-in Display"
+        var second = entry("second", title: "Notes"); second.windowNumber = 2
+        second.displayID = 2; second.displayNameContext = "External Display"
+        let controller = WindowSwitcherOverlayController()
+        let session = WindowSwitcherSession(entries: [first, second], selectedID: first.id,
+            scope: .currentApplication(100), display: 1, isPersistent: false, originalWindowID: nil)
+        controller.show(session, currentPID: 100, showsPreview: false)
+        defer { controller.hide() }
+        let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
+        panel.setContentSize(NSSize(width: 560, height: 320))
+        let content = try XCTUnwrap(panel.contentView)
+        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+        let views = descendants(content)
+        let search = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-search" } as? NSTextField)
+        let button = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-enter-search" } as? NSButton)
+        let scope = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-scope" } as? WindowSwitcherScopeControl)
+        let display = try XCTUnwrap(views.compactMap { $0 as? NSPopUpButton }.first)
+        button.performClick(nil)
+        try await Task.sleep(for: .milliseconds(250))
+        content.layoutSubtreeIfNeeded()
+        XCTAssertFalse(scope.isHiddenOrHasHiddenAncestor)
+        XCTAssertFalse(display.isHiddenOrHasHiddenAncestor)
+        XCTAssertGreaterThanOrEqual(search.frame.width, 95, "Search surface: \(String(describing: search.superview?.frame))")
+        let surface = try XCTUnwrap(search.superview)
+        XCTAssertLessThanOrEqual(display.convert(display.bounds, to: content).maxX, surface.convert(surface.bounds, to: content).minX)
+        XCTAssertLessThanOrEqual(surface.convert(surface.bounds, to: content).maxX, button.convert(button.bounds, to: content).minX)
+        let editor = try XCTUnwrap(search.currentEditor() as? NSTextView)
+        editor.insertText("No match", replacementRange: NSRange(location: NSNotFound, length: 0))
+        XCTAssertTrue(controller.session?.results.isEmpty == true)
+        button.performClick(nil)
+        XCTAssertEqual(controller.session?.query, "")
+        XCTAssertEqual(controller.session?.scope, .currentApplication(100))
+        XCTAssertEqual(controller.session?.display, 1)
+        XCTAssertEqual(controller.session?.results.map(\.id), ["first"])
+        XCTAssertEqual(controller.session?.isPersistent, false)
+        XCTAssertEqual(controller.session?.usesDirectKeys, false)
+        XCTAssertFalse(panel.styleMask.contains(.resizable))
+        XCTAssertTrue(search.isHiddenOrHasHiddenAncestor)
     }
 
     func testCyclePresentationChangesDoNotPromoteButTypingDoes() throws {
@@ -792,6 +1002,72 @@ final class WindowSwitcherSessionTests: XCTestCase {
         XCTAssertEqual(opened, [entries[visible[1]].id, entries[scrolled[0]].id])
     }
 
+    func testLayoutSwitchHandlesBoundsChangesBeforeDestinationReload() throws {
+        for showsPreview in [false, true] {
+            let controller = WindowSwitcherOverlayController(preview: WindowSwitcherPreview(hasPermission: { false }))
+            let entries = (0..<60).map { entry("window-\($0)", title: "Document \($0)") }
+            controller.show(WindowSwitcherSession(entries: Array(entries.prefix(24)), selectedID: "window-23",
+                isPersistent: true, originalWindowID: nil), currentPID: 100, showsPreview: showsPreview,
+                preferredLayout: .grid)
+            defer { controller.hide() }
+            let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
+            let content = try XCTUnwrap(panel.contentView)
+            func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+            let views = descendants(content)
+            let table = try XCTUnwrap(views.compactMap { $0 as? NSTableView }.first)
+            let cards = try XCTUnwrap(views.compactMap { $0 as? NSCollectionView }.first)
+            let picker = try XCTUnwrap(views.first { $0.identifier?.rawValue == "window-switcher-layout" } as? NSSegmentedControl)
+            let cardScroll = try XCTUnwrap(cards.enclosingScrollView)
+            let listScroll = try XCTUnwrap(table.enclosingScrollView)
+            let action = try XCTUnwrap(picker.action)
+            XCTAssertEqual(table.numberOfRows, 0)
+            controller.onLayoutChange = { layout in
+                guard layout == .list else { return }
+                // Replay clip-view notifications emitted by AppKit during a resize,
+                // before the destination view has loaded its current results.
+                cardScroll.contentView.scroll(to: .zero)
+                for clip in [cardScroll.contentView, listScroll.contentView] {
+                    NotificationCenter.default.post(name: NSView.boundsDidChangeNotification, object: clip)
+                }
+            }
+            var opened: [String] = []
+            controller.onSelect = { opened.append($0.id) }
+            for (count, query) in [(24, ""), (60, ""), (60, "Document 1"), (60, "")] {
+                var session = WindowSwitcherSession(entries: Array(entries.prefix(count)), selectedID: nil,
+                    isPersistent: true, originalWindowID: nil)
+                session.query = query
+                session.selectedID = session.results.last?.id
+                controller.update(session)
+                content.layoutSubtreeIfNeeded()
+                cards.scrollToItems(at: [IndexPath(item: session.results.count - 1, section: 0)], scrollPosition: .bottom)
+
+                picker.selectedSegment = 1
+                XCTAssertTrue(NSApp.sendAction(action, to: picker.target, from: picker))
+                content.layoutSubtreeIfNeeded()
+                XCTAssertFalse(listScroll.isHidden)
+                XCTAssertEqual(table.numberOfRows, session.results.count)
+                XCTAssertEqual(table.selectedRow, session.results.count - 1)
+                XCTAssertEqual(controller.session?.selectedID, session.selectedID)
+                XCTAssertEqual(controller.session?.query, query)
+                let visible = controller.visibleShortcutRows()
+                XCTAssertFalse(visible.isEmpty)
+                for (offset, row) in visible.enumerated() {
+                    let cell = try XCTUnwrap(table.view(atColumn: 0, row: row, makeIfNecessary: true))
+                    let badge = try XCTUnwrap(descendants(cell).compactMap { $0 as? WindowSwitcherShortcutBadge }.first)
+                    XCTAssertEqual(badge.title, "⌘\(offset + 1)")
+                }
+
+                picker.selectedSegment = 0
+                XCTAssertTrue(NSApp.sendAction(action, to: picker.target, from: picker))
+                content.layoutSubtreeIfNeeded()
+                XCTAssertFalse(cardScroll.isHidden)
+                XCTAssertEqual(controller.session?.selectedID, session.selectedID)
+                XCTAssertEqual(controller.session?.query, query)
+            }
+            XCTAssertTrue(opened.isEmpty)
+        }
+    }
+
     func testNumberAndLayoutShortcutsWorkWhileCommandCycleIsHeld() throws {
         let controller = WindowSwitcherOverlayController()
         var session = WindowSwitcherSession(entries: (0..<4).map { var value = entry("held-\($0)"); value.windowNumber = UInt32($0 + 1); return value }, selectedID: "held-0", isPersistent: false, originalWindowID: nil)
@@ -1014,7 +1290,7 @@ final class WindowSwitcherSessionTests: XCTestCase {
         let content = try XCTUnwrap(panel.contentView)
         func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
         let cards = try XCTUnwrap(descendants(content).compactMap { $0 as? NSCollectionView }.first)
-        let scroll = try XCTUnwrap(cards.enclosingScrollView as? WindowSwitcherCardScrollView)
+        let scroll = try XCTUnwrap(cards.enclosingScrollView)
         for style in [NSScroller.Style.legacy, .overlay] {
             scroll.scrollerStyle = style
             for (width, expectedColumns) in [(CGFloat(600), 4), (740, 5), (840, 6)] {
@@ -1034,9 +1310,8 @@ final class WindowSwitcherSessionTests: XCTestCase {
                 XCTAssertTrue(cards.visibleRect.contains(frames[0]))
                 XCTAssertTrue(cards.visibleRect.contains(frames[expectedColumns * 2 - 1]),
                               "Two complete rows must remain visible above the preview")
-                XCTAssertEqual(scroll.hasContentBelow, expectedColumns < 6)
+                XCTAssertEqual(cards.visibleRect.maxY < cards.bounds.maxY - 1, expectedColumns < 6)
                 cards.scrollToItems(at: [IndexPath(item: 11, section: 0)], scrollPosition: .bottom)
-                scroll.updateOverflow()
                 XCTAssertTrue(cards.visibleRect.contains(frames[11]), "Overflow must remain reachable")
                 XCTAssertEqual(controller.session?.selectedID, entries[0].id, "Scrolling must not change selection")
             }
@@ -1284,40 +1559,47 @@ final class WindowSwitcherSessionTests: XCTestCase {
         XCTAssertNil(closed)
     }
 
-    func testGridOverflowButtonsFollowScrollAndFiltering() throws {
-        let controller = WindowSwitcherOverlayController()
-        var session = WindowSwitcherSession(entries: (0..<60).map { entry("overflow-\($0)", title: "Document \($0)") }, selectedID: "overflow-0", isPersistent: true, originalWindowID: nil)
-        controller.show(session, currentPID: 100, showsPreview: false, preferredLayout: .grid)
-        defer { controller.hide() }
-        let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
-        let content = try XCTUnwrap(panel.contentView)
-        func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
-        content.layoutSubtreeIfNeeded()
-        let scroll = try XCTUnwrap(descendants(content).compactMap { $0 as? WindowSwitcherCardScrollView }.first)
-        scroll.updateOverflow()
-        XCTAssertFalse(scroll.hasContentAbove)
-        XCTAssertTrue(scroll.hasContentBelow)
-        let down = try XCTUnwrap(descendants(scroll).first { $0.identifier?.rawValue == "window-grid-more-below" } as? NSButton)
-        down.performClick(nil)
-        XCTAssertTrue(scroll.hasContentAbove)
-        let up = try XCTUnwrap(descendants(scroll).first { $0.identifier?.rawValue == "window-grid-more-above" } as? NSButton)
-        XCTAssertFalse(up.isAccessibilityHidden())
-        up.performClick(nil)
-        XCTAssertFalse(scroll.hasContentAbove)
-        XCTAssertTrue(up.isAccessibilityHidden())
-        XCTAssertFalse(up.isEnabled)
-        session.selectedID = "overflow-59"
-        controller.update(session)
-        content.layoutSubtreeIfNeeded(); scroll.updateOverflow()
-        XCTAssertTrue(scroll.hasContentAbove)
-        XCTAssertFalse(scroll.hasContentBelow)
-        XCTAssertTrue(down.isAccessibilityHidden())
-        XCTAssertFalse(down.isEnabled)
-        session.query = "Document 59"
-        controller.update(session)
-        content.layoutSubtreeIfNeeded(); scroll.updateOverflow()
-        XCTAssertFalse(scroll.hasContentAbove)
-        XCTAssertFalse(scroll.hasContentBelow)
+    func testScrollbarsFollowOverflowAndFilteringInBothLayouts() throws {
+        for layout in [WindowSwitcherLayout.grid, .list] {
+            for style in [NSScroller.Style.legacy, .overlay] {
+                let controller = WindowSwitcherOverlayController(preview: WindowSwitcherPreview(hasPermission: { false }))
+                var session = WindowSwitcherSession(entries: (0..<60).map { entry("overflow-\($0)", title: "Document \($0)") },
+                    selectedID: "overflow-0", isPersistent: true, originalWindowID: nil)
+                controller.show(session, currentPID: 100, showsPreview: false, preferredLayout: layout)
+                defer { controller.hide() }
+                let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
+                let content = try XCTUnwrap(panel.contentView)
+                func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+                let cards = try XCTUnwrap(descendants(content).compactMap { $0 as? NSCollectionView }.first)
+                let table = try XCTUnwrap(descendants(content).compactMap { $0 as? NSTableView }.first)
+                let document: NSView = layout == .grid ? cards : table
+                let scroll = try XCTUnwrap(document.enclosingScrollView)
+                scroll.scrollerStyle = style
+                content.layoutSubtreeIfNeeded()
+                XCTAssertFalse(try XCTUnwrap(scroll.verticalScroller).isHidden)
+                XCTAssertFalse(descendants(scroll).contains {
+                    ["window-grid-more-above", "window-grid-more-below"].contains($0.identifier?.rawValue ?? "")
+                })
+
+                if layout == .grid { cards.scrollToItems(at: [IndexPath(item: 59, section: 0)], scrollPosition: .bottom) }
+                else { table.scrollRowToVisible(59) }
+                content.layoutSubtreeIfNeeded()
+                let lastFrame = layout == .grid
+                    ? try XCTUnwrap(cards.collectionViewLayout?.layoutAttributesForItem(at: IndexPath(item: 59, section: 0))).frame
+                    : table.rect(ofRow: 59)
+                XCTAssertTrue(document.visibleRect.contains(lastFrame), "The last window remains reachable without overlay buttons")
+                XCTAssertEqual(controller.session?.selectedID, "overflow-0")
+
+                for (query, fits) in [("Document 59", true), ("no matching window", true), ("", false), ("Document 0", true)] {
+                    session.query = query
+                    session.normalizeSelection()
+                    controller.update(session)
+                    content.layoutSubtreeIfNeeded()
+                    XCTAssertEqual(scroll.verticalScroller?.isHidden, fits, "layout=\(layout), style=\(style.rawValue), query=\(query)")
+                    if fits { XCTAssertGreaterThanOrEqual(document.visibleRect.height + 1, document.bounds.height) }
+                }
+            }
+        }
     }
 
     private func entry(_ id: String, title: String? = "Document", pid: pid_t = 100) -> WindowSwitcherAppEntry {

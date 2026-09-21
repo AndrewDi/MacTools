@@ -247,49 +247,49 @@
     "plugin.capability.both": {
       "extractionState": "manual",
       "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "لوحة المعلومات ولوحة الميزات" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Dashboard und Funktionsbereich" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Dashboard and Feature Panel" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Panel y panel de funciones" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Tableau de bord et panneau de fonctionnalités" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボードと機能パネル" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "대시보드 및 기능 패널" } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Painel e painel de recursos" } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Панель управления и панель функций" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仪表盘与功能面板" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "儀表板與功能面板" } }
+        "ar": { "stringUnit": { "state": "translated", "value": "البطاقات وصفوف الإجراءات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Karten und Aktionszeilen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Cards and Action Rows" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Tarjetas y filas de acciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Cartes et lignes d’actions" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "カードとアクション行" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "카드 및 동작 행" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Cartões e linhas de ações" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Карточки и строки действий" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "卡片与功能行" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "卡片與功能列" } }
       }
     },
-    "plugin.capability.dashboard": {
+    "plugin.capability.widget": {
       "extractionState": "manual",
       "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "لوحة المعلومات" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Dashboard" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Panel" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Tableau de bord" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "ダッシュボード" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "대시보드" } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Painel" } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Панель управления" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "仪表盘" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "儀表板" } }
+        "ar": { "stringUnit": { "state": "translated", "value": "البطاقات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Karten" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Cards" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Tarjetas" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Cartes" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "カード" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "카드" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Cartões" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Карточки" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "卡片" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "卡片" } }
       }
     },
-    "plugin.capability.featurePanel": {
+    "plugin.capability.row": {
       "extractionState": "manual",
       "localizations": {
-        "ar": { "stringUnit": { "state": "translated", "value": "لوحة الميزات" } },
-        "de": { "stringUnit": { "state": "translated", "value": "Funktionsbereich" } },
-        "en": { "stringUnit": { "state": "translated", "value": "Feature Panel" } },
-        "es": { "stringUnit": { "state": "translated", "value": "Panel de funciones" } },
-        "fr": { "stringUnit": { "state": "translated", "value": "Panneau de fonctionnalités" } },
-        "ja": { "stringUnit": { "state": "translated", "value": "機能パネル" } },
-        "ko": { "stringUnit": { "state": "translated", "value": "기능 패널" } },
-        "pt": { "stringUnit": { "state": "translated", "value": "Painel de recursos" } },
-        "ru": { "stringUnit": { "state": "translated", "value": "Панель функций" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能面板" } },
-        "zh-Hant": { "stringUnit": { "state": "translated", "value": "功能面板" } }
+        "ar": { "stringUnit": { "state": "translated", "value": "صفوف الإجراءات" } },
+        "de": { "stringUnit": { "state": "translated", "value": "Aktionszeilen" } },
+        "en": { "stringUnit": { "state": "translated", "value": "Action Rows" } },
+        "es": { "stringUnit": { "state": "translated", "value": "Filas de acciones" } },
+        "fr": { "stringUnit": { "state": "translated", "value": "Lignes d’actions" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "アクション行" } },
+        "ko": { "stringUnit": { "state": "translated", "value": "동작 행" } },
+        "pt": { "stringUnit": { "state": "translated", "value": "Linhas de ações" } },
+        "ru": { "stringUnit": { "state": "translated", "value": "Строки действий" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "功能行" } },
+        "zh-Hant": { "stringUnit": { "state": "translated", "value": "功能列" } }
       }
     },
     "plugin.capability.settingsOnly": {

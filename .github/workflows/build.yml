@@ -120,8 +120,8 @@ jobs:
           path: build/CI-TestResults.xcresult
           retention-days: 7
 
-      - name: Verify PluginKit v6 binary compatibility
-        run: ./scripts/plugins/verify-plugin-kit-v6-binary-compatibility.sh
+      - name: Verify PluginKit v7 binary compatibility
+        run: ./scripts/plugins/verify-plugin-kit-v7-binary-compatibility.sh
 
       - name: Build and verify unsigned Nightly configuration
         run: |

@@ -1,25 +1,40 @@
-# Panel layout editing acceptance
+# Panel layout editing validation
 
-Default validation uses XCTest for persisted entries, independent widget copies, cross-panel moves and Undo, drag invalidation, viewport mounting, and plugin lifecycle. `MenuBarPanelPresenterTests` retains regressions for deleting the selected panel, editing dismissal, and coordinated resizing; `PanelLayoutEditorTests` checks removal confirmation and entry isolation. Run the smallest affected test class with `-only-testing:MacToolsTests/<TestClassName>`.
+Start with the smallest relevant XCTest method or class. Reuse existing coverage and add only missing core behavior or a concrete regression.
 
-Check cosmetic changes visually. Avoid exact padding/color assertions, menu-count checks, screenshot generation without comparisons, and repeating the same behavior through several native click sequences. `PanelLayoutToolbarTests` checks feedback coalescing with explicit timestamps instead of waiting for animation cooldowns.
+| Area | Existing coverage |
+| --- | --- |
+| Layout persistence and migration | `MenuBarPanelStoreTests`, `PluginOrderingStoreTests`, `PreferencesBackupTests` |
+| Independent placements, moves, removal, and Undo | `PanelLayoutEditorTests`, `PanelLayoutEditingSessionTests` |
+| Selected-panel removal, dismissal, and resizing | `MenuBarPanelPresenterTests` |
+| Grid placement and viewport mounting | `ComponentPanelLayoutTests`, `MenuBarPanelLayoutTests` |
+| Feedback coalescing | `PanelLayoutToolbarTests` with explicit timestamps |
 
-For changes to native drag routing or hit testing, run `make panel-layout-ui-tests` on a logged-in macOS desktop with the repository's Xcode toolchain. This is an opt-in check, excluded from `make ci` and the GitHub Build workflow. To run one scenario, use `python3 scripts/e2e/run_panel_layout_fixture.py --surface cross-panels` (also accepts `tabs`, `dashboard`, or `features`).
+Check cosmetic changes visually. Avoid exact padding/color assertions, menu-count checks, captures without review, and repeated native click sequences for behavior already covered by model tests.
 
-The runner compiles the production editor, toolbar, grid packing, drag session, native drag source, and scroller into a temporary application with synthetic host/theme interfaces. It opens an isolated popover, drives its native AppKit event queue, and checks:
+## Native drag fixture
 
-- Dashboard and Feature Panel in left-to-right and right-to-left layouts.
-- Tab reordering and cross-panel drag transfer.
-- A card-body drag, moving to the end and back to the beginning.
-- Cancellation outside the reorder canvas, followed by a successful new drag.
-- Undo and the visible Done button.
+For native drag routing or hit-testing changes, build the current Debug PluginKit framework, then select the affected scenario:
 
-Each scenario runs in a separate process with a watchdog. The runner bounds compilation and execution time, removes its temporary files, and exits unsuccessfully if a scenario fails. It does not load installed plugins, use personal preferences, replace the Debug app, or post global pointer events.
+```bash
+make build
+python3 scripts/e2e/run_panel_layout_fixture.py --surface cross-panels
+```
 
-The synthetic host is an interaction fixture, not a persistence test. `PanelLayoutEditorTests` separately exercises the real `PluginHost`, independent entries, surface isolation, Undo, control isolation, and scroll coordinates. `PanelLayoutEditingSessionTests` covers stale completion callbacks, invalidation, Undo eligibility, and insertion boundaries.
+To check fixture compilation without opening windows, use:
 
-`PanelLayoutEditorTests.testDragPreviewKeepsCardFramesAndDropCanvasStableUntilCommit` mounts mixed-size cards in both layout directions and on both surfaces. It checks that previews and leaving the drop area preserve card frames and canvas bounds, and that committing the move updates the actual layout.
+```bash
+python3 scripts/e2e/run_panel_layout_fixture.py --compile-only
+```
 
-A standalone application loop is deliberate. XCTest's async event pumping can initiate a native source without completing its drop; nesting `NSApplication.run()` inside XCTest can hang its runner. Keep native drag acceptance in the separate fixture.
+Run `--help` for the current scenario list, including compact widgets. Use `make panel-layout-ui-tests` when a shared change warrants all scenarios. The fixture uses the repository's Xcode toolchain; native interaction requires a logged-in macOS desktop. It is opt-in and excluded from `make ci` and GitHub Build.
 
-Before marking the feature ready, also check physical mouse/trackpad dragging and drag lock, dragging outside the application, sustained edge scrolling, keyboard navigation, VoiceOver, and Reduce Motion on supported macOS versions. The fixture uses synthetic pointer events and does not establish those hardware/accessibility results.
+The runner links the built Debug PluginKit framework and compiles the production layout store, models, editor, grid, drag session/source, and scroller into a temporary application with in-memory preferences and synthetic host/theme interfaces. It drives native AppKit events to check affected combinations of tab ordering, mixed widget/row layouts, cross-panel transfer, drag cancellation, Undo, and Done in left-to-right and right-to-left layouts.
+
+Each scenario has a separate process and watchdog. Compilation and execution are bounded, temporary files are removed, and failures produce a nonzero exit. The fixture does not load installed plugins, use personal preferences, or replace the Debug app. It briefly positions the cursor inside its window and restores it afterward; mouse-button events remain scoped to that window.
+
+The synthetic host verifies interaction; XCTest covers real host persistence, placement isolation, drag invalidation, insertion boundaries, and layout stability. Keep native drag acceptance in the standalone application: nested application loops or async event pumping inside XCTest can hang or miss drop completion.
+
+## Physical acceptance
+
+When the change affects these paths, check physical mouse/trackpad dragging, drag lock, dragging outside the app, sustained edge scrolling, keyboard navigation, VoiceOver, and Reduce Motion on the relevant macOS versions. Synthetic pointer events do not establish hardware or accessibility behavior. Record which scenarios were exercised and any remaining gaps in the PR.

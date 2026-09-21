@@ -1,6 +1,6 @@
 # Duo Status
 
-Duo Status (`duo-status`) is a PluginKit v6 plugin for MacTools 1.3.1 or later. It displays a 24-point menu-bar icon for the Mac's battery, Wi-Fi signal, and network connection. The implementation is adapted from the artwork and monitoring in [PR #434](https://github.com/ggbond268/MacTools/pull/434).
+Duo Status (`duo-status`) is a PluginKit v7 plugin for MacTools 1.3.1 or later. It displays a 24-point menu-bar icon for the Mac's battery, Wi-Fi signal, and network connection. The implementation is adapted from the artwork and monitoring in [PR #434](https://github.com/ggbond268/MacTools/pull/434).
 
 ## Use
 

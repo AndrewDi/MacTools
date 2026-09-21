@@ -9,7 +9,7 @@ final class PluginPackageManifestTests: XCTestCase {
             version: "1.0.0",
             minHostVersion: "0.15.0",
             bundleRelativePath: "Demo.bundle",
-            capabilities: .init(primaryPanel: true)
+            capabilities: .init(panelItems: [.row])
         )
 
         XCTAssertNoThrow(try PluginPackageManifestLoader.validate(manifest, hostVersion: "0.16.0"))
@@ -103,15 +103,15 @@ final class PluginPackageManifestTests: XCTestCase {
         let expectations = [
             (
                 path: "Plugins/MouseEnhancer/plugin.json",
-                minimum: "1.3.0",
-                compatibleHost: "1.3.0",
-                incompatibleHost: "1.2.0" as String?
+                minimum: "1.3.1",
+                compatibleHost: "1.3.1",
+                incompatibleHost: "1.3.0" as String?
             ),
             (
                 path: "Plugins/TrackpadGestures/plugin.json",
-                minimum: "1.3.0",
-                compatibleHost: "1.3.0",
-                incompatibleHost: "1.2.0"
+                minimum: "1.3.1",
+                compatibleHost: "1.3.1",
+                incompatibleHost: "1.3.0"
             ),
         ]
         for expectation in expectations {
@@ -124,26 +124,29 @@ final class PluginPackageManifestTests: XCTestCase {
                 )
             )
 
-            XCTAssertEqual(manifest.minHostVersion, expectation.minimum)
+            XCTAssertEqual(manifest.minHostVersion, expectation.minimum, relativePath)
             XCTAssertNoThrow(
                 try PluginPackageManifestLoader.validate(
                     manifest,
                     hostVersion: expectation.compatibleHost
-                )
+                ),
+                relativePath
             )
             if let incompatibleHost = expectation.incompatibleHost {
                 XCTAssertThrowsError(
                     try PluginPackageManifestLoader.validate(
                         manifest,
                         hostVersion: incompatibleHost
-                    )
+                    ),
+                    relativePath
                 ) { error in
                     XCTAssertEqual(
                         error as? PluginPackageManifestError,
                         .incompatibleHostVersion(
                             required: expectation.minimum,
                             current: incompatibleHost
-                        )
+                        ),
+                        relativePath
                     )
                 }
             }
