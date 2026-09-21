@@ -196,6 +196,11 @@ final class StorageExplorerSafetyPolicyTests: XCTestCase {
         XCTAssertTrue(result.isAllowed)
     }
 
+    func testOrdinaryItemInsideFilesystemRootIsAllowed() {
+        let result = policy.validatePathForRemoval("/Users/other/Documents/report.txt", withinRoot: "/")
+        XCTAssertTrue(result.isAllowed)
+    }
+
     func testRecycleItemUsesTrashRecycler() async throws {
         let root = tempDirectory.path
         let validFile = tempDirectory.appendingPathComponent("file_to_trash.txt").path

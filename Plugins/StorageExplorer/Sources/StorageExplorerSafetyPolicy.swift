@@ -138,7 +138,7 @@ public struct StorageExplorerSafetyPolicy: Sendable {
         }
 
         // Must be strictly inside the scan root
-        guard normalizedPath.hasPrefix(normalizedRoot + "/") else {
+        guard Self.isEqualOrDescendant(normalizedPath, of: normalizedRoot) else {
             return .blocked(reason: "Path is outside the active scan root")
         }
 

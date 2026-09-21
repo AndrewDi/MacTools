@@ -129,6 +129,57 @@ final class StorageExplorerControllerTests: XCTestCase {
         try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/replacement"] }
     }
 
+    func testCancelledRescanRebuildsRetainedHierarchyAfterClearingBasket() async throws {
+        let scanner = ControlledStorageScanner()
+        let controller = StorageExplorerController(scanner: scanner)
+        let root = "/tmp/storage-cancelled-refresh"
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        scanner.finish(path: root, snapshot: Self.fixture(root: root))
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/b", root + "/a"] }
+
+        controller.toggleSelection(path: root + "/b")
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/a"] }
+
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        XCTAssertTrue(controller.basket.isEmpty)
+        controller.cancelScan()
+        scanner.finish(path: root, error: CancellationError())
+
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/b", root + "/a"] }
+        XCTAssertEqual(controller.scanState, .cancelled)
+    }
+
+    func testFailedRescanRebuildsRetainedHierarchyAfterClearingBasket() async throws {
+        let scanner = ControlledStorageScanner()
+        let controller = StorageExplorerController(scanner: scanner)
+        let root = "/tmp/storage-failed-refresh"
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        scanner.finish(path: root, snapshot: Self.fixture(root: root))
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/b", root + "/a"] }
+
+        controller.toggleSelection(path: root + "/b")
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/a"] }
+
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        XCTAssertTrue(controller.basket.isEmpty)
+        scanner.finish(
+            path: root,
+            error: NSError(domain: "StorageExplorerControllerTests", code: 1)
+        )
+
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/b", root + "/a"] }
+        XCTAssertFalse(controller.isScanning)
+        if case .failed = controller.scanState {} else {
+            XCTFail("Expected failed scan state")
+        }
+    }
+
     func testPartialResultsUpdateProgressWithoutReplacingVisibleSnapshot() async throws {
         let scanner = ControlledStorageScanner()
         let controller = StorageExplorerController(scanner: scanner)

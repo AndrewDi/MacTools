@@ -95,6 +95,7 @@ public final class StorageExplorerController: ObservableObject {
         completionError: String? = nil
     ) {
         guard !isExecutingTrash else { return }
+        let previousBasket = basket
         cancelScan()
         let id = UUID()
         generation = id
@@ -133,6 +134,9 @@ public final class StorageExplorerController: ObservableObject {
         status.progress = StorageExplorerScanProgress(currentPath: url.path)
         scanStartedAt = Date()
         scanState = .scanning(status.progress)
+        if sameRoot, basket != previousBasket {
+            rebuildRetainedPresentation()
+        }
         activeScanTask = Task { [weak self, scanner] in
             do {
                 if let invalidation = self?.cacheInvalidationTask {
@@ -176,6 +180,7 @@ public final class StorageExplorerController: ObservableObject {
                     self.lastErrorMessage = error.localizedDescription
                 }
                 self.scanStartedAt = nil
+                self.rebuildRetainedPresentation()
             }
         }
     }
@@ -219,11 +224,13 @@ public final class StorageExplorerController: ObservableObject {
     }
 
     public func cancelScan() {
+        let wasScanning = isScanning
         generation = UUID()
         activeScanTask?.cancel()
         activeScanTask = nil
-        if isScanning { scanState = .cancelled }
+        if wasScanning { scanState = .cancelled }
         scanStartedAt = nil
+        if wasScanning { rebuildRetainedPresentation() }
     }
 
     public func selectFolderAndScan() {
@@ -274,6 +281,12 @@ public final class StorageExplorerController: ObservableObject {
     private func refreshPresentation() {
         presentationRevision += 1
         schedulePresentation()
+    }
+
+    private func rebuildRetainedPresentation() {
+        guard rootItem != nil else { return }
+        beginPresentationUpdate()
+        refreshPresentation()
     }
 
     private func schedulePresentation() {
