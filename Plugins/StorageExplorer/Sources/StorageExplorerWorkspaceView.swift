@@ -388,93 +388,7 @@ public struct StorageExplorerWorkspaceView: View {
             ScrollView {
                 LazyVStack(spacing: 1) {
                     ForEach(controller.rows.prefix(16)) { row in
-                        let isTreemapHovered = listRowMatchesTreemapHover(row)
-                        let eligibility = controller.reviewEligibility(for: row.item)
-                        HStack(spacing: 8) {
-                            Button {
-                                controller.toggleSelection(path: row.item.path)
-                            } label: {
-                                Image(systemName: eligibilityCopy.icon(for: eligibility))
-                                    .foregroundStyle(reviewEligibilityColor(for: eligibility))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(!eligibility.canToggle)
-                            .help(eligibilityCopy.message(for: eligibility))
-                            Text(localizedName(row)).lineLimit(1).truncationMode(.middle)
-                            Spacer(minLength: 4)
-                            Text(row.sizeLabel)
-                                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
-                            if row.item.isDirectory && !row.item.isPackage {
-                                Button { controller.drillDown(to: row.item) } label: {
-                                    Image(systemName: "chevron.right")
-                                }
-                                .buttonStyle(.plain)
-                                .help(text("openFolder", "打开文件夹"))
-                            }
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            controller.selectedPath == row.id
-                                ? Color.accentColor.opacity(0.12)
-                                : isTreemapHovered ? Color.accentColor.opacity(0.14) : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 6)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(
-                                    isTreemapHovered ? Color.accentColor.opacity(0.7) : Color.clear,
-                                    lineWidth: 1.5
-                                )
-                        )
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if row.item.isDirectory && !row.item.isPackage {
-                                controller.drillDown(to: row.item)
-                            } else {
-                                controller.selectedPath = row.id
-                            }
-                        }
-                        .modifier(StorageExplorerListDragModifier(
-                            enabled: eligibility.canAdd,
-                            path: row.item.path
-                        ))
-                        .contextMenu {
-                            if eligibility.canToggle {
-                                Button {
-                                    controller.toggleSelection(path: row.item.path)
-                                } label: {
-                                    Label(
-                                        eligibility == .selected
-                                            ? text("removeFromReview", "移出审阅")
-                                            : text("addToReview", "加入审阅"),
-                                        systemImage: eligibility == .selected
-                                            ? "minus.circle" : "plus.circle"
-                                    )
-                                }
-                                Divider()
-                            } else {
-                                Button {} label: {
-                                    Label(
-                                        eligibilityCopy.message(for: eligibility),
-                                        systemImage: eligibilityCopy.icon(for: eligibility)
-                                    )
-                                }
-                                .disabled(true)
-                                Divider()
-                            }
-                            Button {
-                                controller.revealInFinder(path: row.item.path)
-                            } label: {
-                                Label(text("revealInFinder", "在访达中显示"), systemImage: "folder")
-                            }
-                        }
-                        .focusable(true, interactions: .activate)
-                        .focusEffectDisabled()
-                        .onKeyPress(.space) {
-                            showQuickLook(for: row.item) ? .handled : .ignored
-                        }
-                        .help("\(row.item.path)\n\(eligibilityCopy.message(for: eligibility))")
+                        compactListRow(row, eligibilityCopy: eligibilityCopy)
                     }
                 }
             }
@@ -485,6 +399,105 @@ public struct StorageExplorerWorkspaceView: View {
         }
         .background(Color.secondary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
         .accessibilityLabel(text("results", "扫描结果"))
+    }
+
+    private func compactListRow(
+        _ row: StorageExplorerRow,
+        eligibilityCopy: StorageExplorerReviewEligibilityCopy
+    ) -> some View {
+        let isTreemapHovered = listRowMatchesTreemapHover(row)
+        let eligibility = controller.reviewEligibility(for: row.item)
+        let backgroundColor = controller.selectedPath == row.id
+            ? Color.accentColor.opacity(0.12)
+            : isTreemapHovered ? Color.accentColor.opacity(0.14) : Color.clear
+        let borderColor = isTreemapHovered ? Color.accentColor.opacity(0.7) : Color.clear
+        let help = "\(row.item.path)\n\(eligibilityCopy.message(for: eligibility))"
+
+        return HStack(spacing: 8) {
+            Button {
+                controller.toggleSelection(path: row.item.path)
+            } label: {
+                Image(systemName: eligibilityCopy.icon(for: eligibility))
+                    .foregroundStyle(reviewEligibilityColor(for: eligibility))
+            }
+            .buttonStyle(.plain)
+            .disabled(!eligibility.canToggle)
+            .help(eligibilityCopy.message(for: eligibility))
+            Text(localizedName(row)).lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 4)
+            Text(row.sizeLabel)
+                .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+            if row.item.isDirectory && !row.item.isPackage {
+                Button { controller.drillDown(to: row.item) } label: {
+                    Image(systemName: "chevron.right")
+                }
+                .buttonStyle(.plain)
+                .help(text("openFolder", "打开文件夹"))
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(backgroundColor, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(borderColor, lineWidth: 1.5)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if row.item.isDirectory && !row.item.isPackage {
+                controller.drillDown(to: row.item)
+            } else {
+                controller.selectedPath = row.id
+            }
+        }
+        .modifier(StorageExplorerListDragModifier(
+            enabled: eligibility.canAdd,
+            path: row.item.path
+        ))
+        .contextMenu {
+            compactListContextMenu(row: row, eligibility: eligibility, eligibilityCopy: eligibilityCopy)
+        }
+        .focusable(true, interactions: .activate)
+        .focusEffectDisabled()
+        .onKeyPress(.space) {
+            showQuickLook(for: row.item) ? .handled : .ignored
+        }
+        .help(help)
+    }
+
+    @ViewBuilder
+    private func compactListContextMenu(
+        row: StorageExplorerRow,
+        eligibility: StorageExplorerReviewEligibility,
+        eligibilityCopy: StorageExplorerReviewEligibilityCopy
+    ) -> some View {
+        if eligibility.canToggle {
+            let isSelected = eligibility == .selected
+            Button {
+                controller.toggleSelection(path: row.item.path)
+            } label: {
+                Label(
+                    isSelected
+                        ? text("removeFromReview", "移出审阅")
+                        : text("addToReview", "加入审阅"),
+                    systemImage: isSelected ? "minus.circle" : "plus.circle"
+                )
+            }
+        } else {
+            Button {} label: {
+                Label(
+                    eligibilityCopy.message(for: eligibility),
+                    systemImage: eligibilityCopy.icon(for: eligibility)
+                )
+            }
+            .disabled(true)
+        }
+        Divider()
+        Button {
+            controller.revealInFinder(path: row.item.path)
+        } label: {
+            Label(text("revealInFinder", "在访达中显示"), systemImage: "folder")
+        }
     }
 
     private func localizedName(_ row: StorageExplorerRow) -> String {
