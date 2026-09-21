@@ -24,7 +24,7 @@ struct DDCVolumeValue {
     let maximum: UInt16
 }
 
-protocol DDCVolumeTransport {
+protocol DDCVolumeTransport: Sendable {
     func readVolume() throws -> DDCVolumeValue
     func writeVolume(_ value: UInt16) throws
 }
@@ -125,7 +125,7 @@ final class Arm64DDCTransport: DDCVolumeTransport, @unchecked Sendable {
         _ reply: [UInt8],
         displayName: String
     ) throws -> DDCVolumeValue {
-        guard reply.count >= 10 else {
+        guard reply.count == 11 else {
             throw DisplayVolumeControllerError.unsupportedReply(displayName: displayName)
         }
 
@@ -134,15 +134,11 @@ final class Arm64DDCTransport: DDCVolumeTransport, @unchecked Sendable {
             throw DisplayVolumeControllerError.unsupportedReply(displayName: displayName)
         }
 
-        guard reply[0] == 0x91 else {
-            throw DisplayVolumeControllerError.unsupportedReply(displayName: displayName)
-        }
-
-        guard reply[1] == 0x08 else {
-            throw DisplayVolumeControllerError.unsupportedReply(displayName: displayName)
-        }
-
-        guard reply[4] == DDCVolumeControl.volume else {
+        guard reply[0] == DDCVolumeControl.displayAddress,
+              reply[1] == 0x88,
+              reply[2] == 0x02,
+              reply[3] == 0x00,
+              reply[4] == DDCVolumeControl.volume else {
             throw DisplayVolumeControllerError.unsupportedReply(displayName: displayName)
         }
 

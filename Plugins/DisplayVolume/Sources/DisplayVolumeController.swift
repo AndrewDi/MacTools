@@ -71,6 +71,7 @@ final class DisplayVolumeController: DisplayVolumeControlling {
 
     private var managedDisplays: [CGDirectDisplayID: ManagedDisplay] = [:]
     private var displayOrder: [CGDirectDisplayID] = []
+    private var readTasks: [CGDirectDisplayID: (id: UUID, task: Task<Void, Never>)] = [:]
     private var lastErrorMessage: String?
     private var nextWriteID: UInt64 = 0
     private var writeWaiters: [UInt64: CheckedContinuation<DisplayVolumeWriteResult, Never>] = [:]
@@ -81,6 +82,7 @@ final class DisplayVolumeController: DisplayVolumeControlling {
     private var terminateObserver: NSObjectProtocol?
 
     var pendingWriteTimeoutCount: Int { writeTimeoutTasks.count }
+    var pendingReadCount: Int { readTasks.count }
 
     init(
         displayProvider: DisplayProviding = SystemDisplayService(),
@@ -116,7 +118,7 @@ final class DisplayVolumeController: DisplayVolumeControlling {
             uniqueKeysWithValues: managedDisplays.map { ($0.key, $0.value.backend) }
         )
         let nextBackends = backendBuilder.backends(for: displays, previous: previousBackends)
-        let nextDisplayIDs = Set(displays.map(\.id))
+        let nextDisplayIDs = Set(nextBackends.keys)
 
         cleanupDisconnectedDisplays(keeping: nextDisplayIDs)
 
@@ -129,12 +131,14 @@ final class DisplayVolumeController: DisplayVolumeControlling {
             }
 
             let previous = managedDisplays[display.id]
-            let volume = resolvedVolume(for: display, backend: backend, previous: previous)
+            let hasOutstandingWrite = previous?.pendingVolume != nil || previous?.writeInFlight == true
+            let cachedVolume = Self.clamp(backend.cachedVolume)
+            let volume = hasOutstandingWrite ? (previous?.lastCommittedVolume ?? cachedVolume) : cachedVolume
 
             nextManagedDisplays[display.id] = ManagedDisplay(
                 display: display,
                 backend: backend,
-                currentVolume: previous?.pendingVolume ?? volume,
+                currentVolume: hasOutstandingWrite ? (previous?.currentVolume ?? volume) : volume,
                 lastCommittedVolume: volume,
                 pendingVolume: previous?.pendingVolume,
                 pendingWriteID: previous?.pendingWriteID,
@@ -152,6 +156,9 @@ final class DisplayVolumeController: DisplayVolumeControlling {
 
         if !nextManagedDisplays.isEmpty {
             lastErrorMessage = nil
+        }
+        for displayID in displayOrder {
+            scheduleRead(for: displayID)
         }
     }
 
@@ -225,6 +232,7 @@ final class DisplayVolumeController: DisplayVolumeControlling {
     }
 
     func cancelOutstandingWrites() {
+        cancelAllReads()
         for (_, managedDisplay) in Array(managedDisplays) {
             managedDisplay.scheduledFlush?.cancel()
             if let writeID = managedDisplay.pendingWriteID {
@@ -269,6 +277,7 @@ final class DisplayVolumeController: DisplayVolumeControlling {
             return
         }
 
+        cancelRead(for: displayID)
         if let supersededWriteID = managedDisplay.pendingWriteID {
             resolveWrite(
                 supersededWriteID,
@@ -292,25 +301,51 @@ final class DisplayVolumeController: DisplayVolumeControlling {
         onStateChange?()
     }
 
-    private func resolvedVolume(
-        for display: DisplayInfo,
-        backend: any DisplayVolumeBackend,
-        previous: ManagedDisplay?
-    ) -> Double {
-        do {
-            let raw = try backend.readVolume()
-            let clamped = Self.clamp(raw)
-            return clamped
-        } catch {
-            if let previous {
-                return previous.currentVolume
-            }
+    private func scheduleRead(for displayID: CGDirectDisplayID) {
+        guard readTasks[displayID] == nil,
+              let managedDisplay = managedDisplays[displayID],
+              managedDisplay.pendingVolume == nil,
+              !managedDisplay.writeInFlight else { return }
 
-            logger.error(
-                "failed to read volume for \(display.name, privacy: .public): \(error.localizedDescription, privacy: .public)"
-            )
-            return 1
+        let readID = UUID()
+        let backend = managedDisplay.backend
+        let task = Task.detached(priority: .userInitiated) { [weak self] in
+            let volume = try? backend.readVolume()
+            guard !Task.isCancelled else { return }
+            await self?.finishRead(volume, for: displayID, readID: readID, backend: backend)
         }
+        readTasks[displayID] = (readID, task)
+    }
+
+    private func finishRead(
+        _ volume: Double?,
+        for displayID: CGDirectDisplayID,
+        readID: UUID,
+        backend: any DisplayVolumeBackend
+    ) {
+        guard readTasks[displayID]?.id == readID else { return }
+        readTasks.removeValue(forKey: displayID)
+        guard var managedDisplay = managedDisplays[displayID],
+              managedDisplay.backend === backend,
+              managedDisplay.pendingVolume == nil,
+              !managedDisplay.writeInFlight,
+              let volume else { return }
+
+        let clamped = Self.clamp(volume)
+        let changed = managedDisplay.currentVolume != clamped
+        managedDisplay.currentVolume = clamped
+        managedDisplay.lastCommittedVolume = clamped
+        managedDisplays[displayID] = managedDisplay
+        if changed { onStateChange?() }
+    }
+
+    private func cancelRead(for displayID: CGDirectDisplayID) {
+        readTasks.removeValue(forKey: displayID)?.task.cancel()
+    }
+
+    private func cancelAllReads() {
+        for read in readTasks.values { read.task.cancel() }
+        readTasks.removeAll()
     }
 
     private func scheduleWrite(for displayID: CGDirectDisplayID, delay: TimeInterval) {
@@ -474,6 +509,7 @@ final class DisplayVolumeController: DisplayVolumeControlling {
 
     private func cleanupDisconnectedDisplays(keeping displayIDs: Set<CGDirectDisplayID>) {
         for (displayID, managedDisplay) in managedDisplays where !displayIDs.contains(displayID) {
+            cancelRead(for: displayID)
             managedDisplay.scheduledFlush?.cancel()
             failOutstandingWrites(for: displayID, managedDisplay: managedDisplay)
             if let writeID = managedDisplay.inFlightWriteID {
@@ -489,6 +525,7 @@ final class DisplayVolumeController: DisplayVolumeControlling {
     }
 
     private func cleanupAll() {
+        cancelAllReads()
         for (_, managedDisplay) in managedDisplays {
             managedDisplay.scheduledFlush?.cancel()
             managedDisplay.backend.cleanup()

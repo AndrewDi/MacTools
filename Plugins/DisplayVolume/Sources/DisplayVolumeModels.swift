@@ -87,7 +87,9 @@ extension DisplayVolumeControlling {
 protocol DisplayVolumeBackend: AnyObject, Sendable {
     var kind: DisplayVolumeBackendKind { get }
     var display: DisplayInfo { get set }
+    var cachedVolume: Double { get }
 
+    /// Performs hardware I/O and must run on a background worker.
     func readVolume() throws -> Double
     func writeVolume(_ value: Double) throws
     func cleanup()

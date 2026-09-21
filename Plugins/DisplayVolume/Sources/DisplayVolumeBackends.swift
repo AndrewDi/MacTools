@@ -107,6 +107,8 @@ final class DDCVolumeBackend: DisplayVolumeBackend, @unchecked Sendable {
     let kind: DisplayVolumeBackendKind = .ddc
 
     private let lock = NSLock()
+    private let ioLock = NSLock()
+    private var cacheRevision: UInt64 = 0
     private var _display: DisplayInfo
     var display: DisplayInfo {
         get { lock.withLock { _display } }
@@ -118,6 +120,8 @@ final class DDCVolumeBackend: DisplayVolumeBackend, @unchecked Sendable {
     private var localVolume: Double
     private let cacheKey: String
 
+    var cachedVolume: Double { lock.withLock { localVolume } }
+
     init?(display: DisplayInfo, transport: any DDCVolumeTransport) {
         guard !display.isBuiltin else {
             return nil
@@ -128,7 +132,8 @@ final class DDCVolumeBackend: DisplayVolumeBackend, @unchecked Sendable {
         self.maximumValue = 100
         self.cacheKey = "ddc-volume-\(display.id)"
 
-        if let cached = UserDefaults.standard.object(forKey: cacheKey) as? Double {
+        if let cached = UserDefaults.standard.object(forKey: cacheKey) as? Double,
+           cached.isFinite {
             self.localVolume = max(0, min(cached, 1))
         } else {
             self.localVolume = 0.15
@@ -136,41 +141,40 @@ final class DDCVolumeBackend: DisplayVolumeBackend, @unchecked Sendable {
     }
 
     func readVolume() throws -> Double {
-        let cached = lock.withLock { localVolume }
-        let transport = self.transport
-        let cacheKey = self.cacheKey
-        let lock = self.lock
-        
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self else { return }
-            if let volume = try? transport.readVolume(),
-               let max = Self.validMaximum(volume.maximum) {
-                lock.withLock {
-                    self.maximumValue = max
-                    self.localVolume = max == 0 ? 1 : Double(volume.current) / Double(max)
-                    UserDefaults.standard.set(self.localVolume, forKey: cacheKey)
-                }
+        let revision = lock.withLock { cacheRevision }
+        return try ioLock.withLock {
+            try Task.checkCancellation()
+            guard let volume = try? transport.readVolume(),
+                  volume.maximum > 0,
+                  volume.current <= volume.maximum else {
+                return cachedVolume
+            }
+            return lock.withLock {
+                guard !Task.isCancelled, revision == cacheRevision else { return localVolume }
+                maximumValue = volume.maximum
+                localVolume = Double(volume.current) / Double(volume.maximum)
+                UserDefaults.standard.set(localVolume, forKey: cacheKey)
+                return localVolume
             }
         }
-        
-        return cached
     }
 
     func writeVolume(_ value: Double) throws {
         let clampedValue = max(0, min(value, 1))
-        let rawValue = lock.withLock {
-            UInt16((Double(maximumValue) * clampedValue).rounded())
-        }
-        try transport.writeVolume(rawValue)
-        lock.withLock {
-            localVolume = clampedValue
-            UserDefaults.standard.set(localVolume, forKey: cacheKey)
+        lock.withLock { cacheRevision &+= 1 }
+        try ioLock.withLock {
+            let rawValue = lock.withLock {
+                UInt16((Double(maximumValue) * clampedValue).rounded())
+            }
+            try transport.writeVolume(rawValue)
+            lock.withLock {
+                localVolume = clampedValue
+                UserDefaults.standard.set(localVolume, forKey: cacheKey)
+            }
         }
     }
 
-    func cleanup() {}
-
-    private static func validMaximum(_ maximum: UInt16) -> UInt16? {
-        maximum == 0 ? nil : maximum
+    func cleanup() {
+        lock.withLock { cacheRevision &+= 1 }
     }
 }
