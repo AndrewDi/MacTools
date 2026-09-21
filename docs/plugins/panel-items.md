@@ -86,6 +86,11 @@ the icon grid. Standard cards keep their four-column widths; both densities can 
 selects `.compact`. Use layout metrics' `itemWidth(for:)` when resolving a span
 so its grid density is preserved.
 
+The pre-release PluginKit v7 ABI baseline includes the grid field and icon factory.
+Its independent client fixture under `scripts/fixtures/plugin-kit-v7/` covers both
+grid densities. Rebuild packages made against earlier development snapshots;
+after v7 ships, incompatible layout changes require a new PluginKit version.
+
 ```swift
 .iconWidget(
     id: "quick-control",

@@ -113,6 +113,18 @@ final class MenuBarPanelStore {
         guard next != self.configuration || replacingUnreadable,
               let data = try? JSONEncoder().encode(next) else { return false }
         userDefaults.set(data, forKey: Self.storageKey)
+        if replacingUnreadable {
+            // An explicit reset/import supersedes the legacy layout, including
+            // unreadable data. Preserve its management order before retiring it.
+            if userDefaults.object(forKey: PluginOrderingStore.storageKey) == nil {
+                let legacy = userDefaults.data(forKey: Self.legacyDisplayStorageKey).flatMap {
+                    try? LegacyPanelDisplayPreferences(data: $0)
+                }
+                userDefaults.set(legacy?.generalOrder ?? [], forKey: PluginOrderingStore.storageKey)
+            }
+            userDefaults.removeObject(forKey: Self.legacyDisplayStorageKey)
+            userDefaults.removeObject(forKey: Self.legacyClickBehaviorStorageKey)
+        }
         self.configuration = next
         loadError = nil
         if let selected = userDefaults.string(forKey: Self.selectionStorageKey),

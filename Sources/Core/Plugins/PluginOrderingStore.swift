@@ -27,12 +27,14 @@ final class PluginOrderingStore {
     }
 
     func orderedPluginIDs(defaultPluginIDs: [String]) -> [String] {
+        reloadRecoveredOrderIfNeeded()
         let available = Set(defaultPluginIDs)
         var seen: Set<String> = []
         return (order + defaultPluginIDs).filter { available.contains($0) && seen.insert($0).inserted }
     }
 
     func setOrderedPluginIDs(_ ids: [String], defaultPluginIDs: [String]) {
+        reloadRecoveredOrderIfNeeded()
         guard !preservesUnknownData else { return }
         var seen: Set<String> = []
         let requested = (ids + defaultPluginIDs).filter { seen.insert($0).inserted }
@@ -43,7 +45,20 @@ final class PluginOrderingStore {
         persist(next)
     }
 
-    func removePlugin(_ id: String) { persist(order.filter { $0 != id }) }
+    func removePlugin(_ id: String) {
+        reloadRecoveredOrderIfNeeded()
+        persist(order.filter { $0 != id })
+    }
+
+    private func reloadRecoveredOrderIfNeeded() {
+        guard preservesUnknownData,
+              userDefaults.object(forKey: MenuBarPanelStore.legacyDisplayStorageKey) == nil,
+              let saved = userDefaults.array(forKey: Self.storageKey) as? [String] else { return }
+        // The panel store retires an unreadable source only after an explicit
+        // reset/import has persisted its replacement. Resume the existing instance.
+        order = saved
+        preservesUnknownData = false
+    }
 
     private func persist(_ next: [String]) {
         guard !preservesUnknownData, next != order else { return }

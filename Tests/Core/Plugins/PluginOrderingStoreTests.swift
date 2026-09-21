@@ -41,4 +41,23 @@ final class PluginOrderingStoreTests: XCTestCase {
             XCTAssertEqual(preferences.featureHidden, ["a"])
         }
     }
+
+    func testExistingStoreResumesAfterExplicitPanelRecovery() throws {
+        let name = "PluginOrderingStoreTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set(Data(#"{"version":99}"#.utf8), forKey: MenuBarPanelStore.legacyDisplayStorageKey)
+        let ordering = PluginOrderingStore(userDefaults: defaults)
+        ordering.setOrderedPluginIDs(["b", "a"], defaultPluginIDs: ["a", "b"])
+        XCTAssertNil(defaults.object(forKey: PluginOrderingStore.storageKey))
+
+        let panels = MenuBarPanelStore(userDefaults: defaults)
+        XCTAssertTrue(panels.replace(MenuBarPanelConfiguration(), replacingUnreadable: true))
+        ordering.setOrderedPluginIDs(["b", "a"], defaultPluginIDs: ["a", "b"])
+        XCTAssertEqual(ordering.orderedPluginIDs(defaultPluginIDs: ["a", "b"]), ["b", "a"])
+        let reloaded = PluginOrderingStore(userDefaults: defaults)
+        XCTAssertEqual(reloaded.orderedPluginIDs(defaultPluginIDs: ["a", "b"]), ["b", "a"])
+        ordering.removePlugin("b")
+        XCTAssertEqual(defaults.stringArray(forKey: PluginOrderingStore.storageKey), ["a"])
+    }
 }

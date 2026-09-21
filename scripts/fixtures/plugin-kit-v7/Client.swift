@@ -223,5 +223,28 @@ extension PluginKitV7CompatibilityClient {
         precondition(chart.state.subtitle == "Chart" && chart.state.isAvailable)
         _ = chart.makeView(context)
         precondition(chart.makeDetail?("cpu", {})?.id == "cpu")
+
+        let standard = PluginPanelWidgetSpan(width: 2, height: 8)!
+        let compact = PluginPanelWidgetSpan(width: 1, height: 8, grid: .compact)!
+        precondition(standard.grid == .standard && standard.width == 2 && standard.height == 8)
+        precondition(compact.grid == .compact && compact.width == 1 && compact.height == 8)
+        precondition(PluginPanelWidgetSpan(width: 5, height: 1) == nil)
+        precondition(PluginPanelWidgetSpan(width: 6, height: 1, grid: .compact) == nil)
+        precondition(PluginPanelWidgetSpan.isValid(width: 4, height: 1))
+        precondition(PluginPanelWidgetSpan.isValid(width: 5, height: 1, grid: .compact))
+        let metrics = PluginPanelWidgetLayoutMetrics.default
+        precondition(metrics.itemWidth(for: standard) == 148)
+        precondition(abs(metrics.itemWidth(for: compact) - 52.8) < 0.001)
+        precondition(metrics.compactCellSize.height == 64 && metrics.compactRowSpacing == 10)
+        for control in [PluginPanelIconControl.toggle, .button] {
+            let icon = PluginPanelItem.iconWidget(id: "icon", title: "Icon", systemImage: "power",
+                control: control, state: state, menuActionBehavior: .keepPresented, action: { action = $0 })
+            precondition(icon.initialPlacement == nil && icon.kind == .widget)
+            guard case let .widget(content) = icon.content else { fatalError("Icon widget ABI changed") }
+            precondition(content.descriptor.span == compact)
+            precondition(content.state.isActive == (control == .toggle))
+            precondition(content.state.subtitle == "Ready" && content.state.isEnabled)
+            _ = content.makeView(context)
+        }
     }
 }

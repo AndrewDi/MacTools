@@ -1618,6 +1618,32 @@ final class PreferencesBackupTests: XCTestCase {
         )
     }
 
+    func testImportRecoversUnreadableLegacyLayoutAndManagementOrder() throws {
+        let source = makeHost(plugins: [
+            BackupTestPlugin(id: "second", order: 1, shortcutID: "open"),
+            BackupTestPlugin(id: "first", order: 2, shortcutID: "toggle"),
+        ], defaults: makeDefaults())
+        let backup = source.makePreferencesBackup()
+        let defaults = makeDefaults()
+        defaults.set(Data(#"{"version":99}"#.utf8), forKey: MenuBarPanelStore.legacyDisplayStorageKey)
+        let target = makeHost(plugins: [
+            BackupTestPlugin(id: "first", order: 1, shortcutID: "toggle"),
+            BackupTestPlugin(id: "second", order: 2, shortcutID: "open"),
+        ], defaults: defaults)
+        XCTAssertNotNil(target.menuBarPanelStore.loadError)
+
+        _ = try target.importPreferences(backup)
+
+        XCTAssertNil(target.menuBarPanelStore.loadError)
+        XCTAssertEqual(target.pluginSettingsItems.map(\.pluginID), ["second", "first"])
+        XCTAssertEqual(target.menuBarPanelStore.configuration, source.menuBarPanelStore.configuration)
+        let reloadedPanels = MenuBarPanelStore(userDefaults: defaults)
+        XCTAssertNil(reloadedPanels.loadError)
+        XCTAssertEqual(reloadedPanels.configuration, target.menuBarPanelStore.configuration)
+        XCTAssertEqual(PluginOrderingStore(userDefaults: defaults)
+            .orderedPluginIDs(defaultPluginIDs: ["first", "second"]), ["second", "first"])
+    }
+
     func testExportAndImportPreserveSurfaceDisplayOrders() throws {
         let sourceDefaults = makeDefaults()
         let sourceHost = makeHost(

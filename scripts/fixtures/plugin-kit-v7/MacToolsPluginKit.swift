@@ -431,24 +431,32 @@ public struct PluginPanelRowDescriptor {
     }
 }
 
+public enum PluginPanelWidgetGrid: Int, Sendable {
+    case standard = 4
+    case compact = 5
+}
+
 public struct PluginPanelWidgetSpan: Equatable, Hashable, Sendable {
     public static let maximumWidth = 4
 
     public let width: Int
     public let height: Int
+    public let grid: PluginPanelWidgetGrid
 
-    public init?(width: Int, height: Int) {
-        guard Self.isValid(width: width, height: height) else {
+    public init?(width: Int, height: Int, grid: PluginPanelWidgetGrid = .standard) {
+        guard Self.isValid(width: width, height: height, grid: grid) else {
             return nil
         }
 
         self.width = width
         self.height = height
+        self.grid = grid
     }
 
     private init(uncheckedWidth width: Int, height: Int) {
         self.width = width
         self.height = height
+        self.grid = .standard
     }
 
     public static let oneByOne = PluginPanelWidgetSpan(uncheckedWidth: 1, height: 1)
@@ -457,13 +465,14 @@ public struct PluginPanelWidgetSpan: Equatable, Hashable, Sendable {
     public static let twoByTwo = PluginPanelWidgetSpan(uncheckedWidth: 2, height: 2)
     public static let fourByTwo = PluginPanelWidgetSpan(uncheckedWidth: 4, height: 2)
 
-    public static func isValid(width: Int, height: Int) -> Bool {
-        (1...maximumWidth).contains(width) && height >= 1
+    public static func isValid(width: Int, height: Int, grid: PluginPanelWidgetGrid = .standard) -> Bool {
+        (1...grid.rawValue).contains(width) && height >= 1
     }
 }
 
 public struct PluginPanelWidgetLayoutMetrics: Equatable, Sendable {
     public static let cardCornerRadius: CGFloat = 12
+    public static let compactSpacing: CGFloat = 10
 
     public let columns: Int
     public let cellWidth: CGFloat
@@ -508,6 +517,18 @@ public struct PluginPanelWidgetLayoutMetrics: Equatable, Sendable {
     public func itemWidth(forSpanWidth width: Int) -> CGFloat {
         CGFloat(width) * cellWidth + CGFloat(max(width - 1, 0)) * horizontalSpacing
     }
+
+    public func itemWidth(for span: PluginPanelWidgetSpan) -> CGFloat {
+        let spacing = span.grid == .compact ? Self.compactSpacing : horizontalSpacing
+        return (gridWidth + spacing) * CGFloat(span.width) / CGFloat(span.grid.rawValue) - spacing
+    }
+
+    public var compactCellSize: CGSize {
+        let width = itemWidth(for: PluginPanelWidgetSpan(width: 1, height: 1, grid: .compact)!)
+        return CGSize(width: width, height: itemHeight(forSpanHeight: heightSpan(fittingContentHeight: 64)))
+    }
+
+    public var compactRowSpacing: CGFloat { Self.compactSpacing }
 
     public func itemHeight(forSpanHeight height: Int) -> CGFloat {
         CGFloat(height) * cellHeight
@@ -934,6 +955,25 @@ public struct PluginPanelWidget {
         self.state = state
         self.makeDetail = detail
         self.makeView = content
+    }
+}
+
+public enum PluginPanelIconControl: Equatable, Sendable {
+    case toggle
+    case button
+}
+
+public extension PluginPanelItem {
+    static func iconWidget(
+        id: String,
+        title: String,
+        systemImage: String,
+        control: PluginPanelIconControl,
+        state: PluginPanelRowState,
+        menuActionBehavior: PluginMenuActionBehavior,
+        action: @escaping (PluginPanelAction) -> Void
+    ) -> Self {
+        fatalError("Declaration-only ABI fixture; the client links the host framework implementation.")
     }
 }
 

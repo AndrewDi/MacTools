@@ -148,6 +148,45 @@ final class MenuBarPanelStoreTests: XCTestCase {
         }
     }
 
+    func testExplicitReplacementRetiresUnreadableLegacyDataAcrossRelaunch() throws {
+        for data in [Data("not JSON".utf8), Data(#"{"version":99}"#.utf8)] {
+            defaults.removePersistentDomain(forName: suite)
+            defaults.set(data, forKey: MenuBarPanelStore.legacyDisplayStorageKey)
+            defaults.set("swapped", forKey: MenuBarPanelStore.legacyClickBehaviorStorageKey)
+            let unreadable = MenuBarPanelStore(userDefaults: defaults)
+            XCTAssertNotNil(unreadable.loadError)
+            XCTAssertNil(unreadable.addPanel())
+            XCTAssertEqual(defaults.data(forKey: MenuBarPanelStore.legacyDisplayStorageKey), data)
+
+            var replacement = MenuBarPanelConfiguration()
+            let placement = MenuBarPanelPlacement(item: key())
+            replacement.placementsByPanelID["features"] = [placement]
+            XCTAssertTrue(unreadable.replace(replacement, replacingUnreadable: true))
+            XCTAssertNil(defaults.object(forKey: MenuBarPanelStore.legacyDisplayStorageKey))
+            XCTAssertNil(defaults.object(forKey: MenuBarPanelStore.legacyClickBehaviorStorageKey))
+            let reloaded = MenuBarPanelStore(userDefaults: defaults)
+            XCTAssertNil(reloaded.loadError)
+            XCTAssertEqual(reloaded.configuration.placementsByPanelID["features"], [placement])
+            XCTAssertNotNil(reloaded.addPanel())
+        }
+    }
+
+    func testExplicitResetPreservesReadableManagementOrder() throws {
+        let existingOrders: [[String]?] = [nil, ["current"]]
+        for existingOrder in existingOrders {
+            defaults.removePersistentDomain(forName: suite)
+            defaults.set(Data("not JSON".utf8), forKey: MenuBarPanelStore.storageKey)
+            defaults.set(Data(#"{"version":1,"orderedPluginIDs":["legacy"]}"#.utf8),
+                         forKey: MenuBarPanelStore.legacyDisplayStorageKey)
+            if let existingOrder { defaults.set(existingOrder, forKey: PluginOrderingStore.storageKey) }
+            let unreadable = MenuBarPanelStore(userDefaults: defaults)
+            XCTAssertTrue(unreadable.replace(MenuBarPanelConfiguration(), replacingUnreadable: true))
+            XCTAssertEqual(defaults.stringArray(forKey: PluginOrderingStore.storageKey), existingOrder ?? ["legacy"])
+            XCTAssertNil(defaults.object(forKey: MenuBarPanelStore.legacyDisplayStorageKey))
+            XCTAssertNil(MenuBarPanelStore(userDefaults: defaults).loadError)
+        }
+    }
+
     func testMigrationPreservesMixedOrderCopiesAndMissingPlugins() throws {
         let copyID = UUID()
         let legacy: [String: Any] = [
