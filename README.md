@@ -30,6 +30,10 @@ Open MacTools, choose plugins in **Settings → Marketplace**, then arrange your
 
 Plugin shortcut settings use the same separate section headings and native cards as other settings, without empty-section gaps or redundant navigation buttons.
 
+Custom settings workspaces use adaptive system backgrounds that coordinate with native settings cards. Search fields, inset previews, and selected controls retain distinct visual roles in light and dark appearance.
+
+System Status settings use subtle metric row separators, aligned controls, and a two-line metric header in narrow windows to keep names and value assignments readable.
+
 <details>
 <summary>Updates and Nightly builds</summary>
 
@@ -76,6 +80,12 @@ Try development features with `MacTools-Nightly.dmg` from a [`nightly-*` prerele
 ## Get to any action quickly
 
 Search actions, settings, workflows, and plugins from the **Command Palette**. Press **⌘K** within MacTools, or assign a global shortcut to open it from anywhere. Use **Action Grid**, keyboard shortcuts, mouse mappings, or trackpad gestures for frequent actions; connect Apple Shortcuts, saved scripts, and [Run Links](docs/url-scheme.md) to your setup.
+
+Window Switcher keeps search collapsed in direct-key and cycling modes. All Windows sits beside the display filter and expands when an app scope is available; Search, More, and the grid/list control align to the right. Click Search to expand and focus search. In Direct Keys mode, **⌘F** also opens search and is consumed by the panel; window-key assignments reserve it for search. Cycling retains its existing keyboard behavior. Close Search clears the query and restores the previous mode while keeping scope and display filters. Search Select mode keeps its full-width search field.
+
+Switching between grid and list keeps the selected window and visible shortcut numbers in sync, including after scrolling or filtering. Scrollbars hide when all results fit, and the grid stays clear of overlaid navigation buttons.
+
+Editing a direct shortcut highlights its key and shows a concise prompt beside Direct Keys, with Cancel at the far right. Recording instructions and feedback are available in all 11 supported languages.
 
 <p align="center"><a href="docs/assets/screenshots/readme/search-en-dark.png"><img src="docs/assets/screenshots/readme/search-en-dark.png" width="640" alt="Command Palette searching window actions, settings, and plugins in English"></a></p>
 

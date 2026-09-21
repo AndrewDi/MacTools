@@ -52,24 +52,28 @@ final class SystemStatusPluginTests: XCTestCase {
             valueOptions: options, selectedValues: [.level, .power],
             secondaryValueNoneTitle: "No Second Value", reorderAccessibilityTitle: "Drag to reorder"
         )
-        let row = SystemStatusMenuBarMetricEditorRow(
-            item: item, isExpanded: true, selectedSlot: .constant(.primary),
-            onToggleExpansion: {}, onVisibilityChange: { _ in }, onValuesChange: { _ in },
-            onStyleChange: { _ in }, onValueArrangementChange: { _ in }
-        )
-        for width: CGFloat in [500, 640, 740, 960] {
-            let allocatedHeight = SystemStatusMenuBarEditorLayout.expandedHeight(width: width, valueCount: options.count)
-            let host = NSHostingView(rootView: row.frame(width: width))
-            XCTAssertLessThanOrEqual(host.fittingSize.height, allocatedHeight, "Row overflow at width \(width)")
-            XCTAssertEqual(allocatedHeight, width < 740 ? 227 : 192)
+        for width: CGFloat in [400, 500, 640, 660, 740, 960] {
+            for isExpanded in [false, true] {
+                let allocatedHeight = isExpanded
+                    ? SystemStatusMenuBarEditorLayout.expandedHeight(width: width, valueCount: options.count)
+                    : SystemStatusMenuBarEditorLayout.collapsedHeight(width: width)
+                let row = SystemStatusMenuBarMetricEditorRow(
+                    item: item, isExpanded: isExpanded, selectedSlot: .constant(.primary),
+                    onToggleExpansion: {}, onVisibilityChange: { _ in }, onValuesChange: { _ in },
+                    onStyleChange: { _ in }, onValueArrangementChange: { _ in }, contentWidth: width
+                )
+                let host = NSHostingView(rootView: row.frame(width: width))
+                XCTAssertLessThanOrEqual(host.fittingSize.height, allocatedHeight,
+                                         "Row overflow at width \(width), expanded: \(isExpanded)")
 
-            let table = SystemStatusMenuBarMetricEditorTableView(
-                items: [item], expandedKind: .battery, selectedSlots: .constant([:]),
-                onToggleExpansion: { _ in }, onVisibilityChange: { _, _ in }, onMove: { _, _ in },
-                onValuesChange: { _, _ in }, onStyleChange: { _, _ in }, onValueArrangementChange: { _, _ in }
-            )
-            let tableHost = NSHostingView(rootView: table.frame(width: width))
-            XCTAssertEqual(tableHost.fittingSize.height, allocatedHeight + 12, accuracy: 1)
+                let table = SystemStatusMenuBarMetricEditorTableView(
+                    items: [item], expandedKind: isExpanded ? .battery : nil, selectedSlots: .constant([:]),
+                    onToggleExpansion: { _ in }, onVisibilityChange: { _, _ in }, onMove: { _, _ in },
+                    onValuesChange: { _, _ in }, onStyleChange: { _, _ in }, onValueArrangementChange: { _, _ in }
+                )
+                let tableHost = NSHostingView(rootView: table.frame(width: width))
+                XCTAssertEqual(tableHost.fittingSize.height, allocatedHeight, accuracy: 1)
+            }
         }
     }
 
@@ -978,18 +982,34 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertEqual(keys.count, Set(keys).count)
     }
 
-    func testPanelSettingsCellPreservesLocalizedReorderAccessibility() {
+    func testPanelSettingsCellPreservesLocalizedReorderAccessibility() throws {
         let panelItem = makeMetricPreferenceTableItem(
             valueOptions: [],
             selectedValues: [],
             secondaryValueNoneTitle: "Aucune deuxième valeur",
             reorderAccessibilityTitle: "Faire glisser pour réorganiser"
         )
-        let cell = SystemStatusMetricPreferenceCellView(frame: NSRect(x: 0, y: 0, width: 560, height: 58))
-        cell.configure(item: panelItem, onVisibilityChange: { _ in })
-        cell.layoutSubtreeIfNeeded()
+        func findButton(in view: NSView) -> NSButton? {
+            if let button = view as? NSButton { return button }
+            return view.subviews.lazy.compactMap { findButton(in: $0) }.first
+        }
+        for width: CGFloat in [400, 960] {
+            var requestedVisibility: Bool?
+            let cell = SystemStatusMetricPreferenceCellView(frame: NSRect(
+                x: 0, y: 0, width: width, height: SystemStatusMetricPreferenceTableView.rowHeight
+            ))
+            cell.configure(item: panelItem, showsSeparator: true) { requestedVisibility = $0 }
+            cell.layoutSubtreeIfNeeded()
 
-        XCTAssertEqual(cell.reorderAccessibilityLabel, "Faire glisser pour réorganiser")
+            XCTAssertEqual(cell.reorderAccessibilityLabel, "Faire glisser pour réorganiser")
+            let button = try XCTUnwrap(findButton(in: cell))
+            let center = button.convert(NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: cell)
+            XCTAssertTrue(cell.bounds.contains(center))
+            let hit = try XCTUnwrap(cell.hitTest(center))
+            XCTAssertTrue(hit === button || hit.isDescendant(of: button))
+            button.performClick(nil)
+            XCTAssertEqual(requestedVisibility, false)
+        }
     }
 
     func testMenuBarSlotAssignmentAppendsReplacesSwapsAndClears() {

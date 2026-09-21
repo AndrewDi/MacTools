@@ -54,6 +54,15 @@ Use the existing host surfaces and semantic tokens before adding custom UI.
 
 The host owns page titles, descriptions, permission cards, shortcuts, search, validation, and the surrounding background. Do not duplicate page chrome or draw another outer card inside a grouped Form. Plugins must not depend on `Sources/App/SettingsStyle.swift` or copy private host styles.
 
+Keep native forms and custom workspaces as separate containers with shared surface roles:
+
+- Native grouped Form draws its section cards. Custom section content and empty states inherit that surface without adding a standard card; nested previews and editors may use an inset surface when they need their own boundary.
+- Standalone workspace cards use `pluginSettingsCardBackground(.standard)`, backed by the system's secondary background style. Do not approximate a native card with a translucent material, sampled RGB values, or a foreground color with arbitrary opacity.
+- Inset previews, logs, and control groups use `.recessed` or `Palette.recessedControlBackground`; these use a neutral system background rather than an inactive selection color. Editable text uses `Palette.fieldBackground`; raised controls use `Surface.raisedControl` or the appropriate native control background.
+- Preserve selected, hovered, recording, warning, and error states. Theme convergence should not remove interaction feedback or flatten all surfaces to one color.
+
+Compare native and custom surfaces in light and dark appearance, including increased contrast and reduced transparency where available. Verify readability and clear surface boundaries; exact pixel matching across OS versions is not a requirement.
+
 Use semantic fonts, SF Symbols, native bordered buttons, small control sizes, and switch-style toggles where appropriate. Give controls predictable widths and numeric readouts stable alignment. Long localized titles and paths must not displace controls or cause clipping. Custom settings should follow `FanControlPresetManagerView` for typography and grouping.
 
 Respect the user's layout, appearance, accessibility, and system preferences. Check the themes, keyboard/focus behavior, labels, and loading/error/empty states affected by the change. Visual-only changes normally use screenshots and manual verification; state transitions and actions need focused behavior coverage only where existing tests leave a gap. Keep copy brief and user-facing.

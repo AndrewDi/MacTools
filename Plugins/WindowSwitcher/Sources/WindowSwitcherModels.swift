@@ -300,6 +300,7 @@ final class WindowSwitcherStore: ObservableObject {
             guard let token = WindowSwitcherShortcutAssignment.normalizedManualToken(rawToken) else {
                 return .unavailable
             }
+            guard !WindowSwitcherShortcutAssignment.reservedTokens.contains(token) else { return .conflict }
 
             guard !hasShortcutConflict(
                 token,
@@ -335,6 +336,7 @@ final class WindowSwitcherStore: ObservableObject {
         guard let token = WindowSwitcherShortcutAssignment.normalizedManualToken(rawToken) else {
             return true
         }
+        guard !WindowSwitcherShortcutAssignment.reservedTokens.contains(token) else { return true }
 
         let identities = WindowSwitcherShortcutAssignment.identities(for: entries)
         guard let targetIndex = entries.firstIndex(where: { $0.id == entryID }),
@@ -627,7 +629,8 @@ enum WindowSwitcherShortcutAssignment {
         "c", "m", "v", "n", "x", "b", "z", "t", "y",
     ]
     static let digitKeyOrder: [String] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]
-    static let maximumShortcutCount = (letterKeyOrder.count + digitKeyOrder.count) * 2
+    static let reservedTokens: Set<String> = ["cmd+f"]
+    static let maximumShortcutCount = (letterKeyOrder.count + digitKeyOrder.count) * 2 - reservedTokens.count
 
     static func assignShortcuts(to entries: [WindowSwitcherAppEntry]) -> [WindowSwitcherAppEntry] {
         assignShortcuts(to: entries, bindingState: WindowSwitcherShortcutBindingState()).entries
@@ -657,10 +660,11 @@ enum WindowSwitcherShortcutAssignment {
         let availableTokens = shortcutTokens(count: maximumShortcutCount)
         var assignedTokens = Array<String?>(repeating: nil, count: entries.count)
         var activeManualTokens = Set<String>()
-        var usedTokens = reservedManualTokens
+        var usedTokens = reservedManualTokens.union(reservedTokens)
 
         for target in targets {
             guard let token = resolvedBindingState.manual[target.identity].flatMap(normalizedManualToken),
+                  !reservedTokens.contains(token),
                   activeManualTokens.insert(token).inserted
             else {
                 continue
@@ -719,7 +723,7 @@ enum WindowSwitcherShortcutAssignment {
         }
 
         let plainTokens = letterKeyOrder + digitKeyOrder
-        let commandTokens = plainTokens.map { "cmd+\($0)" }
+        let commandTokens = plainTokens.map { "cmd+\($0)" }.filter { !reservedTokens.contains($0) }
         return Array((plainTokens + commandTokens).prefix(count))
     }
 
@@ -837,8 +841,8 @@ enum WindowSwitcherShortcutAssignment {
         let validManualBindings = state.manual.compactMapValues(normalizedManualToken)
         state.manual = validManualBindings
         let activeTargetIdentities = Set(targets.map(\.identity))
-        let effectiveManualBindings = validManualBindings.filter { identity, _ in
-            !isUnresolvedLegacyIdentity(identity, activeIdentities: activeTargetIdentities)
+        let effectiveManualBindings = validManualBindings.filter { identity, token in
+            !reservedTokens.contains(token) && !isUnresolvedLegacyIdentity(identity, activeIdentities: activeTargetIdentities)
         }
         let manualIdentities = Set(effectiveManualBindings.keys)
         let manualTokens = Set(effectiveManualBindings.values)
@@ -861,7 +865,7 @@ enum WindowSwitcherShortcutAssignment {
         }
 
         for (identity, rawToken) in state.automatic {
-            guard let token = normalizedShortcutToken(rawToken) else {
+            guard let token = normalizedShortcutToken(rawToken), !reservedTokens.contains(token) else {
                 state.automatic.removeValue(forKey: identity)
                 continue
             }

@@ -46,10 +46,9 @@ final class WindowSwitcherMigrationTests: XCTestCase {
         XCTAssertEqual(WindowSwitcherStore(storage: storage).configuration.mode, .keyWindow)
     }
 
-    func testDirectKeysWinOverDestructiveAndSearchCommands() throws {
+    func testDirectKeysWinOverDestructiveAndNumberCommands() throws {
         for (token, text, code, flags) in [("cmd+w", "w", kVK_ANSI_W, NSEvent.ModifierFlags.command),
                                           ("cmd+q", "q", kVK_ANSI_Q, .command),
-                                          ("cmd+f", "f", kVK_ANSI_F, .command),
                                           ("cmd+1", "1", kVK_ANSI_1, .command),
                                           ("f", "f", kVK_ANSI_F, [])] {
             let controller = WindowSwitcherOverlayController()
@@ -93,8 +92,9 @@ final class WindowSwitcherMigrationTests: XCTestCase {
         defer { controller.hide() }
         let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
         func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
-        let badge = try XCTUnwrap(descendants(panel.contentView!).compactMap { $0 as? NSButton }.first { $0.title == "F" })
+        let badge = try XCTUnwrap(descendants(panel.contentView!).compactMap { $0 as? WindowSwitcherShortcutBadge }.first { $0.title == "F" })
         badge.performClick(nil)
+        XCTAssertTrue(badge.isRecording)
         func record(_ text: String, code: UInt16) throws {
             let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
                 windowNumber: panel.windowNumber, context: nil, characters: text, charactersIgnoringModifiers: text, isARepeat: false, keyCode: code))
@@ -102,9 +102,11 @@ final class WindowSwitcherMigrationTests: XCTestCase {
         }
         try record("g", code: UInt16(kVK_ANSI_G))
         XCTAssertEqual(store.shortcutBindings.manual["bundle:first"], "f")
+        XCTAssertTrue(badge.isRecording, "Conflicts keep the same shortcut ready for another key")
         try record("x", code: UInt16(kVK_ANSI_X))
         XCTAssertEqual(WindowSwitcherStore(storage: storage).shortcutBindings.manual["bundle:first"], "x")
         XCTAssertEqual(controller.session?.entries.first { $0.id == "first" }?.shortcutToken, "x")
+        XCTAssertFalse(descendants(panel.contentView!).compactMap { $0 as? WindowSwitcherShortcutBadge }.contains(where: \.isRecording))
         let edit = try XCTUnwrap(controller.contextMenu(forRow: 0)?.items.last)
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(edit.action), to: edit.target, from: edit))
         try record("z", code: UInt16(kVK_ANSI_Z))
@@ -125,14 +127,16 @@ final class WindowSwitcherMigrationTests: XCTestCase {
         let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
         func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
         panel.contentView?.layoutSubtreeIfNeeded()
-        let badge = try XCTUnwrap(descendants(panel.contentView!).compactMap { $0 as? NSButton }.first { $0.identifier?.rawValue == "window-shortcut-badge" })
+        let badge = try XCTUnwrap(descendants(panel.contentView!).compactMap { $0 as? WindowSwitcherShortcutBadge }.first { $0.identifier?.rawValue == "window-shortcut-badge" })
         XCTAssertEqual(badge.title, "F")
         badge.performClick(nil)
+        XCTAssertTrue(badge.isRecording)
         XCTAssertTrue(panel.firstResponder is NSTableView)
         let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
             windowNumber: panel.windowNumber, context: nil, characters: "x", charactersIgnoringModifiers: "x", isARepeat: false, keyCode: UInt16(kVK_ANSI_X)))
         panel.sendEvent(event)
         XCTAssertEqual(recorded, "x")
+        XCTAssertFalse(descendants(panel.contentView!).compactMap { $0 as? WindowSwitcherShortcutBadge }.contains(where: \.isRecording))
     }
 
 
@@ -151,21 +155,25 @@ final class WindowSwitcherMigrationTests: XCTestCase {
         let content = try XCTUnwrap(panel.contentView)
         let collection = try XCTUnwrap(descendants(content).compactMap { $0 as? NSCollectionView }.first)
         let item = try XCTUnwrap(collection.item(at: 1))
-        let badge = try XCTUnwrap(descendants(item.view).compactMap { $0 as? NSButton }.first { $0.title == "B" })
+        let badge = try XCTUnwrap(descendants(item.view).compactMap { $0 as? WindowSwitcherShortcutBadge }.first { $0.title == "B" })
         controller.collectionView(collection, didSelectItemsAt: [IndexPath(item: 1, section: 0)])
         XCTAssertTrue(collection.item(at: 1) === item, "Selection must not recycle a tracking button")
         badge.performClick(nil)
         content.layoutSubtreeIfNeeded()
-        let banner = try XCTUnwrap(descendants(content).first { $0.identifier?.rawValue == "window-shortcut-recording" })
-        XCTAssertFalse(banner.isHidden)
-        XCTAssertGreaterThan(banner.frame.height, 20)
+        let cancel = try XCTUnwrap(descendants(content).first { $0.identifier?.rawValue == "window-shortcut-recording-cancel" } as? NSButton)
+        let mode = try XCTUnwrap(descendants(content).first { $0.identifier?.rawValue == "window-switcher-mode" })
+        let hint = try XCTUnwrap(descendants(content).first { $0.identifier?.rawValue == "window-switcher-mode-hint" })
+        XCTAssertFalse(cancel.isHiddenOrHasHiddenAncestor)
+        XCTAssertTrue(mode.superview === hint.superview && hint.superview === cancel.superview)
+        XCTAssertTrue(badge.isRecording)
         var recordedID: String?
         controller.onShortcutChange = { target, _ in recordedID = target.id; return .updated(entries) }
         let event = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
             windowNumber: panel.windowNumber, context: nil, characters: "z", charactersIgnoringModifiers: "z", isARepeat: false, keyCode: UInt16(kVK_ANSI_Z)))
         panel.sendEvent(event)
         XCTAssertEqual(recordedID, "two")
-        XCTAssertTrue(banner.isHidden)
+        XCTAssertTrue(cancel.isHidden)
+        XCTAssertFalse(descendants(content).compactMap { $0 as? WindowSwitcherShortcutBadge }.contains(where: \.isRecording))
         let menu = try XCTUnwrap(controller.contextMenu(forRow: 0))
         var cancelled = false
         controller.onCancel = { cancelled = true }
@@ -174,7 +182,7 @@ final class WindowSwitcherMigrationTests: XCTestCase {
         XCTAssertFalse(cancelled, "Menu tracking must not dismiss the chooser before its action")
         let edit = try XCTUnwrap(menu.items.last)
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(edit.action), to: edit.target, from: edit))
-        XCTAssertFalse(banner.isHidden)
+        XCTAssertFalse(cancel.isHidden)
         panel.sendEvent(event)
         XCTAssertEqual(recordedID, "one")
     }
@@ -190,8 +198,8 @@ final class WindowSwitcherMigrationTests: XCTestCase {
         defer { controller.hide() }
         let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
         func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
-        let search = try XCTUnwrap(descendants(panel.contentView!).compactMap { $0 as? NSTextField }.first { $0.identifier?.rawValue == "window-switcher-search" })
-        panel.makeFirstResponder(search)
+        let searchButton = try XCTUnwrap(descendants(panel.contentView!).first { $0.identifier?.rawValue == "window-switcher-enter-search" } as? NSButton)
+        searchButton.performClick(nil)
         XCTAssertFalse(controller.session!.usesDirectKeys)
         XCTAssertTrue(controller.session!.isPersistent)
         var destructive = false
@@ -204,5 +212,71 @@ final class WindowSwitcherMigrationTests: XCTestCase {
         }
         XCTAssertFalse(destructive)
         XCTAssertTrue(panel.isVisible)
+    }
+
+    func testRecordingTargetMovesAndClearsOnCancelFailureOrWindowRemoval() throws {
+        for layout in [WindowSwitcherLayout.grid, .list] {
+            let controller = WindowSwitcherOverlayController()
+            let entries = ["one", "two"].enumerated().map { index, id in
+                WindowSwitcherAppEntry(id: id, processIdentifier: 100, bundleIdentifier: id, appName: id,
+                    windowTitle: id, icon: nil, windowElement: nil, isMinimized: false, shortcutToken: index == 0 ? "a" : "b")
+            }
+            let session = WindowSwitcherSession(entries: entries, selectedID: "one", isPersistent: true,
+                originalWindowID: nil, usesDirectKeys: true)
+            controller.show(session, currentPID: 100, showsPreview: false, preferredLayout: layout)
+            defer { controller.hide() }
+            let panel = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible })
+            let content = try XCTUnwrap(panel.contentView)
+            func descendants(_ view: NSView) -> [NSView] { [view] + view.subviews.flatMap(descendants) }
+            func badge(_ title: String) throws -> WindowSwitcherShortcutBadge {
+                content.layoutSubtreeIfNeeded()
+                return try XCTUnwrap(descendants(content).compactMap { $0 as? WindowSwitcherShortcutBadge }
+                    .first { $0.title == title && !$0.isHiddenOrHasHiddenAncestor })
+            }
+            let cancel = try XCTUnwrap(descendants(content).first { $0.identifier?.rawValue == "window-shortcut-recording-cancel" } as? NSButton)
+            let more = try XCTUnwrap(descendants(content).first { $0.identifier?.rawValue == "window-switcher-options" })
+            let frame = panel.frame
+            var writes = 0
+            var activations = 0
+            controller.onSelect = { _ in activations += 1 }
+            controller.onShortcutChange = { _, _ in writes += 1; return .unavailable }
+            try badge("A").performClick(nil)
+            XCTAssertTrue(try badge("A").isRecording)
+            try badge("B").performClick(nil)
+            XCTAssertFalse(try badge("A").isRecording)
+            XCTAssertTrue(try badge("B").isRecording)
+            XCTAssertTrue(more.isHidden)
+            cancel.performClick(nil)
+            XCTAssertFalse(try badge("B").isRecording)
+            XCTAssertTrue(cancel.isHidden)
+            XCTAssertFalse(more.isHidden)
+            XCTAssertEqual(writes, 0)
+            XCTAssertEqual(panel.frame, frame)
+            try badge("B").performClick(nil)
+            let escape = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: panel.windowNumber, context: nil, characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}",
+                isARepeat: false, keyCode: UInt16(kVK_Escape)))
+            panel.sendEvent(escape)
+            XCTAssertFalse(try badge("B").isRecording)
+            XCTAssertTrue(panel.isVisible)
+            XCTAssertEqual(writes, 0)
+            try badge("B").performClick(nil)
+            let key = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                windowNumber: panel.windowNumber, context: nil, characters: "x", charactersIgnoringModifiers: "x",
+                isARepeat: false, keyCode: UInt16(kVK_ANSI_X)))
+            panel.sendEvent(key)
+            XCTAssertFalse(try badge("B").isRecording)
+            XCTAssertTrue(cancel.isHidden)
+            XCTAssertFalse(more.isHidden)
+            XCTAssertEqual(writes, 1)
+            try badge("B").performClick(nil)
+            var updated = try XCTUnwrap(controller.session)
+            updated.entries.removeAll { $0.id == "two" }
+            controller.update(updated)
+            XCTAssertTrue(cancel.isHidden)
+            XCTAssertFalse(more.isHidden)
+            XCTAssertFalse(try badge("A").isRecording)
+            XCTAssertEqual(activations, 0)
+        }
     }
 }

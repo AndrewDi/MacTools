@@ -1661,9 +1661,33 @@ final class WindowSwitcherPluginTests: XCTestCase {
         XCTAssertEqual(assigned[25].shortcutToken, "y")
         XCTAssertEqual(assigned[26].shortcutToken, "1")
         XCTAssertEqual(assigned[35].shortcutToken, "0")
-        XCTAssertEqual(assigned[36].shortcutToken, "cmd+f")
-        XCTAssertEqual(assigned[71].shortcutToken, "cmd+0")
+        XCTAssertEqual(assigned[36].shortcutToken, "cmd+j")
+        XCTAssertEqual(assigned[70].shortcutToken, "cmd+0")
+        XCTAssertNil(assigned[71].shortcutToken)
         XCTAssertNil(assigned[72].shortcutToken)
+        XCTAssertFalse(assigned.contains { $0.shortcutToken == "cmd+f" })
+    }
+
+    func testSearchShortcutIsReservedAndSavedAssignmentsReceiveStableFallbacks() throws {
+        let storage = WindowSwitcherMemoryStorage()
+        let saved = WindowSwitcherShortcutBindingState(
+            manual: ["bundle:com.apple.Safari": "cmd+f"], automatic: ["bundle:com.apple.finder": "cmd+f"])
+        storage.set(try JSONEncoder().encode(saved), forKey: "shortcut-bindings")
+        let store = WindowSwitcherStore(storage: storage)
+        let entries = store.assignShortcuts(to: [
+            makeEntry(index: 0, appName: "Safari", bundleIdentifier: "com.apple.Safari"),
+            makeEntry(index: 1, appName: "Finder", bundleIdentifier: "com.apple.finder"),
+        ])
+        XCTAssertEqual(Set(entries.compactMap(\.shortcutToken)).count, 2)
+        XCTAssertFalse(entries.contains { $0.shortcutToken == "cmd+f" })
+        XCTAssertEqual(store.shortcutBindings.manual["bundle:com.apple.Safari"], "cmd+f", "Keep the saved preference while reserving Find in the chooser")
+        XCTAssertTrue(store.hasShortcutConflict("CMD+F", for: entries[0].id, in: entries))
+        guard case .conflict = store.setManualShortcut("cmd+f", for: entries[0].id, in: entries) else {
+            return XCTFail("Find must remain reserved for panel search")
+        }
+        let reopened = WindowSwitcherStore(storage: storage)
+        let reordered = reopened.assignShortcuts(to: Array(entries.reversed()))
+        XCTAssertEqual(reordered.map(\.shortcutToken), entries.reversed().map(\.shortcutToken))
     }
 
     func testShortcutAssignmentPrefersApplicationInitials() {
