@@ -1,7 +1,7 @@
 import Foundation
 
 /// Flat nodes keep navigation and updates independent of the size of descendant trees.
-public struct StorageExplorerSnapshot: Sendable {
+public struct StorageExplorerSnapshot: Sendable, Codable {
     public var progress = StorageExplorerScanProgress()
     public var rootPath: String
     public var items: [String: StorageItem] = [:]

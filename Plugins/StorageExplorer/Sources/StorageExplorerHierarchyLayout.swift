@@ -119,20 +119,49 @@ struct StorageExplorerHierarchyRect: Identifiable, Equatable {
     let node: StorageExplorerHierarchyNode
     let rect: CGRect
     let depth: Int
+    let rootID: String
+    let sizeLabel: String
     var id: String { node.id }
 }
 
 enum StorageExplorerHierarchyRectLayout {
-    static func make(nodes: [StorageExplorerHierarchyNode], in bounds: CGRect) -> [StorageExplorerHierarchyRect] {
-        var result: [StorageExplorerHierarchyRect] = []
+    static func make(
+        nodes: [StorageExplorerHierarchyNode],
+        in bounds: CGRect,
+        maximumRectangles: Int = 500,
+        minimumChildWidth: CGFloat = 44,
+        minimumChildHeight: CGFloat = 34
+    ) -> [StorageExplorerHierarchyRect] {
+        struct Work {
+            let nodes: [StorageExplorerHierarchyNode]
+            let rect: CGRect
+            let depth: Int
+            let rootID: String?
+        }
 
-        func append(_ nodes: [StorageExplorerHierarchyNode], in rect: CGRect, depth: Int) {
-            let positive = nodes.filter { $0.bytes > 0 }
-            guard !positive.isEmpty, rect.width > 2, rect.height > 2 else { return }
+        var result: [StorageExplorerHierarchyRect] = []
+        var queue = [Work(nodes: nodes, rect: bounds, depth: 0, rootID: nil)]
+        var queueIndex = 0
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+
+        while queueIndex < queue.count, result.count < maximumRectangles {
+            let work = queue[queueIndex]
+            queueIndex += 1
+            let positive = work.nodes.filter { $0.bytes > 0 }
+            guard !positive.isEmpty, work.rect.width > 2, work.rect.height > 2,
+                  result.count + positive.count <= maximumRectangles else { continue }
             let weights = positive.map { Double($0.bytes) }
-            let boxes = partition(weights: weights, in: rect)
+            let boxes = partition(weights: weights, in: work.rect)
             for (node, box) in zip(positive, boxes) {
-                result.append(StorageExplorerHierarchyRect(node: node, rect: box, depth: depth))
+                let rootID = work.rootID ?? node.id
+                result.append(StorageExplorerHierarchyRect(
+                    node: node,
+                    rect: box,
+                    depth: work.depth,
+                    rootID: rootID,
+                    sizeLabel: formatter.string(fromByteCount: node.bytes)
+                ))
                 guard !node.children.isEmpty else { continue }
                 let header = min(26, max(18, box.height * 0.12))
                 let inset = box.insetBy(dx: 4, dy: 4)
@@ -142,11 +171,16 @@ enum StorageExplorerHierarchyRectLayout {
                     width: inset.width,
                     height: max(0, inset.height - header)
                 )
-                append(node.children, in: childRect, depth: depth + 1)
+                guard childRect.width >= minimumChildWidth,
+                      childRect.height >= minimumChildHeight else { continue }
+                queue.append(Work(
+                    nodes: node.children,
+                    rect: childRect,
+                    depth: work.depth + 1,
+                    rootID: rootID
+                ))
             }
         }
-
-        append(nodes, in: bounds, depth: 0)
         return result
     }
 

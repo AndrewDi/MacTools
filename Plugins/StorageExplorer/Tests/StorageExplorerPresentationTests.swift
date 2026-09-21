@@ -2,6 +2,70 @@ import XCTest
 @testable import StorageExplorerPlugin
 
 final class StorageExplorerPresentationTests: XCTestCase {
+    func testElapsedClockAdvancesWithoutScannerUpdates() {
+        let started = Date(timeIntervalSince1970: 100)
+        XCTAssertEqual(
+            StorageExplorerElapsedClock.elapsed(
+                startedAt: started,
+                reported: 2,
+                now: Date(timeIntervalSince1970: 115)
+            ),
+            15
+        )
+        XCTAssertEqual(
+            StorageExplorerElapsedClock.elapsed(startedAt: started, reported: 20, now: started),
+            20
+        )
+    }
+
+    func testHierarchyRectangleLayoutKeepsTileBudgetAndEveryRoot() {
+        func leaf(_ path: String, bytes: Int64) -> StorageExplorerHierarchyNode {
+            let item = StorageItem(
+                name: URL(fileURLWithPath: path).lastPathComponent,
+                path: path,
+                url: URL(fileURLWithPath: path),
+                isDirectory: false,
+                size: bytes,
+                allocatedSize: bytes
+            )
+            return StorageExplorerHierarchyNode(item: item, bytes: bytes, children: [], colorKey: "size-rank:0")
+        }
+        let roots = (0..<48).map { rootIndex -> StorageExplorerHierarchyNode in
+            let rootPath = "/root-\(rootIndex)"
+            let children = (0..<18).map { childIndex -> StorageExplorerHierarchyNode in
+                let childPath = rootPath + "/child-\(childIndex)"
+                let grandchildren = (0..<10).map {
+                    leaf(childPath + "/leaf-\($0)", bytes: 1)
+                }
+                let item = StorageItem(
+                    name: "child-\(childIndex)", path: childPath,
+                    url: URL(fileURLWithPath: childPath), isDirectory: true,
+                    size: 10, allocatedSize: 10, parentPath: rootPath
+                )
+                return StorageExplorerHierarchyNode(
+                    item: item, bytes: 10, children: grandchildren, colorKey: "size-rank:\(rootIndex)"
+                )
+            }
+            let item = StorageItem(
+                name: "root-\(rootIndex)", path: rootPath,
+                url: URL(fileURLWithPath: rootPath), isDirectory: true,
+                size: 180, allocatedSize: 180, parentPath: "/"
+            )
+            return StorageExplorerHierarchyNode(
+                item: item, bytes: 180, children: children, colorKey: "size-rank:\(rootIndex)"
+            )
+        }
+
+        let rectangles = StorageExplorerHierarchyRectLayout.make(
+            nodes: roots,
+            in: CGRect(x: 0, y: 0, width: 1_200, height: 800)
+        )
+
+        XCTAssertLessThanOrEqual(rectangles.count, 500)
+        XCTAssertEqual(rectangles.filter { $0.depth == 0 }.count, roots.count)
+        XCTAssertEqual(Set(rectangles.filter { $0.depth == 0 }.map(\.rootID)), Set(roots.map(\.id)))
+    }
+
     func testTreemapPartitionsWithoutOverlapAndPreservesArea() {
         let rows = (1...20).map { number -> StorageExplorerRow in
             let item = StorageItem(name: "\(number)", path: "/\(number)", url: URL(fileURLWithPath: "/\(number)"), isDirectory: false, size: Int64(number))

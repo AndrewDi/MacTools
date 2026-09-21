@@ -7,7 +7,7 @@ import XCTest
 final class StorageExplorerControllerTests: XCTestCase {
     func testObsoleteProgressAndFailureCannotReplaceNewScan() async throws {
         let scanner = ControlledStorageScanner()
-        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
+        let controller = StorageExplorerController(scanner: scanner)
         let first = URL(fileURLWithPath: "/tmp/storage-first")
         let second = URL(fileURLWithPath: "/tmp/storage-second")
         controller.startScan(at: first)
@@ -28,7 +28,7 @@ final class StorageExplorerControllerTests: XCTestCase {
 
     func testSelectionTotalsSpanFoldersAndNormalizeAncestorOverlap() async throws {
         let scanner = ControlledStorageScanner()
-        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
+        let controller = StorageExplorerController(scanner: scanner)
         let root = URL(fileURLWithPath: "/tmp/storage-selection")
         controller.startScan(at: root)
         try await waitUntil { scanner.hasRequest(root.path) }
@@ -49,7 +49,7 @@ final class StorageExplorerControllerTests: XCTestCase {
 
     func testBackgroundHierarchyTracksLatestSelectionAndNavigation() async throws {
         let scanner = ControlledStorageScanner()
-        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
+        let controller = StorageExplorerController(scanner: scanner)
         let root = "/tmp/storage-hierarchy"
         let snapshot = Self.fixture(root: root)
         controller.startScan(at: URL(fileURLWithPath: root))
@@ -59,7 +59,11 @@ final class StorageExplorerControllerTests: XCTestCase {
         try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/b", root + "/a"] }
 
         controller.toggleSelection(path: root + "/b")
+        XCTAssertTrue(controller.isUpdatingPresentation)
         try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/a"] }
+        XCTAssertTrue(controller.isUpdatingPresentation)
+        controller.presentationDidRender(revision: controller.hierarchyRevision)
+        XCTAssertFalse(controller.isUpdatingPresentation)
 
         controller.drillDown(to: try XCTUnwrap(snapshot.items[root + "/a"]))
         XCTAssertTrue(controller.hierarchyNodes.isEmpty)
@@ -67,9 +71,27 @@ final class StorageExplorerControllerTests: XCTestCase {
         XCTAssertEqual(controller.currentPath, root + "/a")
     }
 
+    func testRapidRepeatedStagingPublishesOnlyLatestHierarchy() async throws {
+        let scanner = ControlledStorageScanner()
+        let controller = StorageExplorerController(scanner: scanner)
+        let root = "/tmp/storage-repeated-staging"
+        let snapshot = Self.fixture(root: root)
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        scanner.finish(path: root, snapshot: snapshot)
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { controller.hierarchyNodes.count == 2 }
+
+        controller.toggleSelection(path: root + "/b")
+        controller.toggleSelection(path: root + "/a")
+
+        try await waitUntil { controller.hierarchyNodes.isEmpty }
+        XCTAssertEqual(controller.basket, [root + "/a", root + "/b"])
+    }
+
     func testSameDirectoryRefreshKeepsPreviousHierarchyUntilReplacementPublishes() async throws {
         let scanner = ControlledStorageScanner()
-        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
+        let controller = StorageExplorerController(scanner: scanner)
         let root = "/tmp/storage-hierarchy-refresh"
         controller.startScan(at: URL(fileURLWithPath: root))
         try await waitUntil { scanner.hasRequest(root) }
@@ -109,7 +131,7 @@ final class StorageExplorerControllerTests: XCTestCase {
 
     func testPartialResultsUpdateProgressWithoutReplacingVisibleSnapshot() async throws {
         let scanner = ControlledStorageScanner()
-        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
+        let controller = StorageExplorerController(scanner: scanner)
         let path = "/tmp/storage-partial"
         controller.startScan(at: URL(fileURLWithPath: path))
         try await waitUntil { scanner.hasRequest(path) }
@@ -127,7 +149,7 @@ final class StorageExplorerControllerTests: XCTestCase {
 
     func testSwitchingRootsClearsOldResultsAndSelectionImmediately() async throws {
         let scanner = ControlledStorageScanner()
-        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
+        let controller = StorageExplorerController(scanner: scanner)
         let first = "/tmp/storage-old", second = "/tmp/storage-new"
         controller.startScan(at: URL(fileURLWithPath: first))
         try await waitUntil { scanner.hasRequest(first) }
@@ -144,7 +166,7 @@ final class StorageExplorerControllerTests: XCTestCase {
 
     func testExistingNavigationSurvivesAtomicRefreshCompletion() async throws {
         let scanner = ControlledStorageScanner()
-        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
+        let controller = StorageExplorerController(scanner: scanner)
         let path = "/tmp/storage-navigation"
         let snapshot = Self.fixture(root: path)
         controller.startScan(at: URL(fileURLWithPath: path))
@@ -162,25 +184,23 @@ final class StorageExplorerControllerTests: XCTestCase {
         XCTAssertEqual(controller.currentPath, path + "/b")
     }
 
-    func testFilesystemChangesInvalidateCachedRefresh() async throws {
+    func testExplicitRefreshAlwaysReadsFreshMetadata() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let file = root.appendingPathComponent("file.bin")
         try Data(repeating: 1, count: 10).write(to: file)
-        let controller = StorageExplorerController(observeChanges: false)
+        let controller = StorageExplorerController()
         controller.startScan(at: root)
         try await waitUntil { !controller.isScanning }
         XCTAssertEqual(controller.rootItem?.size, 10)
         try Data(repeating: 2, count: 400).write(to: file)
-        let scannedFilePath = try XCTUnwrap(controller.rootItem?.path) + "/file.bin"
-        controller.handleObservedChanges([scannedFilePath])
         controller.startScan(at: try XCTUnwrap(controller.scanRootURL))
         try await waitUntil { !controller.isScanning }
         XCTAssertEqual(controller.rootItem?.size, 400)
     }
 
-    func testFilesystemChangesDuringScanDoNotInterruptCompletion() async throws {
+    func testCompletedScanRecordsItsTimestamp() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
@@ -190,14 +210,101 @@ final class StorageExplorerControllerTests: XCTestCase {
         controller.startScan(at: root)
         try await waitUntil { scanner.hasRequest(root.path) }
 
-        try Data(repeating: 1, count: 32).write(to: root.appendingPathComponent("during-scan.bin"))
-        try await Task.sleep(for: .milliseconds(500))
+        XCTAssertNil(controller.scanCompletedAt)
         XCTAssertTrue(controller.isScanning)
 
         scanner.finish(path: root.path)
         try await waitUntil { !controller.isScanning }
         XCTAssertEqual(controller.scanState, .completed)
-        XCTAssertTrue(controller.snapshotHasObservedChanges)
+        XCTAssertNotNil(controller.scanCompletedAt)
+    }
+
+    func testCachedPreviewAppearsUntilFreshScanCompletesAndCannotBeReviewed() async throws {
+        let scanner = ControlledStorageScanner()
+        let root = "/tmp/storage-cached-preview"
+        let cached = Self.fixture(root: root)
+        let cache = ControlledStorageSnapshotCache(
+            cached: StorageExplorerCachedSnapshot(
+                snapshot: cached,
+                completedAt: Date(timeIntervalSinceNow: -120)
+            )
+        )
+        let controller = StorageExplorerController(scanner: scanner, snapshotCache: cache)
+
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        try await waitUntil { controller.isShowingCachedPreview }
+
+        XCTAssertTrue(controller.isScanning)
+        XCTAssertEqual(controller.rootItem?.path, root)
+        XCTAssertNotNil(controller.cachedPreviewDate)
+        let item = try XCTUnwrap(cached.items[root + "/a"])
+        XCTAssertEqual(controller.reviewEligibility(for: item), .cachedPreview)
+        controller.toggleSelection(path: item.path)
+        XCTAssertTrue(controller.basket.isEmpty)
+
+        var fresh = cached
+        fresh.items[root]?.allocatedSize = 999
+        scanner.finish(path: root, snapshot: fresh)
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { cache.savedSnapshot != nil }
+
+        XCTAssertFalse(controller.isShowingCachedPreview)
+        XCTAssertNil(controller.cachedPreviewDate)
+        XCTAssertEqual(controller.rootItem?.allocatedSize, 999)
+        XCTAssertEqual(cache.savedRootPath, root)
+    }
+
+    func testCachedPreviewForDifferentRootCannotReplaceActiveScan() async throws {
+        let scanner = ControlledStorageScanner()
+        let first = "/tmp/storage-cache-first"
+        let second = "/tmp/storage-cache-second"
+        let cache = ControlledStorageSnapshotCache(
+            cachedByRoot: [first: StorageExplorerCachedSnapshot(
+                snapshot: Self.fixture(root: first),
+                completedAt: Date()
+            )],
+            loadDelay: .milliseconds(80)
+        )
+        let controller = StorageExplorerController(scanner: scanner, snapshotCache: cache)
+
+        controller.startScan(at: URL(fileURLWithPath: first))
+        controller.startScan(at: URL(fileURLWithPath: second))
+        try await waitUntil { scanner.hasRequest(second) }
+        try await Task.sleep(for: .milliseconds(120))
+
+        XCTAssertFalse(controller.isShowingCachedPreview)
+        XCTAssertNil(controller.rootItem)
+        XCTAssertEqual(controller.scanRootURL?.path, second)
+        scanner.finish(path: second)
+        try await waitUntil { !controller.isScanning }
+    }
+
+    func testSnapshotCacheRoundTripsCompleteSnapshotAndRejectsExpiredPreview() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = "/tmp/storage-cache-round-trip"
+        let snapshot = Self.fixture(root: root)
+        let cache = StorageExplorerSnapshotCache(
+            directoryURL: directory,
+            maximumAge: 60
+        )
+
+        let completedAt = Date(timeIntervalSinceNow: -10)
+        await cache.save(snapshot: snapshot, completedAt: completedAt, rootPath: root)
+        let cached = await cache.load(rootPath: root)
+        let loaded = try XCTUnwrap(cached)
+        XCTAssertEqual(loaded.snapshot.items, snapshot.items)
+        XCTAssertEqual(loaded.completedAt.timeIntervalSince1970, completedAt.timeIntervalSince1970, accuracy: 0.001)
+
+        await cache.save(
+            snapshot: snapshot,
+            completedAt: Date(timeIntervalSinceNow: -120),
+            rootPath: root
+        )
+        let expired = await cache.load(rootPath: root)
+        XCTAssertNil(expired)
     }
 
     func testAllocatedSpaceIsTheDefaultMetricAndProgressTracksIt() async throws {
@@ -205,7 +312,7 @@ final class StorageExplorerControllerTests: XCTestCase {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         try Data(repeating: 1, count: 16_384).write(to: root.appendingPathComponent("payload.bin"))
-        let controller = StorageExplorerController(observeChanges: false)
+        let controller = StorageExplorerController()
 
         controller.startScan(at: root)
         try await waitUntil { !controller.isScanning }
@@ -222,7 +329,7 @@ final class StorageExplorerControllerTests: XCTestCase {
         let unrelated = root.appendingPathComponent("unrelated.bin")
         try Data(repeating: 1, count: 10).write(to: selected)
         try Data(repeating: 2, count: 10).write(to: unrelated)
-        let controller = StorageExplorerController(observeChanges: false)
+        let controller = StorageExplorerController()
         controller.startScan(at: root)
         try await waitUntil { !controller.isScanning }
         try await waitUntil { controller.rows.contains(where: { $0.name == selected.lastPathComponent }) }
@@ -236,65 +343,153 @@ final class StorageExplorerControllerTests: XCTestCase {
         XCTAssertEqual(controller.reviewItems.map(\.path), [selectedPath])
     }
 
-    func testChangedSelectedItemIsRejectedWithoutObserverSignal() async throws {
+    func testChangedSelectedItemCanBeReviewedWithoutRefreshing() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
         let selected = root.appendingPathComponent("selected.bin")
         try Data(repeating: 1, count: 10).write(to: selected)
-        let controller = StorageExplorerController(observeChanges: false)
+        let controller = StorageExplorerController()
         controller.startScan(at: root)
         try await waitUntil { !controller.isScanning }
         try await waitUntil { controller.rows.contains(where: { $0.name == selected.lastPathComponent }) }
         let selectedPath = try XCTUnwrap(controller.rows.first(where: { $0.name == selected.lastPathComponent })?.item.path)
         controller.toggleSelection(path: selectedPath)
 
-        try Data(repeating: 2, count: 100).write(to: selected)
+        let handle = try FileHandle(forWritingTo: selected)
+        try handle.truncate(atOffset: 0)
+        try handle.write(contentsOf: Data(repeating: 2, count: 100))
+        try handle.close()
         controller.confirmTrash()
 
-        XCTAssertFalse(controller.isConfirmingTrash)
-        XCTAssertTrue(controller.reviewItems.isEmpty)
-        XCTAssertNotNil(controller.lastErrorMessage)
+        XCTAssertTrue(controller.isConfirmingTrash)
+        XCTAssertEqual(controller.reviewItems.map(\.path), [selectedPath])
+        XCTAssertNil(controller.lastErrorMessage)
     }
 
-    func testChangedDescendantRequiresRefreshBeforeReviewingFolder() async throws {
+    func testChangedSelectedFolderCanBeReviewedWithoutRefreshing() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let folder = root.appendingPathComponent("selected")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try Data([1]).write(to: folder.appendingPathComponent("existing.bin"))
         defer { try? FileManager.default.removeItem(at: root) }
-        let controller = StorageExplorerController(observeChanges: false)
+        let controller = StorageExplorerController()
 
         controller.startScan(at: root)
         try await waitUntil { !controller.isScanning }
         try await waitUntil { controller.rows.contains(where: { $0.name == "selected" }) }
         let selected = try XCTUnwrap(controller.rows.first(where: { $0.name == "selected" })?.item)
         controller.toggleSelection(path: selected.path)
-        controller.handleObservedChanges([selected.path + "/new.bin"])
+        try Data([2]).write(to: folder.appendingPathComponent("new.bin"))
         controller.confirmTrash()
 
-        XCTAssertTrue(controller.snapshotHasObservedChanges)
-        XCTAssertTrue(controller.reviewNeedsRefresh)
-        XCTAssertFalse(controller.isConfirmingTrash)
-        XCTAssertNotNil(controller.lastErrorMessage)
+        XCTAssertTrue(controller.isConfirmingTrash)
+        XCTAssertEqual(controller.reviewItems.map(\.path), [selected.path])
+        XCTAssertNil(controller.lastErrorMessage)
     }
 
-    func testLargeObservedChangeBatchConservativelyRequiresFolderRefresh() async throws {
+    func testChangedSelectedFileCanMoveToTrashWithoutRefreshingWhenIdentityIsUnchanged() async throws {
+        var root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        if let physical = realpath(root.path, nil) {
+            root = URL(fileURLWithPath: String(cString: physical))
+            free(physical)
+        }
+        defer { try? FileManager.default.removeItem(at: root) }
+        let selected = root.appendingPathComponent("selected.bin")
+        try Data(repeating: 1, count: 10).write(to: selected)
+        let recycler = PartialTrashRecycler(successfulPath: selected.path)
+        let controller = StorageExplorerController(
+            safetyPolicy: StorageExplorerSafetyPolicy(trashRecycler: recycler)
+        )
+        controller.startScan(at: root)
+        try await waitUntil { !controller.isScanning }
+        try await waitUntil { controller.rows.contains(where: { $0.name == selected.lastPathComponent }) }
+        let item = try XCTUnwrap(controller.rows.first(where: { $0.name == selected.lastPathComponent })?.item)
+        controller.toggleSelection(path: item.path)
+
+        try Data(repeating: 2, count: 100).write(to: selected)
+        controller.confirmTrash()
+        await controller.executeTrash()
+        try await waitUntil { !controller.isScanning }
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: selected.path))
+        XCTAssertNil(controller.lastErrorMessage)
+    }
+
+    func testReviewAvailabilityExplainsOnlyActualActionStates() async throws {
         let scanner = ControlledStorageScanner()
-        let controller = StorageExplorerController(scanner: scanner, observeChanges: false)
-        let root = "/tmp/storage-many-events"
+        let controller = StorageExplorerController(scanner: scanner)
+        let root = "/tmp/storage-review-availability"
+        XCTAssertEqual(controller.reviewAvailability, .empty)
         controller.startScan(at: URL(fileURLWithPath: root))
         try await waitUntil { scanner.hasRequest(root) }
+        XCTAssertEqual(controller.reviewAvailability, .empty)
         let snapshot = Self.fixture(root: root)
         scanner.finish(path: root, snapshot: snapshot)
         try await waitUntil { !controller.isScanning }
         controller.toggleSelection(path: root + "/a")
+        XCTAssertEqual(controller.reviewAvailability, .updating)
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/b"] }
+        controller.presentationDidRender(revision: controller.hierarchyRevision)
+        XCTAssertEqual(controller.reviewAvailability, .ready)
+        controller.clearSelection()
+        XCTAssertEqual(controller.reviewAvailability, .empty)
+    }
 
-        controller.handleObservedChanges((0..<33).map { root + "/unrelated-\($0)" })
+    func testReviewEligibilityExplainsStableRestrictionReasons() async throws {
+        let scanner = ControlledStorageScanner()
+        let controller = StorageExplorerController(scanner: scanner)
+        let root = "/tmp/storage-review-eligibility"
+        var snapshot = Self.fixture(root: root)
+        snapshot.items[root + "/a"]?.isIncomplete = true
+        snapshot.items[root + "/a"]?.skippedCount = 3
 
-        XCTAssertTrue(controller.reviewNeedsRefresh)
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        scanner.finish(path: root, snapshot: snapshot)
+        try await waitUntil { !controller.isScanning }
+
+        XCTAssertEqual(controller.reviewEligibility(for: try XCTUnwrap(snapshot.items[root])), .scanRoot)
+        XCTAssertEqual(
+            controller.reviewEligibility(for: try XCTUnwrap(snapshot.items[root + "/a"])),
+            .incomplete(skippedCount: 3)
+        )
+        let incompleteItem = try XCTUnwrap(snapshot.items[root + "/a"])
+        XCTAssertTrue(controller.canStage(incompleteItem))
+        XCTAssertTrue(controller.reviewEligibility(for: incompleteItem).canAdd)
+        XCTAssertTrue(controller.reviewEligibility(for: incompleteItem).canToggle)
+        XCTAssertEqual(controller.reviewEligibility(for: try XCTUnwrap(snapshot.items[root + "/b"])), .eligible)
+
+        controller.toggleSelection(path: root + "/b")
+        try await waitUntil { controller.hierarchyNodes.map(\.id) == [root + "/a"] }
+        controller.presentationDidRender(revision: controller.hierarchyRevision)
+        XCTAssertEqual(controller.reviewEligibility(for: try XCTUnwrap(snapshot.items[root + "/b"])), .selected)
+        XCTAssertEqual(
+            controller.reviewEligibility(for: try XCTUnwrap(snapshot.items[root + "/b/two"])),
+            .includedBySelectedParent(name: "b")
+        )
+    }
+
+    func testIncompleteFolderCanBeSelectedAndConfirmedForTrash() async throws {
+        let scanner = ControlledStorageScanner()
+        let controller = StorageExplorerController(scanner: scanner)
+        let root = "/tmp/storage-incomplete-review"
+        var snapshot = Self.fixture(root: root)
+        snapshot.items[root + "/a"]?.isIncomplete = true
+        snapshot.items[root + "/a"]?.skippedCount = 2
+
+        controller.startScan(at: URL(fileURLWithPath: root))
+        try await waitUntil { scanner.hasRequest(root) }
+        scanner.finish(path: root, snapshot: snapshot)
+        try await waitUntil { !controller.isScanning }
+
+        controller.toggleSelection(path: root + "/a")
+        try await waitUntil { controller.basket.contains(root + "/a") }
         controller.confirmTrash()
-        XCTAssertFalse(controller.isConfirmingTrash)
+
+        XCTAssertTrue(controller.isConfirmingTrash)
+        XCTAssertEqual(controller.reviewItems.map(\.path), [root + "/a"])
     }
 
     func testSymlinkIsVisibleButCannotBeStaged() async throws {
@@ -306,8 +501,7 @@ final class StorageExplorerControllerTests: XCTestCase {
         try Data([1]).write(to: destination)
         try FileManager.default.createSymbolicLink(at: symbolicLink, withDestinationURL: destination)
         let controller = StorageExplorerController(
-            scanner: StorageExplorerScanner(publishesItems: true),
-            observeChanges: false
+            scanner: StorageExplorerScanner(publishesItems: true)
         )
 
         controller.startScan(at: root)
@@ -317,6 +511,7 @@ final class StorageExplorerControllerTests: XCTestCase {
 
         XCTAssertTrue(item.isSymlink)
         XCTAssertFalse(controller.canStage(item))
+        XCTAssertEqual(controller.reviewEligibility(for: item), .symlink)
         controller.toggleSelection(path: item.path)
         XCTAssertTrue(controller.basket.isEmpty)
     }
@@ -330,8 +525,7 @@ final class StorageExplorerControllerTests: XCTestCase {
         try Data(repeating: 1, count: 64).write(to: original)
         XCTAssertEqual(link(original.path, duplicate.path), 0)
         let controller = StorageExplorerController(
-            scanner: StorageExplorerScanner(publishesItems: true),
-            observeChanges: false
+            scanner: StorageExplorerScanner(publishesItems: true)
         )
 
         controller.startScan(at: root)
@@ -362,8 +556,7 @@ final class StorageExplorerControllerTests: XCTestCase {
         try Data(repeating: 2, count: 20).write(to: second)
         let recycler = PartialTrashRecycler(successfulPath: first.path)
         let controller = StorageExplorerController(
-            safetyPolicy: StorageExplorerSafetyPolicy(trashRecycler: recycler),
-            observeChanges: false
+            safetyPolicy: StorageExplorerSafetyPolicy(trashRecycler: recycler)
         )
         controller.startScan(at: root)
         try await waitUntil { !controller.isScanning }
@@ -452,5 +645,41 @@ private final class ControlledStorageScanner: StorageExplorerScanning, @unchecke
             result.apply([StorageItem(name: "root", path: path, url: URL(fileURLWithPath: path), isDirectory: true)])
         }
         request?.continuation.resume(returning: result)
+    }
+}
+
+private final class ControlledStorageSnapshotCache: StorageExplorerSnapshotCaching, @unchecked Sendable {
+    private let lock = NSLock()
+    private let cachedByRoot: [String: StorageExplorerCachedSnapshot]
+    private let loadDelay: Duration?
+    private var storedSnapshot: StorageExplorerSnapshot?
+    private var storedRootPath: String?
+
+    init(
+        cached: StorageExplorerCachedSnapshot? = nil,
+        cachedByRoot: [String: StorageExplorerCachedSnapshot] = [:],
+        loadDelay: Duration? = nil
+    ) {
+        if let cached {
+            self.cachedByRoot = [cached.snapshot.rootPath: cached]
+        } else {
+            self.cachedByRoot = cachedByRoot
+        }
+        self.loadDelay = loadDelay
+    }
+
+    var savedSnapshot: StorageExplorerSnapshot? { lock.withLock { storedSnapshot } }
+    var savedRootPath: String? { lock.withLock { storedRootPath } }
+
+    func load(rootPath: String) async -> StorageExplorerCachedSnapshot? {
+        if let loadDelay { try? await Task.sleep(for: loadDelay) }
+        return cachedByRoot[rootPath]
+    }
+
+    func save(snapshot: StorageExplorerSnapshot, completedAt: Date, rootPath: String) async {
+        lock.withLock {
+            storedSnapshot = snapshot
+            storedRootPath = rootPath
+        }
     }
 }

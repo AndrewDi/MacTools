@@ -1,5 +1,4 @@
 import AppKit
-import Darwin
 import Foundation
 import MacToolsPluginKit
 import SwiftUI
@@ -7,6 +6,15 @@ import SwiftUI
 @MainActor
 public final class StorageExplorerScanStatus: ObservableObject {
     @Published public var progress = StorageExplorerScanProgress()
+}
+
+public enum StorageExplorerReviewAvailability: Equatable, Sendable {
+    case empty
+    case scanning
+    case cachedPreview
+    case updating
+    case executing
+    case ready
 }
 
 @MainActor
@@ -31,11 +39,17 @@ public final class StorageExplorerController: ObservableObject {
     @Published public private(set) var displayedBytes: Int64 = 0
     @Published public private(set) var mapRootItems: [StorageItem] = []
     @Published private(set) var hierarchyNodes: [StorageExplorerHierarchyNode] = []
-    @Published public private(set) var snapshotHasObservedChanges = false
+    @Published private(set) var hierarchyRevision = 0
+    @Published public private(set) var isUpdatingPresentation = false
+    @Published public private(set) var scanStartedAt: Date?
+    @Published public private(set) var scanCompletedAt: Date?
+    @Published public private(set) var isShowingCachedPreview = false
+    @Published public private(set) var cachedPreviewDate: Date?
     public let status = StorageExplorerScanStatus()
     public let scanner: any StorageExplorerScanning
     public let safetyPolicy: StorageExplorerSafetyPolicy
     public let copy: StorageExplorerControllerCopy
+    public let snapshotCache: (any StorageExplorerSnapshotCaching)?
 
     private(set) var snapshot = StorageExplorerSnapshot(rootPath: "")
     private var activeScanTask: Task<Void, Never>?
@@ -45,22 +59,27 @@ public final class StorageExplorerController: ObservableObject {
     private var navigationRevision = 0
     private var sort: StorageExplorerSort = .size
     private var ascending = false
-    private var observer: StorageExplorerFileObserver?
-    private let observeChanges: Bool
-    private var observedChangedPaths: Set<String> = []
-    private var observedUnknownChanges = false
+    private var cacheInvalidationTask: Task<Void, Never>?
+    private var cachedPreviewTask: Task<Void, Never>?
+    private var cacheSaveTask: Task<Void, Never>?
+    private var pendingPresentationReadyRevision: Int?
 
     public init(scanner: any StorageExplorerScanning = StorageExplorerScanner(publishesItems: false),
                 safetyPolicy: StorageExplorerSafetyPolicy = StorageExplorerSafetyPolicy(),
                 copy: StorageExplorerControllerCopy = .fallback,
-                observeChanges: Bool = true) {
+                snapshotCache: (any StorageExplorerSnapshotCaching)? = nil) {
         self.scanner = scanner
         self.safetyPolicy = safetyPolicy
         self.copy = copy
-        self.observeChanges = observeChanges
+        self.snapshotCache = snapshotCache
     }
 
-    deinit { activeScanTask?.cancel(); presentationTask?.cancel() }
+    deinit {
+        activeScanTask?.cancel()
+        presentationTask?.cancel()
+        cachedPreviewTask?.cancel()
+        cacheSaveTask?.cancel()
+    }
 
     public var isScanning: Bool { if case .scanning = scanState { true } else { false } }
     public var rootItem: StorageItem? { snapshot.items[snapshot.rootPath] }
@@ -72,7 +91,6 @@ public final class StorageExplorerController: ObservableObject {
 
     public func startScan(
         at url: URL,
-        force: Bool = false,
         restoringBasket: Set<String> = [],
         completionError: String? = nil
     ) {
@@ -80,21 +98,25 @@ public final class StorageExplorerController: ObservableObject {
         cancelScan()
         let id = UUID()
         generation = id
+        cachedPreviewTask?.cancel()
+        cachedPreviewTask = nil
         let previousPath = currentPath
         let previousNavigationRevision = navigationRevision
         let sameRoot = url.path == scanRootURL?.path
         scanRootURL = url
-        basket.removeAll()
+        basket = sameRoot ? restoringBasket : []
         reviewItems = []
         isConfirmingTrash = false
         lastErrorMessage = nil
         lastSuccessMessage = nil
-        observedChangedPaths.removeAll(keepingCapacity: true)
-        observedUnknownChanges = false
-        snapshotHasObservedChanges = false
-        if force || !sameRoot || (observeChanges && observer == nil) { scanner.clearCache() }
+        isUpdatingPresentation = false
+        pendingPresentationReadyRevision = nil
+        if !sameRoot { scanCompletedAt = nil }
+        // There is no continuous file monitor, so every explicit scan starts from fresh metadata.
+        scheduleCacheReset()
         if !sameRoot {
-            observer = nil
+            isShowingCachedPreview = false
+            cachedPreviewDate = nil
             snapshot = StorageExplorerSnapshot(rootPath: url.path)
             currentPath = nil
             selectedPath = nil
@@ -102,28 +124,21 @@ public final class StorageExplorerController: ObservableObject {
             rows = []; chartRows = []
             mapRootItems = []
             hierarchyNodes = []
+            hierarchyRevision += 1
             matchingCount = 0
             displayedBytes = 0
             searchQuery = ""
-        }
-        if observeChanges && observer == nil {
-            installObserver(for: url)
+            loadCachedPreview(for: url.path, generation: id)
         }
         status.progress = StorageExplorerScanProgress(currentPath: url.path)
+        scanStartedAt = Date()
         scanState = .scanning(status.progress)
         activeScanTask = Task { [weak self, scanner] in
             do {
-                // Drain events from earlier writes before admitting any cached directory listing.
-                if let observer = self?.observer {
-                    await observer.flush()
-                    await Task.yield()
+                if let invalidation = self?.cacheInvalidationTask {
+                    await invalidation.value
                 }
                 guard self?.generation == id, !Task.isCancelled else { return }
-                // Changes delivered before enumeration are part of the baseline this scan will
-                // replace. Only events observed while enumeration is running make its result stale.
-                self?.observedChangedPaths.removeAll(keepingCapacity: true)
-                self?.observedUnknownChanges = false
-                self?.snapshotHasObservedChanges = false
                 let result = try await scanner.scanSnapshot(rootURL: url) { [weak self] update in
                     Task { @MainActor [weak self] in
                         guard let self, self.generation == id, self.isScanning else { return }
@@ -131,22 +146,28 @@ public final class StorageExplorerController: ObservableObject {
                     }
                 }
                 guard let self, self.generation == id, !Task.isCancelled else { return }
-                if let observer = self.observer {
-                    await observer.flush()
-                    await Task.yield()
-                }
-                guard self.generation == id, !Task.isCancelled else { return }
                 self.snapshot = result
                 self.status.progress = result.progress
                 self.scanRootURL = URL(fileURLWithPath: result.rootPath)
                 let preferredPath = self.navigationRevision == previousNavigationRevision ? previousPath : self.currentPath
                 self.currentPath = preferredPath.flatMap { result.items[$0] == nil ? nil : $0 } ?? result.rootPath
                 self.scanState = .completed
+                self.scanStartedAt = nil
+                let completedAt = Date()
+                self.scanCompletedAt = completedAt
+                self.isShowingCachedPreview = false
+                self.cachedPreviewDate = nil
                 self.basket = Set(restoringBasket.filter { result.items[$0] != nil })
                 self.reviewItems = self.basket.sorted().compactMap { result.items[$0] }
                 self.lastErrorMessage = completionError
                 self.rebuildNavigation()
                 self.refreshPresentation()
+                self.cacheSaveTask?.cancel()
+                if let cache = self.snapshotCache {
+                    self.cacheSaveTask = Task {
+                        await cache.save(snapshot: result, completedAt: completedAt, rootPath: url.path)
+                    }
+                }
             } catch {
                 guard let self, self.generation == id else { return }
                 if error is CancellationError { self.scanState = .cancelled }
@@ -154,37 +175,40 @@ public final class StorageExplorerController: ObservableObject {
                     self.scanState = .failed(error.localizedDescription)
                     self.lastErrorMessage = error.localizedDescription
                 }
+                self.scanStartedAt = nil
             }
         }
     }
 
-    private func installObserver(for url: URL) {
-        guard observeChanges else { return }
-        observer = StorageExplorerFileObserver(path: url.path) { [weak self] paths in
-            MainActor.assumeIsolated {
-                self?.handleObservedChanges(paths)
-            }
+    private func loadCachedPreview(for rootPath: String, generation id: UUID) {
+        guard let snapshotCache else { return }
+        cachedPreviewTask = Task { [weak self] in
+            guard let cached = await snapshotCache.load(rootPath: rootPath),
+                  !Task.isCancelled,
+                  let self,
+                  self.generation == id,
+                  self.isScanning,
+                  self.snapshot.items.isEmpty
+            else { return }
+            self.snapshot = cached.snapshot
+            self.currentPath = cached.snapshot.rootPath
+            self.isShowingCachedPreview = true
+            self.cachedPreviewDate = cached.completedAt
+            self.selectedPath = nil
+            self.rebuildNavigation()
+            self.refreshPresentation()
         }
     }
 
-    func handleObservedChanges(_ paths: [String]?) {
-        if let paths {
-            scanner.invalidate(paths: paths)
-            if !observedUnknownChanges {
-                let changedPaths = Set(paths)
-                if changedPaths.count > 32 || observedChangedPaths.union(changedPaths).count > 128 {
-                    observedChangedPaths.removeAll(keepingCapacity: false)
-                    observedUnknownChanges = true
-                } else {
-                    observedChangedPaths.formUnion(changedPaths)
-                }
-            }
-        } else {
+    /// Releasing a full-disk cache can be expensive. Keep it off the main actor so starting a
+    /// refresh never blocks treemap hover, clicks, or drag interactions.
+    private func scheduleCacheReset() {
+        let previous = cacheInvalidationTask
+        let scanner = scanner
+        cacheInvalidationTask = Task.detached(priority: .utility) {
+            if let previous { await previous.value }
             scanner.clearCache()
-            observedChangedPaths.removeAll(keepingCapacity: false)
-            observedUnknownChanges = true
         }
-        snapshotHasObservedChanges = true
     }
 
     private func receive(_ update: StorageExplorerScanUpdate) {
@@ -199,6 +223,7 @@ public final class StorageExplorerController: ObservableObject {
         activeScanTask?.cancel()
         activeScanTask = nil
         if isScanning { scanState = .cancelled }
+        scanStartedAt = nil
     }
 
     public func selectFolderAndScan() {
@@ -254,7 +279,7 @@ public final class StorageExplorerController: ObservableObject {
     private func schedulePresentation() {
         guard presentationTask == nil else { return }
         presentationTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(120))
+            try? await Task.sleep(for: .milliseconds(50))
             guard let self, !Task.isCancelled else { return }
             let revision = self.presentationRevision
             let generation = self.generation
@@ -275,6 +300,10 @@ public final class StorageExplorerController: ObservableObject {
                 self.chartRows = result.chart
                 self.mapRootItems = result.mapRootItems
                 self.hierarchyNodes = result.hierarchy
+                self.hierarchyRevision += 1
+                if self.isUpdatingPresentation {
+                    self.pendingPresentationReadyRevision = self.hierarchyRevision
+                }
                 self.matchingCount = result.matchingCount
                 self.displayedBytes = result.total
             }
@@ -287,40 +316,75 @@ public final class StorageExplorerController: ObservableObject {
         chartRows = []
         mapRootItems = []
         hierarchyNodes = []
+        hierarchyRevision += 1
         matchingCount = 0
         displayedBytes = 0
     }
 
     public func canStage(_ item: StorageItem) -> Bool {
-        !isScanning && !isExecutingTrash && !item.isIncomplete && !item.isSymlink
+        !isShowingCachedPreview && !isScanning && !isExecutingTrash && !item.isSymlink
             && snapshot.items[item.path] != nil
             && safetyPolicy.validatePathForRemoval(item.path, withinRoot: snapshot.rootPath).isAllowed
     }
 
-    public func needsRefreshBeforeReview(_ item: StorageItem) -> Bool {
-        guard item.isDirectory else { return false }
-        if observedUnknownChanges { return true }
-        return observedChangedPaths.contains { changedPath in
-            changedPath == item.path
-                || changedPath.hasPrefix(item.path + "/")
-                || item.path.hasPrefix(changedPath + "/")
+    public func reviewEligibility(for item: StorageItem) -> StorageExplorerReviewEligibility {
+        if isShowingCachedPreview { return .cachedPreview }
+        if isScanning || isExecutingTrash || isUpdatingPresentation { return .busy }
+        if basket.contains(item.path) { return .selected }
+        if let parentPath = basket.first(where: { item.path.hasPrefix($0 + "/") }) {
+            return .includedBySelectedParent(name: snapshot.items[parentPath]?.name ?? URL(fileURLWithPath: parentPath).lastPathComponent)
         }
+        if item.isSymlink { return .symlink }
+        guard snapshot.items[item.path] != nil else { return .unavailable }
+        if item.path == snapshot.rootPath { return .scanRoot }
+        guard safetyPolicy.validatePathForRemoval(item.path, withinRoot: snapshot.rootPath).isAllowed else {
+            return .protectedLocation
+        }
+        if item.isIncomplete { return .incomplete(skippedCount: max(1, item.skippedCount)) }
+        return .eligible
     }
 
-    public var reviewNeedsRefresh: Bool {
-        selectedItemsForReview.contains(where: needsRefreshBeforeReview)
+    public var reviewAvailability: StorageExplorerReviewAvailability {
+        if basket.isEmpty { return .empty }
+        if isExecutingTrash { return .executing }
+        if isShowingCachedPreview { return .cachedPreview }
+        if isScanning { return .scanning }
+        if isUpdatingPresentation { return .updating }
+        return .ready
     }
     public func toggleSelection(path: String) {
-        if basket.contains(path) { basket.remove(path); refreshPresentation(); return }
+        if basket.contains(path) {
+            beginPresentationUpdate()
+            basket.remove(path)
+            refreshPresentation()
+            return
+        }
         guard let item = snapshot.items[path], canStage(item) else { return }
         // A selected ancestor already includes this item; selecting an ancestor replaces descendants.
         guard !basket.contains(where: { path.hasPrefix($0 + "/") }) else { return }
+        beginPresentationUpdate()
         basket = basket.filter { !$0.hasPrefix(path + "/") }
         basket.insert(path)
         refreshPresentation()
     }
     public func selectAllVisible(items: [StorageItem]) { for item in items { if !basket.contains(item.path) { toggleSelection(path: item.path) } } }
-    public func clearSelection() { basket.removeAll(); refreshPresentation() }
+    public func clearSelection() {
+        guard !basket.isEmpty else { return }
+        beginPresentationUpdate()
+        basket.removeAll()
+        refreshPresentation()
+    }
+
+    public func presentationDidRender(revision: Int) {
+        guard pendingPresentationReadyRevision == revision else { return }
+        pendingPresentationReadyRevision = nil
+        isUpdatingPresentation = false
+    }
+
+    private func beginPresentationUpdate() {
+        isUpdatingPresentation = true
+        pendingPresentationReadyRevision = nil
+    }
     public var selectedItemsForReview: [StorageItem] { basket.sorted().compactMap { snapshot.items[$0] } }
     public var totalSelectedBytes: Int64 { selectedItemsForReview.reduce(0) { $0 + metric.bytes($1) } }
 
@@ -331,29 +395,11 @@ public final class StorageExplorerController: ObservableObject {
     public func confirmTrash() {
         let items = selectedItemsForReview
         guard !items.isEmpty, items.allSatisfy(canStage) else { return }
-        guard !items.contains(where: needsRefreshBeforeReview) else {
-            lastErrorMessage = copy.itemChanged
-            return
-        }
-        guard items.allSatisfy(itemStillMatchesSnapshot) else {
-            lastErrorMessage = copy.itemChanged
-            return
-        }
         reviewItems = items
         isConfirmingTrash = true
     }
     public func executeTrash() async {
         guard !reviewItems.isEmpty, reviewItems.allSatisfy(canStage) else { isConfirmingTrash = false; return }
-        guard !reviewItems.contains(where: needsRefreshBeforeReview) else {
-            isConfirmingTrash = false
-            lastErrorMessage = copy.itemChanged
-            return
-        }
-        guard reviewItems.allSatisfy(itemStillMatchesSnapshot) else {
-            isConfirmingTrash = false
-            lastErrorMessage = copy.itemChanged
-            return
-        }
         let attemptedItems = reviewItems
         let root = snapshot.rootPath
         isExecutingTrash = true
@@ -377,7 +423,6 @@ public final class StorageExplorerController: ObservableObject {
             // Recompute accounting, including surviving hard links; never infer freed space from the basket.
             startScan(
                 at: URL(fileURLWithPath: root),
-                force: true,
                 restoringBasket: Set(failedItems.map(\.path)),
                 completionError: message
             )
@@ -387,56 +432,26 @@ public final class StorageExplorerController: ObservableObject {
             isConfirmingTrash = false
             startScan(
                 at: URL(fileURLWithPath: root),
-                force: true,
                 restoringBasket: Set(attemptedItems.map(\.path)),
                 completionError: copy.trashOperationFailed
             )
         }
     }
 
-    private func itemStillMatchesSnapshot(_ item: StorageItem) -> Bool {
-        var status = stat()
-        guard lstat(item.path, &status) == 0 else { return false }
-        if let identity = item.fileIdentity,
-           identity.device != status.st_dev || identity.inode != status.st_ino {
-            return false
-        }
-        guard let attributes = try? FileManager.default.attributesOfItem(atPath: item.path),
-              let type = attributes[.type] as? FileAttributeType
-        else {
-            return false
-        }
-        let isDirectory = type == .typeDirectory
-        guard isDirectory == item.isDirectory else { return false }
-        if !item.isDirectory,
-           let currentSize = (attributes[.size] as? NSNumber)?.int64Value,
-           currentSize != item.observedFileSize {
-            return false
-        }
-        if let snapshotDate = item.modificationDate,
-           let currentDate = attributes[.modificationDate] as? Date,
-           abs(currentDate.timeIntervalSince(snapshotDate)) > 0.001 {
-            return false
-        }
-        return true
-    }
 }
 
 public struct StorageExplorerControllerCopy: Sendable {
-    public let itemChanged: String
     public let movedToTrash: String
     public let trashOperationFailed: String
     public let trashPartialFailure: String
     public let otherName: String
 
     public init(
-        itemChanged: String,
         movedToTrash: String,
         trashOperationFailed: String,
         trashPartialFailure: String,
         otherName: String = "其他"
     ) {
-        self.itemChanged = itemChanged
         self.movedToTrash = movedToTrash
         self.trashOperationFailed = trashOperationFailed
         self.trashPartialFailure = trashPartialFailure
@@ -444,9 +459,8 @@ public struct StorageExplorerControllerCopy: Sendable {
     }
 
     public static let fallback = StorageExplorerControllerCopy(
-        itemChanged: "所选项目已在磁盘上发生更改。请刷新后重新选择。",
         movedToTrash: "已移至废纸篓",
-        trashOperationFailed: "无法将所选项目移至废纸篓。请刷新后重试。",
+        trashOperationFailed: "无法将所选项目移至废纸篓。请检查所选项目后重试。",
         trashPartialFailure: "%d 个项目未能移至废纸篓：%@",
         otherName: "其他"
     )

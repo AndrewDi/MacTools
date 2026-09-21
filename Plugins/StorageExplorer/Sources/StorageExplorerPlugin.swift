@@ -15,12 +15,11 @@ private struct StorageExplorerPluginProvider: PluginProvider {
     func makePlugins() -> [any MacToolsPlugin] {
         let localization = PluginLocalization(bundle: context.resourceBundle)
         let controller = StorageExplorerController(
-            scanner: StorageExplorerScanner(publishesItems: false),
+            scanner: StorageExplorerScanner(
+                publishesItems: false,
+                collectsFileTypeTotals: false
+            ),
             copy: StorageExplorerControllerCopy(
-                itemChanged: localization.string(
-                    "storageExplorer.itemChanged",
-                    defaultValue: "所选项目已在磁盘上发生更改。请刷新后重新选择。"
-                ),
                 movedToTrash: localization.string(
                     "storageExplorer.movedToTrash",
                     defaultValue: "已移至废纸篓"
@@ -34,7 +33,8 @@ private struct StorageExplorerPluginProvider: PluginProvider {
                     defaultValue: "%d 个项目未能移至废纸篓：%@"
                 ),
                 otherName: localization.string("storageExplorer.other", defaultValue: "其他")
-            )
+            ),
+            snapshotCache: StorageExplorerSnapshotCache()
         )
         return [
             StorageExplorerPlugin(

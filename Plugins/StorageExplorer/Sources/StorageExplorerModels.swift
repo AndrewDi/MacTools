@@ -3,7 +3,7 @@ import SwiftUI
 
 // MARK: - Inode Identity for Hard Link Deduplication
 
-public struct StorageFileInode: Hashable, Sendable {
+public struct StorageFileInode: Hashable, Sendable, Codable {
     public let device: dev_t
     public let inode: ino_t
 
@@ -15,7 +15,7 @@ public struct StorageFileInode: Hashable, Sendable {
 
 // MARK: - Storage Item
 
-public struct StorageItem: Identifiable, Sendable, Equatable {
+public struct StorageItem: Identifiable, Sendable, Equatable, Codable {
     public let id: String
     public let name: String
     public let path: String
@@ -129,7 +129,7 @@ public struct StorageItem: Identifiable, Sendable, Equatable {
     }
 }
 
-public struct StorageExplorerSizeTotals: Sendable, Equatable {
+public struct StorageExplorerSizeTotals: Sendable, Equatable, Codable {
     public var size: Int64 = 0
     public var allocatedSize: Int64 = 0
     public var count: Int = 0
@@ -150,9 +150,46 @@ public struct StorageExplorerSizeTotals: Sendable, Equatable {
     }
 }
 
+public enum StorageExplorerReviewEligibility: Equatable, Sendable {
+    case eligible
+    case selected
+    case includedBySelectedParent(name: String)
+    case busy
+    case incomplete(skippedCount: Int)
+    case symlink
+    case aggregate
+    case cachedPreview
+    case scanRoot
+    case protectedLocation
+    case unavailable
+
+    public var canAdd: Bool {
+        switch self {
+        case .eligible, .incomplete:
+            true
+        default:
+            false
+        }
+    }
+
+    public var canToggle: Bool {
+        switch self {
+        case .eligible, .incomplete, .selected:
+            true
+        default:
+            false
+        }
+    }
+}
+
 // MARK: - Scan Progress and State
 
-public struct StorageExplorerScanProgress: Sendable, Equatable {
+public enum StorageExplorerScanPhase: String, Sendable, Equatable, Codable {
+    case enumerating
+    case finalizing
+}
+
+public struct StorageExplorerScanProgress: Sendable, Equatable, Codable {
     public var filesScanned: Int
     public var bytesScanned: Int64
     public var allocatedBytesScanned: Int64
@@ -160,6 +197,7 @@ public struct StorageExplorerScanProgress: Sendable, Equatable {
     public var elapsed: TimeInterval = 0
     public var skippedCount: Int = 0
     public var cachedDirectories: Int = 0
+    public var phase: StorageExplorerScanPhase = .enumerating
 
     public init(
         filesScanned: Int = 0,

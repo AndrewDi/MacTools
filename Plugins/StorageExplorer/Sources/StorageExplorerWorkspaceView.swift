@@ -6,7 +6,11 @@ import SwiftUI
 public struct StorageExplorerWorkspaceView: View {
     @ObservedObject public var controller: StorageExplorerController
     public let localization: PluginLocalization
+    @Environment(\.locale) private var locale
     @State private var hoveredBreadcrumbIndex: Int?
+    @State private var hoveredTreemapListRowID: String?
+    @State private var hoveredTreemapSummary: StorageExplorerTreemapHoverSummary?
+    @State private var isReviewDropTargeted = false
     @StateObject private var quickLookPresenter = StorageExplorerQuickLookPresenter()
 
     public init(controller: StorageExplorerController,
@@ -32,14 +36,6 @@ public struct StorageExplorerWorkspaceView: View {
                 controls
             }
             if controller.rootItem != nil {
-                if controller.snapshotHasObservedChanges {
-                    Label(
-                        text("folderChangedNotice", "扫描后文件夹发生了变化；移动已变化的文件夹前需要刷新。"),
-                        systemImage: "exclamationmark.arrow.triangle.2.circlepath"
-                    )
-                    .font(PluginSettingsTheme.Typography.rowDescription)
-                    .foregroundStyle(.orange)
-                }
                 explorer(width: width)
                     .layoutPriority(1)
                 reviewBar.layoutPriority(2)
@@ -47,7 +43,9 @@ public struct StorageExplorerWorkspaceView: View {
                 StorageExplorerScanningView(
                     status: controller.status,
                     metric: controller.metric,
+                    startedAt: controller.scanStartedAt,
                     scanningTitle: text("scanning", "正在扫描…"),
+                    finalizingTitle: text("finalizing", "正在整理结果…"),
                     filesScannedFormat: text("filesScannedFormat", "已扫描 %d 个项目"),
                     elapsedSecondsFormat: text("elapsedSecondsFormat", "%.1f 秒"),
                     skippedCountFormat: text("skippedCount", "跳过 %d 项")
@@ -85,42 +83,71 @@ public struct StorageExplorerWorkspaceView: View {
                                 idealWidth: geometry.size.width * 0.28,
                                 maxWidth: .infinity
                             )
+                            .opacity(controller.isUpdatingPresentation ? 0.5 : 1)
+                            .allowsHitTesting(!controller.isUpdatingPresentation)
                     }
                 }
             } else {
                 VStack(spacing: 10) {
                     treemapPanel(nodes: controller.hierarchyNodes)
-                    compactList.frame(maxHeight: 120)
+                    compactList
+                        .frame(maxHeight: 120)
+                        .opacity(controller.isUpdatingPresentation ? 0.5 : 1)
+                        .allowsHitTesting(!controller.isUpdatingPresentation)
                 }
             }
         }
         .frame(minHeight: 280, maxHeight: .infinity)
         .clipped()
+        .animation(.easeOut(duration: 0.16), value: controller.isUpdatingPresentation)
     }
 
     private func treemapPanel(nodes: [StorageExplorerHierarchyNode]) -> some View {
         VStack(spacing: 0) {
             treemapPathRail
             Divider()
-            StorageExplorerHierarchyTreemapView(
-                nodes: nodes,
-                selection: $controller.selectedPath,
-                emptyLabel: text("noSizedItems", "尚无可显示的大小"),
-                addReviewLabel: text("addToReview", "加入审阅"),
-                unavailableReviewLabel: text("reviewUnavailable", "此项目不能加入审阅。"),
-                symlinkReviewUnavailableLabel: text(
-                    "symlinkReviewUnsupported",
-                    "符号链接不能加入审阅；请在访达中管理链接本身。"
-                ),
-                aggregateReviewLabel: text(
-                    "aggregateReviewUnsupported",
-                    "这是多个较小项目的合并视图，不能作为单个项目加入审阅。"
-                ),
-                open: controller.drillDown,
-                preview: showQuickLook,
-                toggleReview: { controller.toggleSelection(path: $0.path) },
-                canReview: controller.canStage
-            )
+            if controller.isScanning {
+                StorageExplorerRefreshStatusView(
+                    status: controller.status,
+                    metric: controller.metric,
+                    startedAt: controller.scanStartedAt,
+                    refreshingTitle: text("refreshing", "正在刷新扫描结果…"),
+                    finalizingTitle: text("finalizing", "正在整理结果…"),
+                    filesScannedFormat: text("filesScannedFormat", "已扫描 %d 个项目"),
+                    elapsedSecondsFormat: text("elapsedSecondsFormat", "%.1f 秒"),
+                    cancelTitle: text("cancel", "取消"),
+                    cancel: controller.cancelScan
+                )
+                Divider()
+            }
+            ZStack {
+                StorageExplorerHierarchyTreemapView(
+                    nodes: nodes,
+                    layoutRevision: controller.hierarchyRevision,
+                    selection: $controller.selectedPath,
+                    hoveredListRowID: $hoveredTreemapListRowID,
+                    hoveredSummary: $hoveredTreemapSummary,
+                    emptyLabel: text("noSizedItems", "尚无可显示的大小"),
+                    reviewCopy: reviewEligibilityCopy,
+                    revealInFinderLabel: text("revealInFinder", "在访达中显示"),
+                    open: controller.drillDown,
+                    preview: showQuickLook,
+                    toggleReview: { controller.toggleSelection(path: $0.path) },
+                    reviewEligibility: controller.reviewEligibility,
+                    revealInFinder: { controller.revealInFinder(path: $0.path) },
+                    layoutReady: controller.presentationDidRender
+                )
+                .saturation(controller.isUpdatingPresentation ? 0.58 : 1)
+                .brightness(controller.isUpdatingPresentation ? -0.035 : 0)
+
+                if controller.isUpdatingPresentation {
+                    StorageExplorerTreemapUpdateEffect()
+                        .transition(.opacity)
+                }
+            }
+            .allowsHitTesting(!controller.isUpdatingPresentation)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .animation(.easeOut(duration: 0.16), value: controller.isUpdatingPresentation)
         }
         .background(Color.secondary.opacity(0.055), in: RoundedRectangle(cornerRadius: 8))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -141,6 +168,35 @@ public struct StorageExplorerWorkspaceView: View {
         }
         .buttonStyle(.bordered).controlSize(.small)
         .disabled(controller.isExecutingTrash)
+    }
+
+    private var reviewEligibilityCopy: StorageExplorerReviewEligibilityCopy {
+        StorageExplorerReviewEligibilityCopy(
+            addToReview: text("addToReview", "加入审阅"),
+            removeFromReview: text("removeFromReview", "移出审阅"),
+            selected: text("reviewSelected", "已加入审阅。"),
+            includedByParentFormat: text("reviewIncludedByParentFormat", "已随“%@”加入审阅。"),
+            busy: text("updatingTreemap", "正在更新空间图…"),
+            incompleteFormat: text(
+                "reviewIncompleteFormat",
+                "有 %d 个内容未能扫描。显示大小为最低估计，实际释放空间可能不同。"
+            ),
+            symlink: text(
+                "symlinkReviewUnsupported",
+                "符号链接不能加入审阅；请在访达中管理链接本身。"
+            ),
+            aggregate: text(
+                "aggregateReviewUnsupported",
+                "这是多个较小项目的合并视图，不能作为单个项目加入审阅。"
+            ),
+            cachedPreview: text(
+                "cachedPreviewReviewUnavailable",
+                "这是上次扫描的预览。请等待刷新完成后再加入审阅。"
+            ),
+            scanRoot: text("reviewScanRoot", "当前扫描文件夹本身不能加入审阅。"),
+            protectedLocation: text("reviewProtected", "此位置受保护，不能移至废纸篓。"),
+            unavailable: text("reviewUnavailable", "此项目不能加入审阅。")
+        )
     }
 
     private var treemapPathRail: some View {
@@ -172,12 +228,52 @@ public struct StorageExplorerWorkspaceView: View {
             .layoutPriority(1)
 
             Spacer(minLength: 4)
-            scanSummary
-            scanActions
+            if controller.isUpdatingPresentation {
+                HStack(spacing: 6) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text(text("updatingTreemap", "正在更新空间图…"))
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.secondary)
+                }
+                .fixedSize()
+                .transition(.opacity)
+            } else {
+                if let hoveredTreemapSummary {
+                    treemapHoverSummary(hoveredTreemapSummary)
+                } else {
+                    scanSummary
+                }
+                scanActions
+            }
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 5)
         .background(Color.secondary.opacity(0.035))
+        .animation(.easeOut(duration: 0.16), value: controller.isUpdatingPresentation)
+    }
+
+    private func treemapHoverSummary(_ summary: StorageExplorerTreemapHoverSummary) -> some View {
+        let color: Color = switch summary.tone {
+        case .normal: .secondary
+        case .warning: .orange
+        case .blocked: .red
+        case .selected: .accentColor
+        }
+        return Label {
+            HStack(spacing: 5) {
+                Text(summary.title).fontWeight(.semibold)
+                Text(summary.detail).foregroundStyle(.secondary)
+            }
+            .lineLimit(1)
+            .truncationMode(.middle)
+        } icon: {
+            Image(systemName: summary.systemImage)
+        }
+        .font(PluginSettingsTheme.Typography.rowDescription)
+        .foregroundStyle(color)
+        .frame(maxWidth: 460, alignment: .trailing)
+        .help("\(summary.path)\n\(summary.detail)")
     }
 
     private func breadcrumbSegment(_ item: StorageItem, index: Int) -> some View {
@@ -211,27 +307,34 @@ public struct StorageExplorerWorkspaceView: View {
     }
 
     private var scanSummary: some View {
-        let size = ByteCountFormatter.string(
-            fromByteCount: controller.status.progress.allocatedBytesScanned,
-            countStyle: .file
-        )
-        let itemCount = String(format: text("filesScannedFormat", "已扫描 %d 个项目"), controller.status.progress.filesScanned)
-        let elapsed = String(
-            format: text("elapsedSecondsFormat", "%.1f 秒"),
-            controller.status.progress.elapsed
-        )
+        let summaryBytes = controller.isShowingCachedPreview
+            ? controller.rootItem.map(controller.metric.bytes) ?? 0
+            : controller.status.progress.allocatedBytesScanned
+        let size = ByteCountFormatter.string(fromByteCount: summaryBytes, countStyle: .file)
         let skipped = controller.status.progress.skippedCount
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: 7) {
-                Text(size).fontWeight(.semibold)
-                Text(itemCount)
-                Text(elapsed)
-                if skipped > 0 { skippedSummary(count: skipped) }
+        return HStack(spacing: 7) {
+            Text(size).fontWeight(.semibold)
+            if controller.isShowingCachedPreview, let previewDate = controller.cachedPreviewDate {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Label(
+                        String(format: text("previousScanAgeFormat", "上次扫描：%@"), relativeScanAge(
+                            from: previewDate,
+                            relativeTo: context.date
+                        )),
+                        systemImage: "clock.arrow.circlepath"
+                    )
+                }
+            } else if controller.isScanning {
+                Label(text("scanning", "正在扫描…"), systemImage: "arrow.triangle.2.circlepath")
+            } else if let completedAt = controller.scanCompletedAt {
+                TimelineView(.periodic(from: .now, by: 30)) { context in
+                    Text(String(format: text("scanAgeFormat", "扫描时间：%@"), relativeScanAge(
+                        from: completedAt,
+                        relativeTo: context.date
+                    )))
+                }
             }
-            HStack(spacing: 7) {
-                Text(size).fontWeight(.semibold)
-                if skipped > 0 { skippedSummary(count: skipped) }
-            }
+            if skipped > 0 { skippedSummary(count: skipped) }
         }
         .font(PluginSettingsTheme.Typography.rowDescription)
         .foregroundStyle(.secondary)
@@ -267,9 +370,6 @@ public struct StorageExplorerWorkspaceView: View {
                     Button { controller.startScan(at: root) } label: {
                         Label(text("refresh", "刷新"), systemImage: "arrow.clockwise")
                     }
-                    Button { controller.startScan(at: root, force: true) } label: {
-                        Label(text("rescan", "重新扫描"), systemImage: "arrow.triangle.2.circlepath")
-                    }
                 }
             }
         } label: {
@@ -283,19 +383,23 @@ public struct StorageExplorerWorkspaceView: View {
     }
 
     private var compactList: some View {
-        VStack(spacing: 0) {
+        let eligibilityCopy = reviewEligibilityCopy
+        return VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(spacing: 1) {
                     ForEach(controller.rows.prefix(16)) { row in
+                        let isTreemapHovered = listRowMatchesTreemapHover(row)
+                        let eligibility = controller.reviewEligibility(for: row.item)
                         HStack(spacing: 8) {
                             Button {
                                 controller.toggleSelection(path: row.item.path)
                             } label: {
-                                Image(systemName: controller.basket.contains(row.id) ? "checkmark.circle.fill" : "plus.circle")
-                                    .foregroundStyle(controller.basket.contains(row.id) ? Color.accentColor : Color.secondary)
+                                Image(systemName: eligibilityCopy.icon(for: eligibility))
+                                    .foregroundStyle(reviewEligibilityColor(for: eligibility))
                             }
                             .buttonStyle(.plain)
-                            .disabled(!controller.canStage(row.item))
+                            .disabled(!eligibility.canToggle)
+                            .help(eligibilityCopy.message(for: eligibility))
                             Text(localizedName(row)).lineLimit(1).truncationMode(.middle)
                             Spacer(minLength: 4)
                             Text(row.sizeLabel)
@@ -311,8 +415,17 @@ public struct StorageExplorerWorkspaceView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(
-                            controller.selectedPath == row.id ? Color.accentColor.opacity(0.12) : Color.clear,
+                            controller.selectedPath == row.id
+                                ? Color.accentColor.opacity(0.12)
+                                : isTreemapHovered ? Color.accentColor.opacity(0.14) : Color.clear,
                             in: RoundedRectangle(cornerRadius: 6)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(
+                                    isTreemapHovered ? Color.accentColor.opacity(0.7) : Color.clear,
+                                    lineWidth: 1.5
+                                )
                         )
                         .contentShape(Rectangle())
                         .onTapGesture {
@@ -323,17 +436,45 @@ public struct StorageExplorerWorkspaceView: View {
                             }
                         }
                         .modifier(StorageExplorerListDragModifier(
-                            enabled: controller.canStage(row.item),
+                            enabled: eligibility.canAdd,
                             path: row.item.path
                         ))
+                        .contextMenu {
+                            if eligibility.canToggle {
+                                Button {
+                                    controller.toggleSelection(path: row.item.path)
+                                } label: {
+                                    Label(
+                                        eligibility == .selected
+                                            ? text("removeFromReview", "移出审阅")
+                                            : text("addToReview", "加入审阅"),
+                                        systemImage: eligibility == .selected
+                                            ? "minus.circle" : "plus.circle"
+                                    )
+                                }
+                                Divider()
+                            } else {
+                                Button {} label: {
+                                    Label(
+                                        eligibilityCopy.message(for: eligibility),
+                                        systemImage: eligibilityCopy.icon(for: eligibility)
+                                    )
+                                }
+                                .disabled(true)
+                                Divider()
+                            }
+                            Button {
+                                controller.revealInFinder(path: row.item.path)
+                            } label: {
+                                Label(text("revealInFinder", "在访达中显示"), systemImage: "folder")
+                            }
+                        }
                         .focusable(true, interactions: .activate)
                         .focusEffectDisabled()
                         .onKeyPress(.space) {
                             showQuickLook(for: row.item) ? .handled : .ignored
                         }
-                        .help(row.item.isSymlink
-                            ? text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。")
-                            : row.item.path)
+                        .help("\(row.item.path)\n\(eligibilityCopy.message(for: eligibility))")
                     }
                 }
             }
@@ -350,6 +491,23 @@ public struct StorageExplorerWorkspaceView: View {
         row.id == "type:package" ? text("applicationsAndPackages", "应用与软件包") : row.name
     }
 
+    private func listRowMatchesTreemapHover(_ row: StorageExplorerRow) -> Bool {
+        hoveredTreemapListRowID == row.item.path
+    }
+
+    private func reviewEligibilityColor(for eligibility: StorageExplorerReviewEligibility) -> Color {
+        switch eligibility {
+        case .eligible, .selected, .includedBySelectedParent:
+            .accentColor
+        case .incomplete, .unavailable, .cachedPreview:
+            .orange
+        case .scanRoot, .protectedLocation:
+            .red
+        case .busy, .symlink, .aggregate:
+            .secondary
+        }
+    }
+
     private func showQuickLook(for item: StorageItem) -> Bool {
         guard !item.isDirectory,
               !item.isSymlink,
@@ -363,7 +521,9 @@ public struct StorageExplorerWorkspaceView: View {
     }
 
     private func inlineDetails(for item: StorageItem) -> some View {
-        HStack(spacing: 8) {
+        let eligibility = controller.reviewEligibility(for: item)
+        let eligibilityCopy = reviewEligibilityCopy
+        return HStack(spacing: 8) {
             Image(systemName: item.iconSystemName)
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 1) {
@@ -419,12 +579,11 @@ public struct StorageExplorerWorkspaceView: View {
             }
             .help(text("revealInFinder", "在访达中显示"))
             Button { controller.toggleSelection(path: item.path) } label: {
-                Image(systemName: controller.basket.contains(item.path) ? "checkmark.circle.fill" : "plus.circle")
+                Image(systemName: eligibilityCopy.icon(for: eligibility))
+                    .foregroundStyle(reviewEligibilityColor(for: eligibility))
             }
-            .disabled(!controller.canStage(item))
-            .help(controller.basket.contains(item.path)
-                ? text("removeFromReview", "移出审阅")
-                : text("addToReview", "加入审阅"))
+            .disabled(!eligibility.canToggle)
+            .help(eligibilityCopy.message(for: eligibility))
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 8)
@@ -448,14 +607,19 @@ public struct StorageExplorerWorkspaceView: View {
             lines.append(text("symlinkReviewUnsupported", "符号链接不能加入审阅；请在访达中管理链接本身。"))
         }
         if item.isIncomplete { lines.append(text("incomplete", "大小尚不完整")) }
+        lines.append(reviewEligibilityCopy.message(for: controller.reviewEligibility(for: item)))
         lines.append(text("spaceNote", "占用空间不等于可释放空间；共享数据和废纸篓会影响实际可用容量。"))
         return lines.joined(separator: "\n")
     }
 
     private var reviewBar: some View {
         HStack(spacing: 10) {
-            Image(systemName: controller.basket.isEmpty ? "tray.and.arrow.down" : "checkmark.circle.fill")
-                .foregroundStyle(controller.basket.isEmpty ? Color.secondary : Color.accentColor)
+            Image(systemName: isReviewDropTargeted
+                ? "arrow.down.circle.fill"
+                : controller.basket.isEmpty ? "tray.and.arrow.down" : "checkmark.circle.fill")
+                .foregroundStyle(isReviewDropTargeted
+                    ? Color.accentColor
+                    : controller.basket.isEmpty ? Color.secondary : Color.accentColor)
             VStack(alignment: .leading, spacing: 2) {
                 if controller.basket.isEmpty {
                     Text(text("dropToReview", "拖到这里以加入审阅"))
@@ -472,25 +636,68 @@ public struct StorageExplorerWorkspaceView: View {
                 }
             }
             Spacer()
-            Button(text("clearSelection", "取消选择")) { controller.clearSelection() }.disabled(controller.basket.isEmpty)
+            Button(text("clearSelection", "取消选择")) { controller.clearSelection() }
+                .disabled(controller.basket.isEmpty || controller.isUpdatingPresentation)
             Button(text("review", "审阅…")) { controller.confirmTrash() }
                 .buttonStyle(.borderedProminent)
-                .disabled(controller.basket.isEmpty || controller.isScanning || controller.reviewNeedsRefresh)
+                .disabled(controller.reviewAvailability != .ready)
+                .help(reviewAvailabilityHelp)
         }
         .buttonStyle(.bordered).controlSize(.small)
         .padding(.horizontal, 12).padding(.vertical, 9)
-        .background(Color.accentColor.opacity(controller.basket.isEmpty ? 0.04 : 0.08), in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.accentColor.opacity(0.65), lineWidth: 1.5))
+        .background(
+            Color.accentColor.opacity(isReviewDropTargeted ? 0.18 : controller.basket.isEmpty ? 0.04 : 0.08),
+            in: RoundedRectangle(cornerRadius: 10)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.accentColor.opacity(isReviewDropTargeted ? 1 : 0.65),
+                        lineWidth: isReviewDropTargeted ? 2.5 : 1.5)
+        )
         .dropDestination(for: String.self) { paths, _ in
+            isReviewDropTargeted = false
+            guard !controller.isUpdatingPresentation else { return false }
+            let eligibleItems = paths.compactMap { path -> StorageItem? in
+                guard let item = controller.snapshot.items[path],
+                      controller.reviewEligibility(for: item).canAdd else { return nil }
+                return item
+            }
             var accepted = false
-            for path in paths where controller.snapshot.items[path] != nil {
-                if !controller.basket.contains(path) {
-                    controller.toggleSelection(path: path)
-                    accepted = true
+            for item in eligibleItems {
+                if !controller.basket.contains(item.path) {
+                    controller.toggleSelection(path: item.path)
+                    accepted = accepted || controller.basket.contains(item.path)
                 }
             }
             return accepted
-        } isTargeted: { _ in }
+        } isTargeted: { isTargeted in
+            isReviewDropTargeted = isTargeted && !controller.isUpdatingPresentation
+        }
+        .animation(.easeOut(duration: 0.12), value: isReviewDropTargeted)
+    }
+
+    private func relativeScanAge(from date: Date, relativeTo referenceDate: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = locale
+        formatter.unitsStyle = .short
+        return formatter.localizedString(for: date, relativeTo: referenceDate)
+    }
+
+    private var reviewAvailabilityHelp: String {
+        switch controller.reviewAvailability {
+        case .empty:
+            return text("reviewEmptyHelp", "先将项目加入审阅。")
+        case .scanning:
+            return text("reviewScanningHelp", "扫描完成后可以审阅。")
+        case .cachedPreview:
+            return text("cachedPreviewReviewUnavailable", "这是上次扫描的预览。请等待刷新完成后再加入审阅。")
+        case .updating:
+            return text("updatingTreemap", "正在更新空间图…")
+        case .executing:
+            return text("reviewExecutingHelp", "正在将所选项目移至废纸篓。")
+        case .ready:
+            return text("reviewReadyHelp", "检查所选项目，然后移至废纸篓。")
+        }
     }
 
     private var confirmation: some View {
@@ -499,9 +706,20 @@ public struct StorageExplorerWorkspaceView: View {
                 .font(PluginSettingsTheme.Typography.sectionTitle)
             Text(text("confirmTrashMessage", "所选项目将移至 macOS 废纸篓，可从废纸篓恢复。"))
             List(controller.reviewItems) { item in
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(item.name)
                     Text(item.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    if item.isIncomplete {
+                        Label(
+                            String(format: text(
+                                "reviewIncompleteFormat",
+                                "有 %d 个内容未能扫描。显示大小为最低估计，实际释放空间可能不同。"
+                            ), max(1, item.skippedCount)),
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .font(PluginSettingsTheme.Typography.rowDescription)
+                        .foregroundStyle(.orange)
+                    }
                 }
             }.frame(height: 220)
             Text(String(format: text("selectedItemsFormat", "已选 %d 个项目（共 %@）"), controller.reviewItems.count,
@@ -557,7 +775,9 @@ private struct StorageExplorerListDragModifier: ViewModifier {
 private struct StorageExplorerScanningView: View {
     @ObservedObject var status: StorageExplorerScanStatus
     let metric: StorageExplorerMetric
+    let startedAt: Date?
     let scanningTitle: String
+    let finalizingTitle: String
     let filesScannedFormat: String
     let elapsedSecondsFormat: String
     let skippedCountFormat: String
@@ -567,26 +787,28 @@ private struct StorageExplorerScanningView: View {
             Spacer()
             ProgressView()
                 .controlSize(.large)
-            Text(scanningTitle)
+            Text(status.progress.phase == .finalizing ? finalizingTitle : scanningTitle)
                 .font(PluginSettingsTheme.Typography.sectionTitle)
-            HStack(spacing: 18) {
-                Text(ByteCountFormatter.string(
-                    fromByteCount: metric == .logical
-                        ? status.progress.bytesScanned
-                        : status.progress.allocatedBytesScanned,
-                    countStyle: .file
-                ))
-                .frame(width: 110, alignment: .trailing)
-                Text(String(format: filesScannedFormat, status.progress.filesScanned))
-                    .frame(width: 170, alignment: .leading)
-                Text(String(
-                    format: elapsedSecondsFormat,
-                    status.progress.elapsed
-                ))
-                    .frame(width: 64, alignment: .trailing)
+            TimelineView(.periodic(from: .now, by: 0.25)) { context in
+                HStack(spacing: 18) {
+                    Text(ByteCountFormatter.string(
+                        fromByteCount: metric == .logical
+                            ? status.progress.bytesScanned
+                            : status.progress.allocatedBytesScanned,
+                        countStyle: .file
+                    ))
+                    .frame(width: 110, alignment: .trailing)
+                    Text(String(format: filesScannedFormat, status.progress.filesScanned))
+                        .frame(width: 170, alignment: .leading)
+                    Text(String(
+                        format: elapsedSecondsFormat,
+                        displayedElapsed(at: context.date)
+                    ))
+                        .frame(width: 64, alignment: .trailing)
+                }
+                .font(PluginSettingsTheme.Typography.rowDescription)
+                .monospacedDigit()
             }
-            .font(PluginSettingsTheme.Typography.rowDescription)
-            .monospacedDigit()
             if status.progress.skippedCount > 0 {
                 Label(String(format: skippedCountFormat, status.progress.skippedCount),
                       systemImage: "exclamationmark.circle")
@@ -596,5 +818,120 @@ private struct StorageExplorerScanningView: View {
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func displayedElapsed(at date: Date) -> TimeInterval {
+        StorageExplorerElapsedClock.elapsed(
+            startedAt: startedAt,
+            reported: status.progress.elapsed,
+            now: date
+        )
+    }
+}
+
+private struct StorageExplorerRefreshStatusView: View {
+    @ObservedObject var status: StorageExplorerScanStatus
+    let metric: StorageExplorerMetric
+    let startedAt: Date?
+    let refreshingTitle: String
+    let finalizingTitle: String
+    let filesScannedFormat: String
+    let elapsedSecondsFormat: String
+    let cancelTitle: String
+    let cancel: () -> Void
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.25)) { context in
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(status.progress.phase == .finalizing ? finalizingTitle : refreshingTitle)
+                        .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
+                    HStack(spacing: 8) {
+                        Text(ByteCountFormatter.string(
+                            fromByteCount: metric == .logical
+                                ? status.progress.bytesScanned
+                                : status.progress.allocatedBytesScanned,
+                            countStyle: .file
+                        ))
+                        Text(String(format: filesScannedFormat, status.progress.filesScanned))
+                        Text(String(
+                            format: elapsedSecondsFormat,
+                            StorageExplorerElapsedClock.elapsed(
+                                startedAt: startedAt,
+                                reported: status.progress.elapsed,
+                                now: context.date
+                            )
+                        ))
+                    }
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                }
+                Spacer(minLength: 8)
+                Button(cancelTitle, role: .cancel, action: cancel)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(Color.accentColor.opacity(0.10))
+        }
+    }
+}
+
+private struct StorageExplorerTreemapUpdateEffect: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var sweepToTrailingEdge = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.primary.opacity(0.075)
+
+                if !reduceMotion {
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            Color.white.opacity(0.04),
+                            Color.white.opacity(0.24),
+                            Color.white.opacity(0.04),
+                            .clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(
+                        width: max(140, geometry.size.width * 0.34),
+                        height: geometry.size.height * 1.35
+                    )
+                    .rotationEffect(.degrees(9))
+                    .offset(x: sweepOffset(for: geometry.size.width))
+                    .blendMode(.screen)
+                }
+
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.accentColor.opacity(0.42), lineWidth: 2)
+            }
+            .compositingGroup()
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.linear(duration: 1.45).repeatForever(autoreverses: false)) {
+                    sweepToTrailingEdge = true
+                }
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func sweepOffset(for width: CGFloat) -> CGFloat {
+        sweepToTrailingEdge ? width * 0.68 : -width * 0.68
+    }
+}
+
+enum StorageExplorerElapsedClock {
+    static func elapsed(startedAt: Date?, reported: TimeInterval, now: Date) -> TimeInterval {
+        max(reported, startedAt.map { max(0, now.timeIntervalSince($0)) } ?? 0)
     }
 }

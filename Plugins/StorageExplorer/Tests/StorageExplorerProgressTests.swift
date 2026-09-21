@@ -24,7 +24,7 @@ final class StorageExplorerProgressTests: XCTestCase {
         try FileManager.default.linkItem(at: file, to: root.appendingPathComponent("b/link"))
         let canonicalPath = root.appendingPathComponent("a/file").path
         let duplicatePath = root.appendingPathComponent("b/link").path
-        for workers in [1, 2, 4] {
+        for workers in [1, 2, 4, 6] {
             for _ in 0..<3 {
                 let result = try await StorageExplorerScanner(workerCount: workers).scanSnapshot(rootURL: root) { _ in }
                 XCTAssertEqual(result.items[result.rootPath]?.size, 10_000)
@@ -47,8 +47,8 @@ final class StorageExplorerProgressTests: XCTestCase {
         XCTAssertEqual(productionResult.items[productionResult.rootPath]?.size, 10_000)
         XCTAssertEqual(productionResult.items[canonicalPath]?.size, 10_000)
         XCTAssertNil(productionResult.items[duplicatePath])
-        XCTAssertEqual(productionResult.fileTypeTotals["—"]?.size, 10_000)
-        XCTAssertEqual(productionResult.fileTypeTotals["—"]?.count, 2)
+        XCTAssertTrue(productionResult.fileTypeTotals.isEmpty)
+        XCTAssertTrue(productionResult.fileTypeTotalsByDirectory.isEmpty)
     }
 
     func testCacheInvalidationRefreshesNestedContentAndReusesUnaffectedDirectories() async throws {
@@ -109,7 +109,11 @@ final class StorageExplorerProgressTests: XCTestCase {
         XCTAssertEqual(reconstructed.items, result.items)
         XCTAssertEqual(result.items[result.rootPath]?.size, 4_000)
         XCTAssertFalse(result.items[result.rootPath]?.isIncomplete ?? true)
-        XCTAssertLessThanOrEqual(captured.count, Int(result.progress.elapsed / 0.15) + 2)
+        // The stream may contain the initial incomplete root, the explicit finalizing phase,
+        // and the completed result in addition to interval-based progress updates.
+        XCTAssertLessThanOrEqual(captured.count, Int(result.progress.elapsed / 0.15) + 3)
+        XCTAssertTrue(captured.contains { $0.progress.phase == .finalizing })
+        XCTAssertEqual(result.progress.phase, .finalizing)
     }
 
     func testBulkStorageAttributesMatchFilesystemIncludingSparseFile() throws {
@@ -139,7 +143,7 @@ final class StorageExplorerProgressTests: XCTestCase {
         XCTAssertTrue(result.items.values.contains { $0.name == "blocked" && $0.isAccessDenied })
     }
 
-    func testProgressOnlySnapshotBoundsRetainedFilesAndKeepsExactTotals() async throws {
+    func testProgressOnlySnapshotBoundsRetainedFilesWithoutUnusedFileTypeTotals() async throws {
         for directory in 0..<3 {
             let folder = root.appendingPathComponent("folder-\(directory)")
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -154,9 +158,16 @@ final class StorageExplorerProgressTests: XCTestCase {
         ).scanSnapshot(rootURL: root) { _ in }
 
         XCTAssertEqual(snapshot.items[snapshot.rootPath]?.size, 300)
-        XCTAssertEqual(snapshot.fileTypeTotals["bin"]?.size, 300)
-        XCTAssertEqual(snapshot.fileTypeTotals["bin"]?.count, 300)
+        XCTAssertTrue(snapshot.fileTypeTotals.isEmpty)
+        XCTAssertTrue(snapshot.fileTypeTotalsByDirectory.isEmpty)
         XCTAssertLessThanOrEqual(snapshot.items.values.filter { !$0.isDirectory }.count, 23)
+    }
+
+    func testDefaultScannerUsesBoundedAdaptiveConcurrencyAndRetention() {
+        let scanner = StorageExplorerScanner(publishesItems: false)
+        XCTAssertTrue((4...6).contains(scanner.workerCount))
+        XCTAssertEqual(scanner.maximumRetainedFiles, 10_000)
+        XCTAssertFalse(scanner.collectsFileTypeTotals)
     }
 }
 

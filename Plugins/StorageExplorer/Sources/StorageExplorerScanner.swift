@@ -5,16 +5,20 @@ import MacToolsFileSystem
 public final class StorageExplorerScanner: StorageExplorerScanning, @unchecked Sendable {
     public let workerCount: Int
     public let publishesItems: Bool
+    public let collectsFileTypeTotals: Bool
     public let maximumRetainedFiles: Int
     private let cache = StorageExplorerDirectoryCache()
 
     public init(
-        workerCount: Int = 2,
+        workerCount: Int? = nil,
         publishesItems: Bool = true,
-        maximumRetainedFiles: Int = 50_000
+        collectsFileTypeTotals: Bool? = nil,
+        maximumRetainedFiles: Int = 10_000
     ) {
-        self.workerCount = min(max(workerCount, 1), 4)
+        let adaptiveWorkerCount = max(4, ProcessInfo.processInfo.activeProcessorCount / 2)
+        self.workerCount = min(max(workerCount ?? adaptiveWorkerCount, 1), 6)
         self.publishesItems = publishesItems
+        self.collectsFileTypeTotals = collectsFileTypeTotals ?? publishesItems
         self.maximumRetainedFiles = max(1, maximumRetainedFiles)
     }
 
@@ -46,6 +50,7 @@ public final class StorageExplorerScanner: StorageExplorerScanning, @unchecked S
                             cancellation: cancellation,
                             update: update,
                             publishesItems: publishesItems,
+                            collectsFileTypeTotals: collectsFileTypeTotals,
                             maximumRetainedFiles: maximumRetainedFiles
                         )
                         DispatchQueue.concurrentPerform(iterations: workerCount) { _ in
@@ -60,7 +65,7 @@ public final class StorageExplorerScanner: StorageExplorerScanning, @unchecked S
                                         let url = parentURL.appendingPathComponent(name)
                                         let directory = entry.fileType == .directory
                                         let dataless = (entry.flags ?? 0) & UInt32(SF_DATALESS) != 0
-                                        let package = directory && !dataless && ((try? url.resourceValues(forKeys: [.isPackageKey]).isPackage) == true)
+                                        let package = directory && !dataless && Self.isPackageDirectory(name: name)
                                         var item = StorageItem(name: name, path: url.path, url: url, isDirectory: directory,
                                             isPackage: package, isSymlink: entry.fileType == .symlink,
                                             size: directory ? 0 : max(entry.dataLength ?? 0, 0),
@@ -82,12 +87,28 @@ public final class StorageExplorerScanner: StorageExplorerScanning, @unchecked S
                             }
                         }
                         if cancellation.isCancelled { throw CancellationError() }
-                        continuation.resume(returning: state.result())
+                        continuation.resume(returning: try state.result())
                     } catch { continuation.resume(throwing: error) }
                 }
             }
         } onCancel: { cancellation.cancel() }
     }
+
+    /// Package classification must stay on the enumeration hot path without issuing a second
+    /// filesystem metadata request for every directory. Missing an unusual package extension is
+    /// safe: it only exposes more hierarchy instead of hiding ordinary folders from the scan.
+    fileprivate static func isPackageDirectory(name: String) -> Bool {
+        let pathExtension = URL(fileURLWithPath: name).pathExtension.lowercased()
+        return packageDirectoryExtensions.contains(pathExtension)
+    }
+
+    private static let packageDirectoryExtensions: Set<String> = [
+        "action", "app", "appex", "band", "bundle", "framework", "garageband",
+        "imovielibrary", "keynote", "kext", "logicx", "mdimporter", "musiclibrary",
+        "numbers", "pages", "photolibrary", "photoslibrary", "pkg", "playground",
+        "playgroundbook", "plugin", "prefpane", "qlgenerator", "rtfd", "saver",
+        "service", "systemextension", "workflow", "xcworkspace", "xcodeproj", "xpc",
+    ]
 }
 
 private struct StorageExplorerScannedEntry {
@@ -157,7 +178,8 @@ private final class ScanWork: @unchecked Sendable {
         let accountingOwner: String
         let fileTypeParent: String?
     }
-    private let condition = NSCondition()
+    private let workCondition = NSCondition()
+    private let stateLock = NSLock()
     private let cancellation: StorageExplorerCancellation
     private let update: @Sendable (StorageExplorerScanUpdate) -> Void
     private var jobs: [Job] = []
@@ -170,6 +192,7 @@ private final class ScanWork: @unchecked Sendable {
     private var lastReport = Date.distantPast
     private let device: UInt64
     private let publishesItems: Bool
+    private let collectsFileTypeTotals: Bool
     private let retainedFiles: StorageExplorerLargestFileHeap
     private var largestFileByDirectory: [String: StorageItem] = [:]
     private var directFileTypeTotals: [String: [String: StorageExplorerSizeTotals]] = [:]
@@ -177,6 +200,7 @@ private final class ScanWork: @unchecked Sendable {
     init(rootURL: URL, cancellation: StorageExplorerCancellation,
          update: @escaping @Sendable (StorageExplorerScanUpdate) -> Void,
          publishesItems: Bool,
+         collectsFileTypeTotals: Bool,
          maximumRetainedFiles: Int) throws {
         // Expand /tmp and /var once, then require physical paths for every directory open.
         guard let resolved = realpath(rootURL.path, nil) else { throw CocoaError(.fileNoSuchFile) }
@@ -187,12 +211,13 @@ private final class ScanWork: @unchecked Sendable {
         self.cancellation = cancellation
         self.update = update
         self.publishesItems = publishesItems
+        self.collectsFileTypeTotals = collectsFileTypeTotals
         self.retainedFiles = StorageExplorerLargestFileHeap(limit: maximumRetainedFiles)
         self.device = UInt64(UInt32(bitPattern: status.st_dev))
         self.snapshot = StorageExplorerSnapshot(rootPath: path)
         let url = URL(fileURLWithPath: path)
         let dataless = status.st_flags & UInt32(SF_DATALESS) != 0
-        let package = !dataless && ((try? url.resourceValues(forKeys: [.isPackageKey]).isPackage) == true)
+        let package = !dataless && StorageExplorerScanner.isPackageDirectory(name: url.lastPathComponent)
         var root = StorageItem(
             name: url.lastPathComponent,
             path: path,
@@ -212,10 +237,10 @@ private final class ScanWork: @unchecked Sendable {
     }
 
     func next() -> Job? {
-        condition.lock()
-        defer { condition.unlock() }
+        workCondition.lock()
+        defer { workCondition.unlock() }
         while jobs.isEmpty && active > 0 && !cancellation.isCancelled {
-            _ = condition.wait(until: Date().addingTimeInterval(0.1))
+            _ = workCondition.wait(until: Date().addingTimeInterval(0.1))
         }
         guard !cancellation.isCancelled, let job = jobs.popLast() else { return nil }
         active += 1
@@ -223,22 +248,26 @@ private final class ScanWork: @unchecked Sendable {
     }
 
     func finishCancelled() {
-        condition.lock(); defer { condition.unlock() }
+        workCondition.lock(); defer { workCondition.unlock() }
         active -= 1
-        condition.broadcast()
+        workCondition.broadcast()
     }
 
     func finishFailed(job: Job, error: Error) {
-        condition.lock(); defer { condition.unlock() }
+        stateLock.lock()
         let path = job.packageOwner ?? job.path
         if let code = (error as? POSIXError)?.code, code == .EACCES || code == .EPERM {
             snapshot.items[path]?.isAccessDenied = true
         }
         addDirectTotals(to: path, bytes: 0, allocated: 0, count: 0, skipped: 1)
         progress.skippedCount += 1
-        active -= 1
         publish()
-        condition.broadcast()
+        stateLock.unlock()
+
+        workCondition.lock()
+        active -= 1
+        workCondition.broadcast()
+        workCondition.unlock()
     }
 
     func finish(
@@ -247,7 +276,14 @@ private final class ScanWork: @unchecked Sendable {
         entries: [StorageExplorerScannedEntry],
         cached: Bool
     ) {
-        condition.lock(); defer { condition.unlock() }
+        let discoveredJobs = entries.compactMap { scannedEntry -> Job? in
+            let item = scannedEntry.item
+            let entry = scannedEntry.metadata
+            guard item.isDirectory, !item.isCloudPlaceholder, entry.devid == device else { return nil }
+            return Job(path: item.path, packageOwner: job.packageOwner ?? (item.isPackage ? item.path : nil))
+        }
+
+        stateLock.lock()
         let owner = job.packageOwner ?? job.path
         var bytes: Int64 = 0
         var allocated: Int64 = 0
@@ -277,8 +313,6 @@ private final class ScanWork: @unchecked Sendable {
                 if item.isCloudPlaceholder || entry.devid != device {
                     item.skippedCount = 1
                     skipped += 1
-                } else {
-                    jobs.append(Job(path: item.path, packageOwner: job.packageOwner ?? (item.isPackage ? item.path : nil)))
                 }
             }
             bytes += item.size
@@ -299,9 +333,14 @@ private final class ScanWork: @unchecked Sendable {
         progress.skippedCount += skipped
         progress.currentPath = job.path
         progress.cachedDirectories += cached ? 1 : 0
-        active -= 1
         publish()
-        condition.broadcast()
+        stateLock.unlock()
+
+        workCondition.lock()
+        jobs.append(contentsOf: discoveredJobs)
+        active -= 1
+        workCondition.broadcast()
+        workCondition.unlock()
     }
 
     private func addDirectTotals(to path: String, bytes: Int64, allocated: Int64, count: Int, skipped: Int) {
@@ -323,8 +362,11 @@ private final class ScanWork: @unchecked Sendable {
         changed.removeAll(keepingCapacity: true)
     }
 
-    func result() -> StorageExplorerSnapshot {
-        applyDeterministicHardLinkAccounting()
+    func result() throws -> StorageExplorerSnapshot {
+        progress.phase = .finalizing
+        publish(force: true)
+        try checkCancellation()
+        try applyDeterministicHardLinkAccounting()
         if !publishesItems {
             let retained = retainedFiles.items + Array(largestFileByDirectory.values)
             let unique = Dictionary(grouping: retained, by: \StorageItem.path).compactMap(\.value.first)
@@ -333,15 +375,25 @@ private final class ScanWork: @unchecked Sendable {
         // Each directory records only the entries read directly from it while scanning. Folding
         // completed directories into their parents once avoids walking every ancestor while the
         // filesystem workers are contending for the shared scan-state lock.
-        let completedDirectoryPaths = snapshot.items.values
-            .filter { $0.isDirectory && $0.path != snapshot.rootPath }
-            .map(\.path)
-            .sorted { lhs, rhs in
-                lhs.split(separator: "/", omittingEmptySubsequences: true).count
-                    > rhs.split(separator: "/", omittingEmptySubsequences: true).count
+        let directoryItems = snapshot.items.values.filter {
+            $0.isDirectory && $0.path != snapshot.rootPath
+        }
+        var completedDirectories: [(item: StorageItem, depth: Int)] = directoryItems.map { item in
+            let depth = item.path.split(separator: "/", omittingEmptySubsequences: true).count
+            return (item: item, depth: depth)
+        }
+        completedDirectories.sort { lhs, rhs in
+            if lhs.depth == rhs.depth {
+                return lhs.item.path < rhs.item.path
             }
-        for path in completedDirectoryPaths {
-            guard let directory = snapshot.items[path] else { continue }
+            return lhs.depth > rhs.depth
+        }
+        for (index, value) in completedDirectories.enumerated() {
+            if index.isMultiple(of: 512) {
+                try checkCancellation()
+                publish()
+            }
+            let directory = snapshot.items[value.item.path] ?? value.item
             guard let parentPath = directory.parentPath,
                   var parent = snapshot.items[parentPath]
             else { continue }
@@ -351,19 +403,27 @@ private final class ScanWork: @unchecked Sendable {
             parent.skippedCount += directory.skippedCount
             snapshot.items[parentPath] = parent
         }
-        for path in snapshot.items.keys {
+        for (index, path) in snapshot.items.keys.enumerated() {
+            if index.isMultiple(of: 512) {
+                try checkCancellation()
+                publish()
+            }
             let incomplete = (snapshot.items[path]?.skippedCount ?? 0) > 0
             snapshot.items[path]?.isIncomplete = incomplete
             changed.insert(path)
         }
-        foldFileTypeTotals()
+        try foldFileTypeTotals(directories: completedDirectories.map { $0.item })
         publish(force: true)
         snapshot.progress = progress
         return snapshot
     }
 
-    private func applyDeterministicHardLinkAccounting() {
-        for canonical in hardLinkCandidates.values {
+    private func applyDeterministicHardLinkAccounting() throws {
+        for (index, canonical) in hardLinkCandidates.values.enumerated() {
+            if index.isMultiple(of: 512) {
+                try checkCancellation()
+                publish()
+            }
             let logical = canonical.item.size
             let allocated = canonical.item.allocatedSize
             addDirectTotals(
@@ -377,12 +437,13 @@ private final class ScanWork: @unchecked Sendable {
             progress.allocatedBytesScanned += allocated
 
             if let parentPath = canonical.fileTypeParent {
-                let kind = canonical.item.fileExtension.isEmpty ? "—" : canonical.item.fileExtension
-                var totals = directFileTypeTotals[parentPath, default: [:]][kind, default: StorageExplorerSizeTotals()]
-                totals.size += logical
-                totals.allocatedSize += allocated
-                directFileTypeTotals[parentPath, default: [:]][kind] = totals
-
+                if collectsFileTypeTotals {
+                    let kind = canonical.item.fileExtension.isEmpty ? "—" : canonical.item.fileExtension
+                    var totals = directFileTypeTotals[parentPath, default: [:]][kind, default: StorageExplorerSizeTotals()]
+                    totals.size += logical
+                    totals.allocatedSize += allocated
+                    directFileTypeTotals[parentPath, default: [:]][kind] = totals
+                }
                 if publishesItems {
                     snapshot.items[canonical.item.path] = canonical.item
                     changed.insert(canonical.item.path)
@@ -401,10 +462,12 @@ private final class ScanWork: @unchecked Sendable {
     }
 
     private func recordFile(_ item: StorageItem, parentPath: String, retain: Bool = true) {
-        let kind = item.isPackage ? "package" : (item.fileExtension.isEmpty ? "—" : item.fileExtension)
-        var totals = directFileTypeTotals[parentPath, default: [:]][kind, default: StorageExplorerSizeTotals()]
-        totals.add(item)
-        directFileTypeTotals[parentPath, default: [:]][kind] = totals
+        if collectsFileTypeTotals {
+            let kind = item.isPackage ? "package" : (item.fileExtension.isEmpty ? "—" : item.fileExtension)
+            var totals = directFileTypeTotals[parentPath, default: [:]][kind, default: StorageExplorerSizeTotals()]
+            totals.add(item)
+            directFileTypeTotals[parentPath, default: [:]][kind] = totals
+        }
         if publishesItems {
             snapshot.apply([item])
             changed.insert(item.path)
@@ -420,12 +483,14 @@ private final class ScanWork: @unchecked Sendable {
         }
     }
 
-    private func foldFileTypeTotals() {
+    private func foldFileTypeTotals(directories: [StorageItem]) throws {
+        guard collectsFileTypeTotals else { return }
         var totals = directFileTypeTotals
-        let directories = snapshot.items.values
-            .filter(\.isDirectory)
-            .sorted { $0.path.split(separator: "/").count > $1.path.split(separator: "/").count }
-        for directory in directories {
+        for (index, directory) in directories.enumerated() {
+            if index.isMultiple(of: 512) {
+                try checkCancellation()
+                publish()
+            }
             guard let parentPath = directory.parentPath else { continue }
             for (kind, value) in totals[directory.path] ?? [:] {
                 totals[parentPath, default: [:]][kind, default: StorageExplorerSizeTotals()].add(value)
@@ -436,6 +501,10 @@ private final class ScanWork: @unchecked Sendable {
         }
         snapshot.fileTypeTotalsByDirectory = totals
         snapshot.fileTypeTotals = totals[snapshot.rootPath] ?? [:]
+    }
+
+    private func checkCancellation() throws {
+        if cancellation.isCancelled { throw CancellationError() }
     }
 
     static func identity(for entry: FileSystemBulkAttributeEntry) -> StorageFileInode? {
