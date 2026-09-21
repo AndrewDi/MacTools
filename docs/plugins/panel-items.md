@@ -134,6 +134,18 @@ track the set of visible item IDs in the plugin. Start shared work when the firs
 item appears and stop it only when the last item disappears; widget previews must
 not initiate that work.
 
+## Panel layout and editing
+
+Live panels follow saved item order. Equal-height widgets share a row while their
+widths fit; a different height or insufficient width starts a new row. Later items
+do not backfill completed rows. Standard and compact spans retain their own widths.
+
+During editing, small widgets use one centered menu for removal, cross-panel moves,
+and ordering, leaving the surrounding area draggable. Larger cards keep separate
+controls with draggable gaps. Insertion indicators follow the pointed widget edge
+and preview the available footprint; moving a widget does not reserve its old cell.
+Changes save one ordered list, and Undo restores the previous arrangement.
+
 ## Identity and state
 
 An item definition is identified by `(pluginID, itemID)`. Each user-added placement

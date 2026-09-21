@@ -9,7 +9,7 @@ final class PluginPackageManifestTests: XCTestCase {
             version: "1.0.0",
             minHostVersion: "0.15.0",
             bundleRelativePath: "Demo.bundle",
-            capabilities: .init(primaryPanel: true)
+            capabilities: .init(panelItems: [.row])
         )
 
         XCTAssertNoThrow(try PluginPackageManifestLoader.validate(manifest, hostVersion: "0.16.0"))

@@ -111,7 +111,7 @@ struct DeviceBatteryComponentView: View {
 
 enum DeviceBatteryComponentLayout {
     static let width = 4
-    static let cornerRadius: CGFloat = PluginComponentPanelLayoutMetrics.cardCornerRadius
+    static let cornerRadius: CGFloat = PluginPanelWidgetLayoutMetrics.cardCornerRadius
     static let horizontalPadding: CGFloat = 12
     static let rowHeight: CGFloat = 34
     static let rowIconWidth: CGFloat = 26
@@ -141,7 +141,7 @@ enum DeviceBatteryComponentLayout {
     static func spanHeight(
         mode: DeviceBatteryLayoutMode,
         visibleItemCount: Int,
-        metrics: PluginComponentPanelLayoutMetrics = .default
+        metrics: PluginPanelWidgetLayoutMetrics = .default
     ) -> Int {
         metrics.heightSpan(
             fittingContentHeight: contentHeight(

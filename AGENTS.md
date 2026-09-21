@@ -36,7 +36,7 @@
 - Generate the project with `make generate`. Do not run bare `xcodegen generate`, because it can miss the latest generated plugin configuration.
 - Validate compilation with `make build`.
 - Run locally with `make run`; it syncs the latest Debug plugin packages and generates the local development catalog.
-- Sync only already-built Debug plugin packages and the local development catalog with `make sync-debug-plugins`.
+- Build and sync Debug plugin packages and the local development catalog without launching the app with `make sync-debug-plugins`.
 - Build the local plugin packages and generate the Debug catalog with `make build-plugin`.
 - Build one plugin with `make build-plugin PLUGIN=<plugin directory name or plugin ID>`.
 - Run repository script tests with `make script-tests`; these checks are separate from XCTest and include pending changelog validation and PluginKit minimum-host compatibility validation.

@@ -788,7 +788,7 @@ final class DynamicPluginManagerTests: XCTestCase {
         let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
         let host = PluginHost(
             plugins: [], dynamicPluginManager: manager, shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )

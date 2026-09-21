@@ -25,11 +25,11 @@ final class DisplayVolumePluginTests: XCTestCase {
         let plugin = DisplayVolumePlugin(controller: controller)
         plugin.handleAction(.setDisclosureExpanded(true))
 
-        let state = plugin.primaryPanelState
+        let state = plugin.rowState
 
         XCTAssertEqual(state.subtitle, "未检测到可调节音量的显示器")
         XCTAssertFalse(state.isEnabled)
-        XCTAssertFalse(state.isExpanded)
+        XCTAssertTrue(state.isAvailable)
         XCTAssertNil(state.detail)
     }
 
@@ -44,7 +44,7 @@ final class DisplayVolumePluginTests: XCTestCase {
 
         let plugin = DisplayVolumePlugin(controller: controller)
 
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "Studio Display 72%")
+        XCTAssertEqual(plugin.rowState.subtitle, "Studio Display 72%")
     }
 
     func testMultipleDisplaysSummaryUsesDisplayCount() {
@@ -59,7 +59,7 @@ final class DisplayVolumePluginTests: XCTestCase {
 
         let plugin = DisplayVolumePlugin(controller: controller)
 
-        XCTAssertEqual(plugin.primaryPanelState.subtitle, "2 个显示器")
+        XCTAssertEqual(plugin.rowState.subtitle, "2 个显示器")
     }
 
     func testExpandedStateBuildsOneSliderPerDisplay() throws {
@@ -75,7 +75,7 @@ final class DisplayVolumePluginTests: XCTestCase {
         let plugin = DisplayVolumePlugin(controller: controller)
         plugin.handleAction(.setDisclosureExpanded(true))
 
-        let controls = try XCTUnwrap(plugin.primaryPanelState.detail?.primaryControls)
+        let controls = try XCTUnwrap(plugin.rowState.detail?.primaryControls)
         let sliders = controls.filter { $0.kind == .slider }
 
         XCTAssertEqual(sliders.count, 2)
@@ -84,6 +84,51 @@ final class DisplayVolumePluginTests: XCTestCase {
         XCTAssertEqual(sliders.map(\.valueLabel), ["72%", "41%"])
         XCTAssertEqual(sliders.first?.sliderBounds, 0...1)
         XCTAssertEqual(sliders.first?.sliderStep, 0.01)
+    }
+
+    func testPanelItemDefaultsToCollapsedRowAndRoutesSliderActions() throws {
+        let controller = MockDisplayVolumeController()
+        controller.snapshotValue = DisplayVolumeSnapshot(
+            displays: [makeVolumeDisplay(id: 7, name: "Display", volume: 0.5)], errorMessage: nil
+        )
+        let plugin = DisplayVolumePlugin(controller: controller)
+        let item = try XCTUnwrap(plugin.panelItems.first)
+        XCTAssertEqual(plugin.panelItems.map(\.id), ["control"])
+        XCTAssertEqual(item.initialPlacement, .featurePanel)
+        guard case let .row(row) = item.content else { return XCTFail("Expected a row") }
+        XCTAssertEqual(row.descriptor.controlStyle, .disclosure)
+        XCTAssertEqual(row.descriptor.menuActionBehavior, .keepPresented)
+        XCTAssertNil(row.state.detail)
+        XCTAssertTrue(row.state.isEnabled)
+
+        var notifications = 0
+        plugin.onStateChange = { notifications += 1 }
+        row.action(.setDisclosureExpanded(true))
+        XCTAssertEqual(plugin.rowState.detail?.primaryControls.count, 1)
+        row.action(.setSlider(controlID: "display.7.volume", value: 0.6, phase: .changed))
+        row.action(.setSlider(controlID: "display.7.volume", value: 0.6, phase: .ended))
+        XCTAssertEqual(controller.volumeWrites, [
+            .init(value: 0.6, displayID: 7, phase: .changed),
+            .init(value: 0.6, displayID: 7, phase: .ended)
+        ])
+        row.action(.setDisclosureExpanded(false))
+        XCTAssertNil(plugin.rowState.detail)
+        XCTAssertEqual(notifications, 4)
+    }
+
+    func testSnapshotReadsDoNotResetHostDetailDemandAndKeepErrorsVisible() {
+        let controller = MockDisplayVolumeController()
+        let display = makeVolumeDisplay(id: 7, name: "Display", volume: 0.5)
+        let plugin = DisplayVolumePlugin(controller: controller)
+        plugin.handleAction(.setDisclosureExpanded(true))
+        controller.snapshotValue = DisplayVolumeSnapshot(displays: [], errorMessage: "Disconnected")
+        XCTAssertNil(plugin.rowState.detail)
+        XCTAssertEqual(plugin.rowState.errorMessage, "Disconnected")
+
+        controller.snapshotValue = DisplayVolumeSnapshot(displays: [display], errorMessage: nil)
+        XCTAssertNotNil(plugin.rowState.detail, "Only the host's collapse action should clear detail demand")
+        plugin.handleAction(.setDisclosureExpanded(false))
+        XCTAssertNil(plugin.rowState.detail)
     }
 
     func testShortcutDefinitionsIncludeDecreaseAndIncreaseOnly() {

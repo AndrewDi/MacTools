@@ -92,7 +92,7 @@ xcodebuild -project MacTools.xcodeproj -scheme MacTools \
 | UI 或 widget | 提供下述 UI 证据，检查受影响的交互；仅在状态、操作或生命周期改变时补充必要的逻辑测试。 |
 | PluginKit API/ABI 或跨模块行为 | 此类代码改动推送前运行 `make ci`，已包含脚本测试、XCTest 和冻结客户端兼容检查。新引入的 API 登记到 `scripts/tests/test_plugin_minimum_host_compatibility.py`；使用已登记 API 须确保 `minHostVersion` 兼容，无需重复登记。 |
 | 脚本、manifest 或 catalog | 独立逻辑运行相关脚本测试；包结构、schema、兼容性变化或新增公共 API 使用者运行 `make script-tests`。元数据或操作变化后运行 `python3 scripts/plugins/generate_website_plugin_data.py`。 |
-| 面板拖拽路由或命中测试 | 运行受影响的[原生交互场景](docs/testing/panel-layout-editing.md)，需要完整检查时再运行 `make panel-layout-ui-tests`。要求活动桌面会话，独立于 CI。 |
+| 面板拖拽路由或命中测试 | 先运行 `make build`，再运行受影响的[原生交互场景](docs/testing/panel-layout-editing.md)。仅检查编译可用 `--compile-only`，需要全部场景时运行 `make panel-layout-ui-tests`。原生交互要求活动桌面会话，独立于 CI。 |
 | Changelog 片段 | 提交或推送前运行 `make validate-changelog`。 |
 | 仅文档 | 检查改动的链接、示例、格式与渲染效果，无需构建应用。 |
 

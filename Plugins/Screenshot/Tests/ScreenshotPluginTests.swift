@@ -10,11 +10,11 @@ final class ScreenshotPluginTests: XCTestCase {
     func testHostPanelActionsShortcutsAndPermissionContracts() {
         let plugin = makePlugin()
         XCTAssertEqual(plugin.metadata.id, "screenshot")
-        XCTAssertEqual(plugin.primaryPanelDescriptor.controlStyle, .button)
-        XCTAssertEqual(plugin.primaryPanelDescriptor.menuActionBehavior, .dismissBeforeHandling)
-        XCTAssertTrue(plugin.primaryPanelState.isEnabled)
-        XCTAssertFalse(plugin.primaryPanelState.isOn)
-        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+        XCTAssertEqual(plugin.rowDescriptor.controlStyle, .button)
+        XCTAssertEqual(plugin.rowDescriptor.menuActionBehavior, .dismissBeforeHandling)
+        XCTAssertTrue(plugin.rowState.isEnabled)
+        XCTAssertFalse(plugin.rowState.isOn)
+        XCTAssertNil(plugin.rowState.errorMessage)
         XCTAssertNotNil(plugin.settingsPage)
         XCTAssertEqual(plugin.permissionRequirements.map(\.id), ["screen-recording"])
         XCTAssertEqual(plugin.actionDefinitions.map(\.key.actionID), ["capture", "quick-capture"])
@@ -125,7 +125,7 @@ final class ScreenshotPluginTests: XCTestCase {
         XCTAssertEqual(count, 0)
         XCTAssertEqual(requested, ["screen-recording"])
         XCTAssertFalse(plugin.permissionState(for: "screen-recording").isGranted)
-        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+        XCTAssertNotNil(plugin.rowState.errorMessage)
         XCTAssertFalse(plugin.actionAvailability(for: reference()).isAvailable)
     }
 
@@ -135,10 +135,10 @@ final class ScreenshotPluginTests: XCTestCase {
         permissionGranted = false
         plugin.handleShortcutAction(id: "capture")
         XCTAssertEqual(count, 0)
-        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+        XCTAssertNotNil(plugin.rowState.errorMessage)
         permissionGranted = true
         plugin.refresh()
-        XCTAssertNil(plugin.primaryPanelState.errorMessage)
+        XCTAssertNil(plugin.rowState.errorMessage)
         XCTAssertTrue(plugin.permissionState(for: "screen-recording").isGranted)
         plugin.handleShortcutAction(id: "capture")
         XCTAssertEqual(count, 1)
@@ -211,7 +211,7 @@ final class ScreenshotPluginTests: XCTestCase {
         guard case .failed = result else { return XCTFail("Pending action must not reopen a disabled plugin") }
         plugin.handleShortcutAction(id: "capture")
         XCTAssertEqual(count, 0)
-        XCTAssertFalse(plugin.primaryPanelState.isEnabled)
+        XCTAssertFalse(plugin.rowState.isEnabled)
         plugin.activate(context: PluginRuntimeContext(pluginID: "screenshot", storage: ScreenshotTestStorage()))
         plugin.handleShortcutAction(id: "capture")
         XCTAssertEqual(count, 1)

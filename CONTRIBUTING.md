@@ -92,7 +92,7 @@ Replace the selector with the tests for your change; omit it for the full suite 
 | UI or widgets | Attach the UI evidence below. Check affected interactions; add logic tests only when state, actions, or lifecycle change. |
 | PluginKit API/ABI or cross-module behavior | `make ci` before pushing these code changes; it includes script tests, XCTest, and frozen-client compatibility. Register newly introduced APIs in `scripts/tests/test_plugin_minimum_host_compatibility.py`; consumers of already listed APIs need a compatible `minHostVersion`, not another inventory entry. |
 | Scripts, manifests, or catalogs | Focused script tests for isolated logic; `make script-tests` for package/schema/compatibility changes or new public API consumers. Regenerate website data with `python3 scripts/plugins/generate_website_plugin_data.py` after metadata/action changes. |
-| Panel drag routing or hit testing | Run the affected [native interaction scenario](docs/testing/panel-layout-editing.md); use `make panel-layout-ui-tests` for the full fixture when needed. Requires an active desktop and is separate from CI. |
+| Panel drag routing or hit testing | Run `make build` first, then the affected [native interaction scenario](docs/testing/panel-layout-editing.md). Use `--compile-only` for compilation checks or `make panel-layout-ui-tests` for all scenarios. Native interaction requires an active desktop and is separate from CI. |
 | Changelog fragments | `make validate-changelog` before committing or pushing. |
 | Documentation only | Check changed links, examples, formatting, and rendered layout; no app build is needed. |
 

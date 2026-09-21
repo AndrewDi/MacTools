@@ -141,47 +141,14 @@ enum AppShortcutAction: String, CaseIterable, Hashable {
 }
 
 struct PluginHostCapabilities: Equatable, Sendable {
-    let supportsDashboard: Bool
-    let supportsFeaturePanel: Bool
+    let panelKinds: Set<PluginPanelItemKind>
     let settingsLayout: PluginSettingsLayout?
-
-    var hasSettings: Bool {
-        settingsLayout != nil
-    }
-
-    var supportedSurfaces: Set<PluginDisplaySurface> {
-        var surfaces: Set<PluginDisplaySurface> = []
-        if supportsDashboard {
-            surfaces.insert(.dashboard)
-        }
-        if supportsFeaturePanel {
-            surfaces.insert(.featurePanel)
-        }
-        return surfaces
-    }
-}
-
-struct PluginSurfaceLayoutItem: Identifiable {
-    let id: String
-    let title: String
-    let description: String
-    let iconName: String
-    let iconTint: Color
-    let capabilities: PluginHostCapabilities
-    let isVisible: Bool
-    let isActive: Bool
-    let canUninstall: Bool
-    let removesDataOnUninstall: Bool
-    let category: String?
-    let releaseChannel: String?
+    var hasSettings: Bool { settingsLayout != nil }
 }
 
 struct MenuBarPanelLayoutEntry: Identifiable {
-    let item: PluginSurfaceLayoutItem
-    let surface: PluginDisplaySurface
-
-    var instanceID: String? = nil
-    var entry: MenuBarPanelEntry { MenuBarPanelEntry(pluginID: item.id, surface: surface, instanceID: instanceID) }
+    let item: PanelCatalogItem
+    let entry: MenuBarPanelEntry
     var id: String { entry.id }
 }
 
@@ -357,13 +324,6 @@ final class PluginHost: ObservableObject {
         let plugin: any MacToolsPlugin
         let capabilities: PluginHostCapabilities
 
-        var hasPrimaryPanel: Bool {
-            capabilities.supportsFeaturePanel
-        }
-
-        var hasComponentPanel: Bool {
-            capabilities.supportsDashboard
-        }
 
         var hasSettings: Bool {
             capabilities.hasSettings
@@ -414,7 +374,7 @@ final class PluginHost: ObservableObject {
 
     private let builtInPlugins: [any MacToolsPlugin]
     private let shortcutStore: ShortcutStore
-    private let pluginDisplayPreferencesStore: PluginDisplayPreferencesStore
+    private let pluginOrderingStore: PluginOrderingStore
     let menuBarPanelStore: MenuBarPanelStore
     let menuBarIconCoordinator: PluginMenuBarIconCoordinator
     @Published private(set) var menuBarPanels: [MenuBarPanelDefinition] = []
@@ -476,11 +436,8 @@ final class PluginHost: ObservableObject {
     private var shortcutErrors: [String: String] = [:]
     private let shortcutBindingDeliveries = PluginShortcutBindingTracker()
     private var appShortcutErrors: [AppShortcutAction: String] = [:]
-    private var componentViewCache: [String: PluginComponentViewItem] = [:]
+    let panelCoordinator = PluginPanelCoordinator()
     private var settingsViewCache: [SettingsViewCacheKey: PluginSettingsContentViewItem] = [:]
-    private var visiblePanelSurfaces: Set<PluginPanelSurface> = []
-    private var visiblePanelSurfacePluginIDs: [PluginPanelSurface: Set<String>] = [:]
-    private var isSynchronizingPanelSurfaces = false
     private var isolatedPluginFailures: [String: String] = [:]
     private var isHandlingPluginAction = false
     private var didLoadDynamicPlugins = false
@@ -490,30 +447,12 @@ final class PluginHost: ObservableObject {
     private var runtimeLocaleCancellable: AnyCancellable?
     private var applicationActivityState: PluginApplicationActivityState
     private var dirtyPluginIDs: Set<String> = []
-    private var cachedPanelStatesByID: [String: PluginPanelState] = [:]
-    private var cachedPrimaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
-    private var evaluatedPrimaryPanelIndicatorPluginIDs: Set<String> = []
-    private var cachedPrimaryPanelCompactIndicatorsByID: [String: PluginPrimaryPanelCompactIndicator] = [:]
-    private var evaluatedPrimaryPanelCompactIndicatorPluginIDs: Set<String> = []
-    private var cachedComponentStatesByID: [String: PluginComponentState] = [:]
-    private var loggedCapabilityMismatchPluginIDs: Set<String> = []
     private var builtInCapabilitiesByID: [String: PluginHostCapabilities] = [:]
     private var dynamicResolvedCapabilitiesByID: [String: PluginHostCapabilities] = [:]
 
-    @Published private(set) var panelItems: [PluginPanelItem] = []
-    @Published private(set) var primaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
-    @Published private(set) var primaryPanelCompactIndicatorsByID: [String: PluginPrimaryPanelCompactIndicator] = [:]
-    @Published private(set) var componentItems: [PluginComponentItem] = []
-    // Include removed entries for the library without mounting their views or changing visibility.
-    @Published private(set) var availablePanelItems: [PluginPanelItem] = []
-    @Published private(set) var availableComponentItems: [PluginComponentItem] = []
-    // Legacy management projection retained for failure isolation and older
-    // tests. Layout settings use the per-surface order projections below.
-    @Published private(set) var featureManagementItems: [PluginFeatureManagementItem] = []
-    @Published private(set) var dashboardLayoutItems: [PluginSurfaceLayoutItem] = []
-    @Published private(set) var dashboardHiddenLayoutItems: [PluginSurfaceLayoutItem] = []
-    @Published private(set) var featurePanelLayoutItems: [PluginSurfaceLayoutItem] = []
-    @Published private(set) var featurePanelHiddenLayoutItems: [PluginSurfaceLayoutItem] = []
+    var availablePanelItems: [PanelCatalogItem] { panelCoordinator.catalog.filter(\.isAvailable) }
+    var panelItems: [PluginPanelRowSnapshot] { panelItems(in: MenuBarPanelDefinition.featuresID) }
+    var componentItems: [PluginPanelWidgetSnapshot] { componentItems(in: MenuBarPanelDefinition.componentsID) }
     @Published private(set) var pluginSettingsItems: [PluginSettingsPageItem] = []
     @Published private(set) var permissionCards: [PluginPermissionCard] = []
     private(set) lazy var permissionCoordinator = PermissionCoordinator(
@@ -559,7 +498,6 @@ final class PluginHost: ObservableObject {
     /// The app shell installs this while the application is running. The host
     /// emits typed requests but never manipulates windows or popovers directly.
     var appPresentationHandler: ((AppPresentationRequest) -> Void)?
-    var componentDetailPresentationHandler: ((String, String) -> Void)?
     var componentDetailHandlersByPanelID: [String: (String, String) -> Void] = [:]
 
     private let openPermissionSettings: (URL) -> Void
@@ -602,7 +540,7 @@ final class PluginHost: ObservableObject {
             dynamicPluginManager: dynamicPluginManager,
             pluginCatalogManager: pluginCatalogManager,
             shortcutStore: shortcutStore,
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(
+            pluginOrderingStore: PluginOrderingStore(
                 preferencesBackupChangeReporter: preferencesBackupChangeReporter
             ),
             preferencesBackupStore: preferencesBackupStore,
@@ -626,7 +564,7 @@ final class PluginHost: ObservableObject {
         dynamicPluginManager: DynamicPluginManager? = nil,
         pluginCatalogManager: PluginCatalogManager? = nil,
         shortcutStore: ShortcutStore,
-        pluginDisplayPreferencesStore: PluginDisplayPreferencesStore,
+        pluginOrderingStore: PluginOrderingStore,
         preferencesBackupStore: any PreferencesBackupApplicationStoring,
         preferencesBackupChangeReporter providedPreferencesBackupChangeReporter:
             PreferencesBackupChangeReporter? = nil,
@@ -654,7 +592,7 @@ final class PluginHost: ObservableObject {
         let preferencesBackupChangeReporter = providedPreferencesBackupChangeReporter
             ?? PreferencesBackupChangeReporter()
         shortcutStore.preferencesBackupChangeReporter = preferencesBackupChangeReporter
-        pluginDisplayPreferencesStore.preferencesBackupChangeReporter =
+        pluginOrderingStore.preferencesBackupChangeReporter =
             preferencesBackupChangeReporter
         preferencesBackupStore.preferencesBackupChangeReporter = preferencesBackupChangeReporter
 
@@ -667,7 +605,7 @@ final class PluginHost: ObservableObject {
         }
         self.actionInputAliases = CommandPaletteAliasStore(defaults: shortcutStore.userDefaults)
         self.shortcutStore = shortcutStore
-        self.pluginDisplayPreferencesStore = pluginDisplayPreferencesStore
+        self.pluginOrderingStore = pluginOrderingStore
         self.menuBarPanelStore = MenuBarPanelStore(
             userDefaults: shortcutStore.userDefaults, reporter: preferencesBackupChangeReporter
         )
@@ -758,22 +696,9 @@ final class PluginHost: ObservableObject {
             dynamicPluginManager.onPluginWillDeactivate = { [weak self] pluginID, reason in
                 self?.menuBarIconCoordinator.unregister(pluginID: pluginID, reason: reason)
             }
-            // The retired global checkbox becomes hidden on every surface
-            // the plugin supports. Consume the package-store marker before
-            // loading dynamic code, but do not hold or deactivate packages:
-            // surface visibility is intentionally independent of lifecycle.
             let legacyHiddenPluginIDs = dynamicPluginManager.legacyHiddenPluginIDs()
-            if pluginDisplayPreferencesStore.addLegacyHiddenPluginIDs(legacyHiddenPluginIDs) {
+            if menuBarPanelStore.migrateLegacyHiddenPlugins(legacyHiddenPluginIDs) {
                 dynamicPluginManager.clearLegacyHiddenPluginIDs()
-            } else {
-                // An unknown future display payload must remain untouched until
-                // the user makes an explicit edit. Acknowledge the package-store
-                // marker after that edit durably captures the staged state, so a
-                // later launch cannot reapply stale legacy visibility.
-                pluginDisplayPreferencesStore.onNextSuccessfulPersistence = {
-                    [weak dynamicPluginManager] in
-                    dynamicPluginManager?.clearLegacyHiddenPluginIDs()
-                }
             }
             if loadDynamicPluginsOnInit {
                 self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
@@ -955,7 +880,7 @@ final class PluginHost: ObservableObject {
         menuBarIconCoordinator.deactivateAll(reason: reason)
         pluginStateChangeRebuildTask?.cancel()
         pluginStateChangeRebuildTask = nil
-        hideAllPanelSurfaces()
+        hideAllPanelItems()
 
         for plugin in activePlugins {
             guardPluginCall(plugin, operation: "deactivate plugin") {
@@ -1046,12 +971,9 @@ final class PluginHost: ObservableObject {
         }
         return PreferencesBackup(
             application: preferencesBackupStore.applicationPreferences(),
-            pluginDisplay: pluginDisplayPreferencesStore.backupSnapshot(
-                defaultPluginIDs: defaultPluginIDs,
-                dashboardDefaultPluginIDs: defaultPluginIDs(for: .dashboard),
-                featurePanelDefaultPluginIDs: defaultPluginIDs(for: .featurePanel),
-                panelConfiguration: menuBarPanelStore.configuration
-            ),
+            pluginDisplay: PluginDisplayPreferencesBackup(
+                orderedPluginIDs: orderedPluginIDs(), hiddenPluginIDs: [],
+                panelConfiguration: menuBarPanelStore.configuration),
             shortcutCustomizations: selection.includesShortcuts ? shortcutCustomizations : [:],
             actionShortcutAssignments: selection.includesShortcuts
                 ? shortcutAssignmentService.assignments.filter {
@@ -1306,35 +1228,13 @@ final class PluginHost: ObservableObject {
 
         if selection.includesPluginLayout {
             let panelConfiguration = backup.pluginDisplay.panelConfiguration
-                ?? MenuBarPanelConfiguration().applyingLegacyClickBehavior(backup.application.menuBarClickBehavior)
-            menuBarPanelStore.replace(panelConfiguration)
+                ?? PanelLayoutMigrator.migrate(LegacyPanelLayout(),
+                    preferences: LegacyPanelDisplayPreferences(backup: backup.pluginDisplay))
+                    .applyingLegacyClickBehavior(backup.application.menuBarClickBehavior)
+            menuBarPanelStore.replace(panelConfiguration, replacingUnreadable: true)
             menuBarPanels = menuBarPanelStore.configuration.displayPanels
-            pluginDisplayPreferencesStore.setOrderedPluginIDs(
-                backup.pluginDisplay.orderedPluginIDs,
-                defaultPluginIDs: defaultPluginIDs
-            )
-            pluginDisplayPreferencesStore.setOrderedPluginIDs(
-                backup.pluginDisplay.dashboardOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
-                for: .dashboard,
-                defaultPluginIDs: defaultPluginIDs(for: .dashboard)
-            )
-            pluginDisplayPreferencesStore.setOrderedPluginIDs(
-                backup.pluginDisplay.featurePanelOrderedPluginIDs ?? backup.pluginDisplay.orderedPluginIDs,
-                for: .featurePanel,
-                defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
-            )
-            // A legacy backup has one global checkbox. Map it to both supported
-            // surfaces; current backups restore the two independent values.
-            pluginDisplayPreferencesStore.setHiddenPluginIDs(
-                Set(backup.pluginDisplay.dashboardHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
-                for: .dashboard,
-                defaultPluginIDs: defaultPluginIDs(for: .dashboard)
-            )
-            pluginDisplayPreferencesStore.setHiddenPluginIDs(
-                Set(backup.pluginDisplay.featurePanelHiddenPluginIDs ?? backup.pluginDisplay.hiddenPluginIDs),
-                for: .featurePanel,
-                defaultPluginIDs: defaultPluginIDs(for: .featurePanel)
-            )
+            pluginOrderingStore.setOrderedPluginIDs(
+                backup.pluginDisplay.orderedPluginIDs, defaultPluginIDs: defaultPluginIDs)
         }
 
         let actionSurfacePluginIDs = Set(activePlugins.compactMap { plugin in
@@ -1529,10 +1429,8 @@ final class PluginHost: ObservableObject {
                 localizationRefreshing.refreshLocalization()
             }
         }
-        componentViewCache.removeAll()
+        panelCoordinator.clearWidgetViews()
         settingsViewCache.removeAll()
-        cachedPanelStatesByID.removeAll()
-        cachedComponentStatesByID.removeAll()
         syncPluginManagementState()
         menuBarIconCoordinator.refreshPrimaryIconOwner(
             pluginTitle: menuBarIconCoordinator.primaryIconOwner.flatMap {
@@ -1548,146 +1446,58 @@ final class PluginHost: ObservableObject {
         refreshDisplayTopologyNow()
     }
 
-    func isSwitchOn(for pluginID: String) -> Bool {
-        panelItems.first(where: { $0.id == pluginID })?.isOn ?? false
+    func isSwitchOn(for itemID: String) -> Bool {
+        guard let item = panelCoordinator.item(for: itemID),
+              case let .row(row) = item.definition.content else { return false }
+        return row.state.isOn
     }
 
-    func setSwitchValue(_ isOn: Bool, for pluginID: String) {
-        guard let plugin = corePlugin(for: pluginID),
-              let primaryPanel = plugin.primaryPanel
-        else {
-            return
-        }
-
-        handlePluginAction {
-            guardPluginCall(plugin, operation: "set switch") {
-                primaryPanel.handleAction(.setSwitch(isOn))
-            }
-        }
+    func setSwitchValue(_ isOn: Bool, for itemID: String) {
+        performPanelAction(.setSwitch(isOn), itemID: itemID)
     }
 
-    func setDisclosureExpanded(_ isExpanded: Bool, for pluginID: String) {
-        guard let plugin = corePlugin(for: pluginID),
-              let primaryPanel = plugin.primaryPanel
-        else {
-            return
-        }
-
-        handlePluginAction {
-            guardPluginCall(plugin, operation: "set disclosure") {
-                primaryPanel.handleAction(.setDisclosureExpanded(isExpanded))
-            }
-        }
+    func setDisclosureExpanded(_ isExpanded: Bool, for itemID: String) {
+        panelCoordinator.setExpanded(isExpanded, id: itemID)
+        performPanelAction(.setDisclosureExpanded(panelCoordinator.hasExpandedPlacement(for: itemID)), itemID: itemID)
     }
 
-    func setPanelSelectionValue(
-        _ optionID: String,
-        controlID: String,
-        for pluginID: String
-    ) {
-        guard let plugin = corePlugin(for: pluginID),
-              let primaryPanel = plugin.primaryPanel
-        else {
-            return
-        }
-
-        handlePluginAction {
-            guardPluginCall(plugin, operation: "set selection") {
-                primaryPanel.handleAction(.setSelection(controlID: controlID, optionID: optionID))
-            }
-        }
+    func setPanelSelectionValue(_ optionID: String, controlID: String, for itemID: String) {
+        performPanelAction(.setSelection(controlID: controlID, optionID: optionID), itemID: itemID)
     }
 
-    func setPanelNavigationSelectionValue(
-        _ optionID: String,
-        controlID: String,
-        for pluginID: String
-    ) {
-        guard let plugin = corePlugin(for: pluginID),
-              let primaryPanel = plugin.primaryPanel
-        else {
-            return
-        }
-
-        handlePluginAction {
-            guardPluginCall(plugin, operation: "set navigation selection") {
-                primaryPanel.handleAction(
-                    .setNavigationSelection(controlID: controlID, optionID: optionID)
-                )
-            }
-        }
+    func setPanelNavigationSelectionValue(_ optionID: String, controlID: String, for itemID: String) {
+        panelCoordinator.setNavigationSelection(optionID, controlID: controlID, id: itemID)
+        performPanelAction(.setNavigationSelection(controlID: controlID, optionID: optionID), itemID: itemID)
     }
 
-    func clearPanelNavigationSelection(
-        controlID: String,
-        for pluginID: String
-    ) {
-        guard let plugin = corePlugin(for: pluginID),
-              let primaryPanel = plugin.primaryPanel
-        else {
-            return
-        }
-
-        handlePluginAction {
-            guardPluginCall(plugin, operation: "clear navigation selection") {
-                primaryPanel.handleAction(.clearNavigationSelection(controlID: controlID))
-            }
-        }
+    func clearPanelNavigationSelection(controlID: String, for itemID: String) {
+        panelCoordinator.setNavigationSelection(nil, controlID: controlID, id: itemID)
+        performPanelAction(.clearNavigationSelection(controlID: controlID), itemID: itemID)
     }
 
-    func setPanelDateValue(
-        _ date: Date,
-        controlID: String,
-        for pluginID: String
-    ) {
-        guard let plugin = corePlugin(for: pluginID),
-              let primaryPanel = plugin.primaryPanel
-        else {
-            return
-        }
-
-        handlePluginAction {
-            guardPluginCall(plugin, operation: "set date") {
-                primaryPanel.handleAction(.setDate(controlID: controlID, value: date))
-            }
-        }
+    func setPanelDateValue(_ date: Date, controlID: String, for itemID: String) {
+        performPanelAction(.setDate(controlID: controlID, value: date), itemID: itemID)
     }
 
-    func setPanelSliderValue(
-        _ value: Double,
-        controlID: String,
-        for pluginID: String,
-        phase: PluginPanelAction.SliderPhase
-    ) {
-        guard let plugin = corePlugin(for: pluginID),
-              let primaryPanel = plugin.primaryPanel
-        else {
-            return
-        }
-
-        let isolatedPluginCountAtStart = isolatedPluginFailures.count
-        handlePluginAction(rebuildAfterAction: phase == .ended) {
-            guardPluginCall(plugin, operation: "set slider") {
-                primaryPanel.handleAction(.setSlider(controlID: controlID, value: value, phase: phase))
-            }
-        }
-
-        if phase == .changed, isolatedPluginFailures.count > isolatedPluginCountAtStart {
-            rebuildDerivedState()
-        }
+    func setPanelSliderValue(_ value: Double, controlID: String, for itemID: String,
+                             phase: PluginPanelAction.SliderPhase) {
+        performPanelAction(.setSlider(controlID: controlID, value: value, phase: phase),
+                           itemID: itemID, rebuild: phase == .ended)
     }
 
-    func invokePanelAction(controlID: String, for pluginID: String) {
-        guard let plugin = corePlugin(for: pluginID),
-              let primaryPanel = plugin.primaryPanel
-        else {
-            return
-        }
+    func invokePanelAction(controlID: String, for itemID: String) {
+        performPanelAction(.invokeAction(controlID: controlID), itemID: itemID)
+    }
 
-        handlePluginAction {
-            guardPluginCall(plugin, operation: "invoke panel action") {
-                primaryPanel.handleAction(.invokeAction(controlID: controlID))
-            }
+    private func performPanelAction(_ action: PluginPanelAction, itemID: String, rebuild: Bool = true) {
+        guard let item = panelCoordinator.item(for: itemID),
+              let plugin = corePlugin(for: item.key.pluginID),
+              !isPluginIsolated(plugin), case let .row(row) = item.definition.content else { return }
+        handlePluginAction(rebuildAfterAction: false) {
+            guardPluginCall(plugin, operation: "perform panel item action") { row.action(action) }
+        }
+        if rebuild || isPluginIsolated(plugin) {
+            rebuildDerivedState(dirtyPluginIDs: [item.key.pluginID])
         }
     }
 
@@ -2407,229 +2217,39 @@ final class PluginHost: ObservableObject {
         rebuildDerivedState()
     }
 
-    /// Moves a plugin within a surface's visible order while leaving hidden
-    /// plugins in their remembered slots.
-    func movePlugin(id pluginID: String, toOffset targetOffset: Int, on surface: PluginDisplaySurface) {
-        let defaultPluginIDs = defaultPluginIDs(for: surface)
-        var orderedPluginIDs = visiblePluginIDs(for: surface)
 
-        guard let currentIndex = orderedPluginIDs.firstIndex(of: pluginID) else {
-            return
-        }
-
-        let clampedOffset = min(max(targetOffset, 0), orderedPluginIDs.count)
-        guard currentIndex != clampedOffset, currentIndex + 1 != clampedOffset else {
-            return
-        }
-
-        orderedPluginIDs.move(
-            fromOffsets: IndexSet(integer: currentIndex),
-            toOffset: clampedOffset
-        )
-        pluginDisplayPreferencesStore.setVisiblePluginIDs(
-            orderedPluginIDs,
-            for: surface,
-            defaultPluginIDs: defaultPluginIDs
-        )
-        rebuildDerivedState()
+    func componentViewItem(for itemID: String, dismiss: @escaping () -> Void) -> PluginPanelWidgetViewItem {
+        let content = panelCoordinator.widgetView(for: itemID, dismiss: dismiss) { [weak self] detailID in
+            guard let self, let entry = self.panelCoordinator.entry(for: itemID),
+                  let panelID = self.menuBarPanelStore.configuration.panelID(for: entry.placement.id),
+                  self.visibleMenuBarPanelID == panelID else { return }
+            self.componentDetailHandlersByPanelID[panelID]?(itemID, detailID)
+        } ?? AnyView(EmptyView())
+        return PluginPanelWidgetViewItem(id: itemID, content: content)
     }
 
-    /// Moves only currently rendered items. Runtime-hidden plugins keep their slots,
-    /// and the preferences store also preserves slots hidden by the user's settings.
-    func moveRenderedPlugin(id pluginID: String, toOffset targetOffset: Int, on surface: PluginDisplaySurface) {
-        var renderedIDs = surface == .dashboard ? componentItems.map(\.id) : panelItems.map(\.id)
-        guard let currentIndex = renderedIDs.firstIndex(of: pluginID) else { return }
-        let clampedOffset = min(max(targetOffset, 0), renderedIDs.count)
-        guard currentIndex != clampedOffset, currentIndex + 1 != clampedOffset else { return }
-
-        let renderedIDSet = Set(renderedIDs)
-        renderedIDs.move(fromOffsets: IndexSet(integer: currentIndex), toOffset: clampedOffset)
-        var reorderedIDs = renderedIDs.makeIterator()
-        let orderedIDs = visiblePluginIDs(for: surface).map { id in
-            renderedIDSet.contains(id) ? reorderedIDs.next()! : id
-        }
-        pluginDisplayPreferencesStore.setVisiblePluginIDs(
-            orderedIDs,
-            for: surface,
-            defaultPluginIDs: defaultPluginIDs(for: surface)
-        )
-        rebuildDerivedState()
+    func componentPreviewView(for itemID: String,
+                              reportContentHeight: @escaping (CGFloat) -> Void = { _ in }) -> AnyView? {
+        guard let item = panelCoordinator.item(for: itemID),
+              case let .widget(widget) = item.definition.content,
+              let plugin = corePlugin(for: item.key.pluginID) else { return nil }
+        return guardedValue(for: plugin, operation: "make widget preview",
+            widget.makeView(PluginPanelWidgetContext(pluginID: item.key.pluginID,
+                itemID: item.key.itemID, placementID: nil, dismiss: {},
+                reportContentHeight: reportContentHeight)))
     }
 
-    func setPluginVisible(_ isVisible: Bool, id pluginID: String, on surface: PluginDisplaySurface) {
-        pluginDisplayPreferencesStore.setPluginVisible(
-            isVisible,
-            pluginID: pluginID,
-            on: surface,
-            defaultPluginIDs: defaultPluginIDs(for: surface)
-        )
-        rebuildDerivedState()
-    }
-
-    func resetPluginOrder(on surface: PluginDisplaySurface) {
-        pluginDisplayPreferencesStore.resetOrder(
-            for: surface,
-            defaultPluginIDs: defaultPluginIDs(for: surface)
-        )
-        rebuildDerivedState()
-    }
-
-    func canMoveFeatureManagementItem(id pluginID: String, by offset: Int) -> Bool {
-        let orderedPluginIDs = orderedPluginIDs()
-
-        guard let currentIndex = orderedPluginIDs.firstIndex(of: pluginID) else {
-            return false
-        }
-
-        let targetIndex = currentIndex + offset
-        return orderedPluginIDs.indices.contains(targetIndex)
-    }
-
-    func moveFeatureManagementItem(id pluginID: String, by offset: Int) {
-        var orderedPluginIDs = orderedPluginIDs()
-
-        guard let currentIndex = orderedPluginIDs.firstIndex(of: pluginID) else {
-            return
-        }
-
-        let targetIndex = currentIndex + offset
-
-        guard orderedPluginIDs.indices.contains(targetIndex) else {
-            return
-        }
-
-        let movedPluginID = orderedPluginIDs.remove(at: currentIndex)
-        orderedPluginIDs.insert(movedPluginID, at: targetIndex)
-
-        pluginDisplayPreferencesStore.setOrderedPluginIDs(
-            orderedPluginIDs,
-            defaultPluginIDs: defaultPluginIDs
-        )
-        rebuildDerivedState()
-    }
-
-    func moveFeatureManagementItem(id pluginID: String, toOffset targetOffset: Int) {
-        var orderedPluginIDs = orderedPluginIDs()
-
-        guard let currentIndex = orderedPluginIDs.firstIndex(of: pluginID) else {
-            return
-        }
-
-        let clampedOffset = min(max(targetOffset, 0), orderedPluginIDs.count)
-
-        guard currentIndex != clampedOffset, currentIndex + 1 != clampedOffset else {
-            return
-        }
-
-        orderedPluginIDs.move(
-            fromOffsets: IndexSet(integer: currentIndex),
-            toOffset: clampedOffset
-        )
-
-        pluginDisplayPreferencesStore.setOrderedPluginIDs(
-            orderedPluginIDs,
-            defaultPluginIDs: defaultPluginIDs
-        )
-        rebuildDerivedState()
-    }
-
-    func moveFeatureManagementItems(fromOffsets: IndexSet, toOffset: Int) {
-        var orderedPluginIDs = orderedPluginIDs()
-        orderedPluginIDs.move(fromOffsets: fromOffsets, toOffset: toOffset)
-
-        pluginDisplayPreferencesStore.setOrderedPluginIDs(
-            orderedPluginIDs,
-            defaultPluginIDs: defaultPluginIDs
-        )
-        rebuildDerivedState()
-    }
-
-    func componentViewItem(for itemID: String, dismiss: @escaping () -> Void) -> PluginComponentViewItem {
-        if let cachedItem = componentViewCache[itemID] {
-            return cachedItem
-        }
-
-        guard let plugin = corePlugin(for: itemID),
-              let componentPanel = plugin.componentPanel
-        else {
-            let item = PluginComponentViewItem(id: itemID, content: AnyView(EmptyView()))
-            componentViewCache[itemID] = item
-            return item
-        }
-
-        let context = PluginComponentContext(
-            pluginID: itemID,
-            dismiss: dismiss,
-            isPanelVisible: true
-        )
-        let content = guardedValue(
-            for: plugin,
-            operation: "make component view",
-            componentPanel.makeView(context: context)
-        ) ?? AnyView(EmptyView())
-
-        let item = PluginComponentViewItem(
-            id: itemID,
-            content: AnyView(content.id(localizationRevision))
-        )
-        componentViewCache[itemID] = item
-        if isPluginIsolated(plugin) {
-            rebuildDerivedState()
-        }
-        return item
-    }
-
-    func componentPreviewView(for itemID: String) -> AnyView? {
-        guard availableComponentItems.contains(where: { $0.id == itemID }),
-              let plugin = corePlugin(for: itemID), let panel = plugin.componentPanel else { return nil }
-        return guardedValue(for: plugin, operation: "make component preview",
-            panel.makeView(context: PluginComponentContext(pluginID: itemID, dismiss: {}, isPanelVisible: false)))
-    }
-
-    func componentDetailContent(
-        pluginID: String,
-        detailID: String,
-        dismiss: @escaping () -> Void
-    ) -> PluginComponentDetailContent? {
-        guard
-            let plugin = corePlugin(for: pluginID),
-            let presenting = plugin as? any PluginComponentDetailPresenting
-        else {
-            return nil
-        }
-
-        guard let content = presenting.makeComponentDetailContent(
-            detailID: detailID,
-            dismiss: dismiss
-        ) else {
-            return nil
-        }
-
-        return guardedValue(
-            for: plugin,
-            operation: "make component detail",
-            content
-        )
-    }
-
-    func setPanelSurface(_ surface: PluginPanelSurface, visible isVisible: Bool) {
-        if isVisible {
-            visiblePanelSurfaces.insert(surface)
-        } else {
-            visiblePanelSurfaces.remove(surface)
-        }
-
-        syncVisiblePanelSurfaces()
+    func componentDetailContent(placementID itemID: String, detailID: String,
+                                dismiss: @escaping () -> Void) -> PluginPanelDetailContent? {
+        guard let item = panelCoordinator.item(for: itemID),
+              let plugin = corePlugin(for: item.key.pluginID),
+              case let .widget(widget) = item.definition.content else { return nil }
+        return guardedOptionalValue(for: plugin, operation: "make panel item detail",
+                                    widget.makeDetail?(detailID, dismiss))
     }
 
     func isComponentViewCached(for itemID: String) -> Bool {
-        componentViewCache[itemID] != nil
-    }
-
-    func prewarmComponentViews(panelID: String? = nil, dismiss: @escaping () -> Void) {
-        for item in panelID.map({ componentItems(in: $0) }) ?? componentItems {
-            _ = componentViewItem(for: item.id, dismiss: dismiss)
-        }
+        panelCoordinator.isWidgetViewCached(itemID)
     }
 
     func pluginSettingsContentViewItem(
@@ -2748,7 +2368,7 @@ final class PluginHost: ObservableObject {
     }
 
     func discardComponentViews() {
-        componentViewCache.removeAll()
+        panelCoordinator.clearWidgetViews()
     }
 
     func recheckPluginRequirements() {
@@ -2924,7 +2544,7 @@ final class PluginHost: ObservableObject {
 
     func uninstallDynamicPlugin(pluginID: String, removeData: Bool = false) throws {
         try dynamicPluginManager?.uninstallPlugin(pluginID: pluginID, removeData: removeData)
-        pluginDisplayPreferencesStore.removePlugin(pluginID)
+        pluginOrderingStore.removePlugin(pluginID)
         menuBarPanelStore.removePlugin(id: pluginID)
         shortcutStore.removeCustomizations(forPluginID: pluginID)
         shortcutErrors = shortcutErrors.filter { !$0.key.hasPrefix("\(pluginID).shortcut.") }
@@ -3482,15 +3102,6 @@ final class PluginHost: ObservableObject {
                     self?.appPresentationHandler?(.showDashboard)
                 }
             }
-            if let componentDetailPresenting = plugin as? any PluginComponentDetailPresenting {
-                componentDetailPresenting.requestComponentDetailPresentation = { [weak self] detailID in
-                    guard let self else { return }
-                    if let panelID = self.visibleMenuBarPanelID,
-                       let handler = self.componentDetailHandlersByPanelID[panelID] {
-                        handler(pluginID, detailID)
-                    } else { self.componentDetailPresentationHandler?(pluginID, detailID) }
-                }
-            }
             if let actionGridConsumer = plugin as? any ActionGridHostContextConsuming {
                 actionGridConsumer.actionGridHostContext = makeActionGridHostContext()
             }
@@ -3566,12 +3177,10 @@ final class PluginHost: ObservableObject {
     }
 
     private func replaceDynamicPlugins(_ plugins: [any MacToolsPlugin]) {
-        let previouslyVisibleSurfaces = visiblePanelSurfaces
-        hideAllPanelSurfaces()
-        visiblePanelSurfaces = previouslyVisibleSurfaces
+        hideAllPanelItems()
+        for plugin in dynamicPlugins { panelCoordinator.removePlugin(plugin.metadata.id) }
         discardComponentViews()
         settingsViewCache.removeAll()
-        loggedCapabilityMismatchPluginIDs.removeAll()
         dynamicResolvedCapabilitiesByID.removeAll()
         syncPluginManagementState()
         dynamicPlugins = plugins.sorted {
@@ -3696,283 +3305,25 @@ final class PluginHost: ObservableObject {
         synchronizeInputGestureClaims()
 
         let descriptors = pluginDescriptorSnapshot()
-        let defaultDescriptors = descriptors.defaults
-        pluginDisplayPreferencesStore.migrateLegacyHiddenPluginIDs(
-            dashboardDefaultPluginIDs: defaultDescriptors
-                .filter { $0.capabilities.supportedSurfaces.contains(.dashboard) }
-                .map(\.metadata.id),
-            featurePanelDefaultPluginIDs: defaultDescriptors
-                .filter { $0.capabilities.supportedSurfaces.contains(.featurePanel) }
-                .map(\.metadata.id)
-        )
-
         let isolatedPluginCountAtStart = isolatedPluginFailures.count
         let orderedDescriptors = descriptors.ordered
-        let descriptorIDs = Set(orderedDescriptors.map(\.metadata.id))
-        var panelStatesByID = dirtyPluginIDs == nil ? [:] : cachedPanelStatesByID.filter {
-            descriptorIDs.contains($0.key)
-        }
-        var primaryPanelIndicatorsByID = dirtyPluginIDs == nil
-            ? [:]
-            : cachedPrimaryPanelIndicatorsByID.filter { descriptorIDs.contains($0.key) }
-        var evaluatedIndicatorPluginIDs = dirtyPluginIDs == nil
-            ? Set<String>()
-            : evaluatedPrimaryPanelIndicatorPluginIDs.intersection(descriptorIDs)
-        var primaryPanelCompactIndicatorsByID = dirtyPluginIDs == nil
-            ? [:]
-            : cachedPrimaryPanelCompactIndicatorsByID.filter { descriptorIDs.contains($0.key) }
-        var evaluatedCompactIndicatorPluginIDs = dirtyPluginIDs == nil
-            ? Set<String>()
-            : evaluatedPrimaryPanelCompactIndicatorPluginIDs.intersection(descriptorIDs)
-        var componentStatesByID = dirtyPluginIDs == nil ? [:] : cachedComponentStatesByID.filter {
-            descriptorIDs.contains($0.key)
-        }
-
         for descriptor in orderedDescriptors {
-            let pluginID = descriptor.metadata.id
-            let shouldReadPlugin = dirtyPluginIDs?.contains(pluginID) ?? true
-            let plugin = descriptor.plugin
-
-            if descriptor.hasPrimaryPanel,
-               !isPluginIsolated(plugin),
-               let primaryPanel = plugin.primaryPanel {
-                if shouldReadPlugin || panelStatesByID[pluginID] == nil {
-                    if let state = guardedValue(
-                        for: plugin,
-                        operation: "read primary panel state",
-                        primaryPanel.primaryPanelState
-                    ) {
-                        panelStatesByID[pluginID] = state
-                    } else {
-                        panelStatesByID.removeValue(forKey: pluginID)
-                    }
-                }
-
-                if let indicatorProvider = plugin as? any PluginPrimaryPanelIndicatorProviding {
-                    if shouldReadPlugin || !evaluatedIndicatorPluginIDs.contains(pluginID) {
-                        evaluatedIndicatorPluginIDs.insert(pluginID)
-                        if let indicator = guardedOptionalValue(
-                            for: plugin,
-                            operation: "read primary panel indicator",
-                            indicatorProvider.primaryPanelIndicator
-                        ) {
-                            primaryPanelIndicatorsByID[pluginID] = indicator
-                        } else {
-                            primaryPanelIndicatorsByID.removeValue(forKey: pluginID)
-                        }
-                    }
-                } else {
-                    evaluatedIndicatorPluginIDs.remove(pluginID)
-                    primaryPanelIndicatorsByID.removeValue(forKey: pluginID)
-                }
-
-                if let indicatorProvider = plugin as? any PluginPrimaryPanelCompactIndicatorProviding {
-                    if shouldReadPlugin || !evaluatedCompactIndicatorPluginIDs.contains(pluginID) {
-                        evaluatedCompactIndicatorPluginIDs.insert(pluginID)
-                        if let indicator = guardedOptionalValue(
-                            for: plugin,
-                            operation: "read compact primary panel indicator",
-                            indicatorProvider.primaryPanelCompactIndicator
-                        ) {
-                            primaryPanelCompactIndicatorsByID[pluginID] = indicator
-                        } else {
-                            primaryPanelCompactIndicatorsByID.removeValue(forKey: pluginID)
-                        }
-                    }
-                } else {
-                    evaluatedCompactIndicatorPluginIDs.remove(pluginID)
-                    primaryPanelCompactIndicatorsByID.removeValue(forKey: pluginID)
-                }
-            } else {
-                panelStatesByID.removeValue(forKey: pluginID)
-                evaluatedIndicatorPluginIDs.remove(pluginID)
-                primaryPanelIndicatorsByID.removeValue(forKey: pluginID)
-                evaluatedCompactIndicatorPluginIDs.remove(pluginID)
-                primaryPanelCompactIndicatorsByID.removeValue(forKey: pluginID)
-            }
-
-            if descriptor.hasComponentPanel,
-               !isPluginIsolated(plugin),
-               let componentPanel = plugin.componentPanel {
-                if shouldReadPlugin || componentStatesByID[pluginID] == nil {
-                    if let state = guardedValue(
-                        for: plugin,
-                        operation: "read component panel state",
-                        componentPanel.componentPanelState
-                    ) {
-                        componentStatesByID[pluginID] = state
-                    } else {
-                        componentStatesByID.removeValue(forKey: pluginID)
-                    }
-                }
-            } else {
-                componentStatesByID.removeValue(forKey: pluginID)
+            let id = descriptor.metadata.id
+            guard dirtyPluginIDs == nil || dirtyPluginIDs!.contains(id) ||
+                    !panelCoordinator.hasSnapshot(for: id) else { continue }
+            guard let items = guardedValue(for: descriptor.plugin, operation: "read panel items",
+                                           descriptor.plugin.panelItems) else { continue }
+            do {
+                try panelCoordinator.update(pluginID: id, metadata: descriptor.metadata,
+                    definitions: items, allowedKinds: descriptor.capabilities.panelKinds,
+                    sourceDefaultDescription: descriptor.plugin.metadata.defaultDescription)
+            } catch {
+                // Keep the last validated snapshot and its identity contract until
+                // the plugin publishes valid definitions or is actually unloaded.
+                AppLog.pluginHost.error("Invalid panel items for \(id, privacy: .public): \(String(describing: error), privacy: .public)")
             }
         }
-
-        cachedPanelStatesByID = panelStatesByID
-        cachedPrimaryPanelIndicatorsByID = primaryPanelIndicatorsByID
-        evaluatedPrimaryPanelIndicatorPluginIDs = evaluatedIndicatorPluginIDs
-        cachedPrimaryPanelCompactIndicatorsByID = primaryPanelCompactIndicatorsByID
-        evaluatedPrimaryPanelCompactIndicatorPluginIDs = evaluatedCompactIndicatorPluginIDs
-        cachedComponentStatesByID = componentStatesByID
-        self.primaryPanelIndicatorsByID = primaryPanelIndicatorsByID
-        self.primaryPanelCompactIndicatorsByID = primaryPanelCompactIndicatorsByID
-
-        let featurePanelOrderedDescriptors = visiblePluginDescriptors(for: .featurePanel, snapshot: descriptors)
-        let dashboardOrderedDescriptors = visiblePluginDescriptors(for: .dashboard, snapshot: descriptors)
-        let featurePanelHiddenDescriptors = hiddenPluginDescriptors(for: .featurePanel, snapshot: descriptors)
-        let dashboardHiddenDescriptors = hiddenPluginDescriptors(for: .dashboard, snapshot: descriptors)
-
-        availablePanelItems = (featurePanelOrderedDescriptors + featurePanelHiddenDescriptors).compactMap { descriptor in
-            guard descriptor.hasPrimaryPanel else {
-                return nil
-            }
-
-            let plugin = descriptor.plugin
-            let metadata = descriptor.metadata
-            guard
-                let primaryPanel = plugin.primaryPanel,
-                let state = panelStatesByID[metadata.id]
-            else {
-                return nil
-            }
-
-            guard state.isVisible else {
-                return nil
-            }
-
-            let description = localizedDescription(
-                state.errorMessage ?? state.subtitle,
-                pluginMetadata: plugin.metadata,
-                localizedMetadata: metadata
-            )
-            let descriptor = primaryPanel.primaryPanelDescriptor
-
-            return PluginPanelItem(
-                id: metadata.id,
-                title: metadata.title,
-                iconName: metadata.iconName,
-                iconTint: metadata.iconTint,
-                controlStyle: descriptor.controlStyle,
-                menuActionBehavior: descriptor.menuActionBehavior,
-                description: description.isEmpty ? metadata.defaultDescription : description,
-                helpText: description.isEmpty ? metadata.defaultDescription : description,
-                descriptionTone: state.errorMessage == nil ? .secondary : .error,
-                isOn: state.isOn,
-                isExpanded: state.isExpanded,
-                isEnabled: state.isEnabled,
-                detail: state.detail,
-                buttonActionID: descriptor.controlStyle == .button ? "execute" : nil,
-                buttonTitle: descriptor.buttonTitle
-            )
-        }
-
-        let visibleFeatureIDs = Set(featurePanelOrderedDescriptors.map { $0.metadata.id })
-        panelItems = availablePanelItems.filter { visibleFeatureIDs.contains($0.id) }
-
-        availableComponentItems = (dashboardOrderedDescriptors + dashboardHiddenDescriptors).compactMap { descriptor in
-            guard descriptor.hasComponentPanel else {
-                return nil
-            }
-
-            let plugin = descriptor.plugin
-            let metadata = descriptor.metadata
-            guard
-                let componentPanel = plugin.componentPanel,
-                let state = componentStatesByID[metadata.id]
-            else {
-                return nil
-            }
-
-            guard state.isVisible else {
-                return nil
-            }
-
-            let description = localizedDescription(
-                state.errorMessage ?? state.subtitle,
-                pluginMetadata: plugin.metadata,
-                localizedMetadata: metadata
-            )
-
-            return PluginComponentItem(
-                id: metadata.id,
-                title: metadata.title,
-                iconName: metadata.iconName,
-                iconTint: metadata.iconTint,
-                description: description.isEmpty ? metadata.defaultDescription : description,
-                helpText: description.isEmpty ? metadata.defaultDescription : description,
-                descriptionTone: state.errorMessage == nil ? .secondary : .error,
-                span: componentPanel.descriptor.span,
-                isActive: state.isActive,
-                isEnabled: state.isEnabled
-            )
-        }
-        let visibleComponentIDs = Set(dashboardOrderedDescriptors.map { $0.metadata.id })
-        componentItems = availableComponentItems.filter { visibleComponentIDs.contains($0.id) }
-        menuBarPanelContentCache.removeAll(keepingCapacity: true)
-        trimComponentViewCache(keeping: Set(componentItems.map(\.id)))
-        syncVisiblePanelSurfaces()
-
-        featureManagementItems = orderedDescriptors.compactMap { descriptor in
-            let metadata = descriptor.metadata
-            guard !descriptor.capabilities.supportedSurfaces.isEmpty else {
-                return nil
-            }
-            return PluginFeatureManagementItem(
-                id: metadata.id,
-                title: metadata.title,
-                description: metadata.defaultDescription,
-                iconName: metadata.iconName,
-                iconTint: metadata.iconTint,
-                isVisible: true,
-                isActive: (
-                    panelStatesByID[metadata.id]?.isOn == true
-                        || componentStatesByID[metadata.id]?.isActive == true
-                ),
-                presentation: presentation(for: descriptor),
-                category: dynamicPluginCategoriesByID[metadata.id] ?? nil,
-                releaseChannel: dynamicPluginReleaseChannelsByID[metadata.id] ?? nil
-            )
-        }
-
-        dashboardLayoutItems = dashboardOrderedDescriptors.map { descriptor in
-            surfaceLayoutItem(
-                for: descriptor,
-                surface: .dashboard,
-                isVisible: true,
-                panelStatesByID: panelStatesByID,
-                componentStatesByID: componentStatesByID
-            )
-        }
-        dashboardHiddenLayoutItems = dashboardHiddenDescriptors.map { descriptor in
-            surfaceLayoutItem(
-                for: descriptor,
-                surface: .dashboard,
-                isVisible: false,
-                panelStatesByID: panelStatesByID,
-                componentStatesByID: componentStatesByID
-            )
-        }
-        featurePanelLayoutItems = featurePanelOrderedDescriptors.map { descriptor in
-            surfaceLayoutItem(
-                for: descriptor,
-                surface: .featurePanel,
-                isVisible: true,
-                panelStatesByID: panelStatesByID,
-                componentStatesByID: componentStatesByID
-            )
-        }
-        featurePanelHiddenLayoutItems = featurePanelHiddenDescriptors.map { descriptor in
-            surfaceLayoutItem(
-                for: descriptor,
-                surface: .featurePanel,
-                isVisible: false,
-                panelStatesByID: panelStatesByID,
-                componentStatesByID: componentStatesByID
-            )
-        }
-
+        synchronizePanelLayout(pluginOrder: orderedDescriptors.map(\.metadata.id))
         let missingPermissionCardIDs = rebuildPermissionProjections(plugins: orderedDescriptors.map(\.plugin))
 
         synchronizeActionRegistry(descriptors: orderedDescriptors)
@@ -4116,8 +3467,12 @@ final class PluginHost: ObservableObject {
         }
         trimSettingsViewCache(keeping: Set(pluginSettingsItems.map(\.id)))
 
-        let newHasActivePlugin = panelStatesByID.contains { $0.value.isOn }
-            || componentStatesByID.contains { $0.value.isActive }
+        let newHasActivePlugin = panelCoordinator.catalog.contains {
+            switch $0.definition.content {
+            case .row(let row): row.state.isOn
+            case .widget(let widget): widget.state.isActive
+            }
+        }
         if hasActivePlugin != newHasActivePlugin {
             hasActivePlugin = newHasActivePlugin
         }
@@ -5018,10 +4373,7 @@ final class PluginHost: ObservableObject {
         shortcutDefinitionRevision &+= 1
         isolatedPluginFailures[pluginID] = message
         menuBarIconCoordinator.unregister(pluginID: pluginID, reason: .disabled)
-        removePluginFromVisiblePanelSurfaces(pluginID, notify: false)
-        cachedPanelStatesByID.removeValue(forKey: pluginID)
-        cachedComponentStatesByID.removeValue(forKey: pluginID)
-        componentViewCache.removeValue(forKey: pluginID)
+        panelCoordinator.removePlugin(pluginID)
         settingsViewCache = settingsViewCache.filter { $0.key.pluginID != pluginID }
         shortcutErrors = shortcutErrors.filter { !$0.key.hasPrefix("\(pluginID).shortcut.") }
 
@@ -5059,7 +4411,6 @@ final class PluginHost: ObservableObject {
         }
         (plugin as? any PluginSettingsPresenting)?.requestSettingsPresentation = nil
         (plugin as? any PluginDashboardPresenting)?.requestDashboardPresentation = nil
-        (plugin as? any PluginComponentDetailPresenting)?.requestComponentDetailPresentation = nil
         (plugin as? any ActionGridHostContextConsuming)?.actionGridHostContext = nil
         (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionHostContext = nil
         (plugin as? any PluginActionExecutionHostContextConsuming)?.actionExecutionHostContext = nil
@@ -5248,37 +4599,6 @@ final class PluginHost: ObservableObject {
         }
     }
 
-    private func surfaceLayoutItem(
-        for descriptor: PluginDescriptor,
-        surface: PluginDisplaySurface,
-        isVisible: Bool,
-        panelStatesByID: [String: PluginPanelState],
-        componentStatesByID: [String: PluginComponentState]
-    ) -> PluginSurfaceLayoutItem {
-        let metadata = descriptor.metadata
-        let isActive: Bool
-        switch surface {
-        case .dashboard:
-            isActive = componentStatesByID[metadata.id]?.isActive == true
-        case .featurePanel:
-            isActive = panelStatesByID[metadata.id]?.isOn == true
-        }
-        return PluginSurfaceLayoutItem(
-            id: metadata.id,
-            title: metadata.title,
-            description: metadata.defaultDescription,
-            iconName: metadata.iconName,
-            iconTint: metadata.iconTint,
-            capabilities: descriptor.capabilities,
-            isVisible: isVisible,
-            isActive: isActive,
-            canUninstall: dynamicPluginManifestsByID[metadata.id] != nil,
-            removesDataOnUninstall: dynamicPluginManifestsByID[metadata.id]?
-                .effectiveUninstallDataPolicy == .removePrivateData,
-            category: dynamicPluginCategoriesByID[metadata.id] ?? nil,
-            releaseChannel: dynamicPluginReleaseChannelsByID[metadata.id] ?? nil
-        )
-    }
 
     private func shortcutDescriptors(from descriptors: [PluginDescriptor]? = nil) -> [ShortcutDescriptor] {
         (descriptors ?? orderedPluginDescriptors()).filter { !isPluginIsolated($0.plugin) }.flatMap { descriptor in
@@ -5316,14 +4636,9 @@ final class PluginHost: ObservableObject {
         defaultPluginDescriptors().map(\.metadata.id)
     }
 
-    private func defaultPluginIDs(for surface: PluginDisplaySurface) -> [String] {
-        defaultPluginDescriptors()
-            .filter { $0.capabilities.supportedSurfaces.contains(surface) }
-            .map(\.metadata.id)
-    }
 
     private func orderedPluginIDs() -> [String] {
-        pluginDisplayPreferencesStore.orderedPluginIDs(defaultPluginIDs: defaultPluginIDs)
+        pluginOrderingStore.orderedPluginIDs(defaultPluginIDs: defaultPluginIDs)
     }
 
     private func orderedPlugins() -> [any MacToolsPlugin] {
@@ -5344,47 +4659,12 @@ final class PluginHost: ObservableObject {
         let descriptors = defaultPluginDescriptors()
         return PluginDescriptorSnapshot(
             defaults: descriptors,
-            orderedIDs: pluginDisplayPreferencesStore.orderedPluginIDs(
+            orderedIDs: pluginOrderingStore.orderedPluginIDs(
                 defaultPluginIDs: descriptors.map(\.metadata.id)
             )
         )
     }
 
-    private func visiblePluginDescriptors(
-        for surface: PluginDisplaySurface,
-        snapshot: PluginDescriptorSnapshot
-    ) -> [PluginDescriptor] {
-        let defaultIDs = snapshot.defaults.filter {
-            !isPluginIsolated($0.plugin) && $0.capabilities.supportedSurfaces.contains(surface)
-        }.map(\.metadata.id)
-        return pluginDisplayPreferencesStore.visiblePluginIDs(for: surface, defaultPluginIDs: defaultIDs)
-            .compactMap { snapshot.byID[$0] }
-    }
-
-    private func hiddenPluginDescriptors(
-        for surface: PluginDisplaySurface,
-        snapshot: PluginDescriptorSnapshot
-    ) -> [PluginDescriptor] {
-        let defaultIDs = snapshot.defaults.filter {
-            !isPluginIsolated($0.plugin) && $0.capabilities.supportedSurfaces.contains(surface)
-        }.map(\.metadata.id)
-        return pluginDisplayPreferencesStore.hiddenPluginIDs(for: surface, defaultPluginIDs: defaultIDs)
-            .compactMap { snapshot.byID[$0] }
-    }
-
-    private func visiblePluginIDs(for surface: PluginDisplaySurface) -> [String] {
-        pluginDisplayPreferencesStore.visiblePluginIDs(
-            for: surface,
-            defaultPluginIDs: defaultPluginIDs(for: surface)
-        )
-    }
-
-    private func hiddenPluginIDs(for surface: PluginDisplaySurface) -> [String] {
-        pluginDisplayPreferencesStore.hiddenPluginIDs(
-            for: surface,
-            defaultPluginIDs: defaultPluginIDs(for: surface)
-        )
-    }
 
     private func pluginsByID() -> [String: any MacToolsPlugin] {
         activePlugins.reduce(into: [String: any MacToolsPlugin]()) { result, plugin in
@@ -5442,193 +4722,26 @@ final class PluginHost: ObservableObject {
         )
     }
 
-    private func localizedDescription(
-        _ description: String,
-        pluginMetadata: PluginMetadata,
-        localizedMetadata: PluginMetadata
-    ) -> String {
-        // Replace only the metadata default; panel-specific descriptions and
-        // errors must remain intact even if their text happens to be localized.
-        description == pluginMetadata.defaultDescription
-            ? localizedMetadata.defaultDescription
-            : description
-    }
-
     private func builtInCapabilities(for plugin: any MacToolsPlugin) -> PluginHostCapabilities {
-        if let cachedCapabilities = builtInCapabilitiesByID[plugin.metadata.id] {
-            return cachedCapabilities
-        }
-
-        let capabilities = PluginHostCapabilities(
-            supportsDashboard: plugin.componentPanel != nil,
-            supportsFeaturePanel: plugin.primaryPanel != nil,
-            settingsLayout: plugin.settingsPage?.body.layout
-        )
+        if let cached = builtInCapabilitiesByID[plugin.metadata.id] { return cached }
+        let capabilities = PluginHostCapabilities(panelKinds: Set(PluginPanelItemKind.allCases),
+                                                  settingsLayout: plugin.settingsPage?.body.layout)
         builtInCapabilitiesByID[plugin.metadata.id] = capabilities
         return capabilities
     }
 
     private func dynamicCapabilities(for plugin: any MacToolsPlugin) -> PluginHostCapabilities {
-        if let cachedCapabilities = dynamicResolvedCapabilitiesByID[plugin.metadata.id] {
-            return cachedCapabilities
-        }
-
-        guard let declared = dynamicPluginCapabilitiesByID[plugin.metadata.id] else {
-            let capabilities = PluginHostCapabilities(
-                supportsDashboard: plugin.componentPanel != nil,
-                supportsFeaturePanel: plugin.primaryPanel != nil,
-                settingsLayout: plugin.settingsPage?.body.layout
-            )
-            dynamicResolvedCapabilitiesByID[plugin.metadata.id] = capabilities
-            return capabilities
-        }
-
-        let runtimeSupportsFeaturePanel = plugin.primaryPanel != nil
-        let runtimeSupportsDashboard = plugin.componentPanel != nil
-        let hasPanelMismatch = declared.primaryPanel != runtimeSupportsFeaturePanel
-            || declared.componentPanel != runtimeSupportsDashboard
-
-        if hasPanelMismatch,
-           loggedCapabilityMismatchPluginIDs.insert(plugin.metadata.id).inserted {
-            AppLog.pluginHost.warning(
-                "Plugin \(plugin.metadata.id, privacy: .public) panel capability mismatch; declared primary=\(declared.primaryPanel, privacy: .public), component=\(declared.componentPanel, privacy: .public), runtime primary=\(runtimeSupportsFeaturePanel, privacy: .public), component=\(runtimeSupportsDashboard, privacy: .public)"
-            )
-        }
-
+        if let cached = dynamicResolvedCapabilitiesByID[plugin.metadata.id] { return cached }
+        let declared = dynamicPluginCapabilitiesByID[plugin.metadata.id]
         let capabilities = PluginHostCapabilities(
-            supportsDashboard: declared.componentPanel && runtimeSupportsDashboard,
-            supportsFeaturePanel: declared.primaryPanel && runtimeSupportsFeaturePanel,
-            settingsLayout: declared.settings.layout
-        )
+            panelKinds: Set(declared?.panelItems ?? PluginPanelItemKind.allCases),
+            settingsLayout: declared.map { $0.settings.layout } ?? plugin.settingsPage?.body.layout)
         dynamicResolvedCapabilitiesByID[plugin.metadata.id] = capabilities
         return capabilities
     }
 
-    private func presentation(for descriptor: PluginDescriptor) -> PluginFeaturePresentation {
-        switch (
-            descriptor.capabilities.supportsFeaturePanel,
-            descriptor.capabilities.supportsDashboard
-        ) {
-        case (true, true):
-            return .featureAndComponentPanel
-        case (true, false):
-            return .featurePanel
-        case (false, true):
-            return .componentPanel
-        case (false, false):
-            assertionFailure("Settings-only plugins do not have a panel presentation")
-            return .featurePanel
-        }
-    }
+    private func hideAllPanelItems() { panelCoordinator.setVisiblePanel(nil) }
 
-    private func trimComponentViewCache(keeping visibleComponentIDs: Set<String>) {
-        componentViewCache = componentViewCache.filter { visibleComponentIDs.contains($0.key) }
-    }
-
-    private func pluginIDs(for surface: PluginPanelSurface) -> Set<String> {
-        if let panelID = visibleMenuBarPanelID {
-            return surface == .component
-                ? Set(componentItems(in: panelID).map(\.id))
-                : Set(panelItems(in: panelID).map(\.id))
-        }
-        switch surface {
-        case .component:
-            return Set(componentItems.map(\.id))
-        case .primary:
-            return Set(panelItems.map(\.id))
-        }
-    }
-
-    private func syncVisiblePanelSurfaces() {
-        guard !isSynchronizingPanelSurfaces else { return }
-        isSynchronizingPanelSurfaces = true
-        defer { isSynchronizingPanelSurfaces = false }
-
-        // Record each delivered transition before calling the plugin. Callbacks
-        // may refresh, remove an entry, or close the panel synchronously; derive
-        // the next transition again instead of delivering a stale notification.
-        while true {
-            var desired: [PluginPanelSurface: Set<String>] = [:]
-            for surface in visiblePanelSurfaces {
-                desired[surface] = pluginIDs(for: surface).filter { id in
-                    corePlugin(for: id).map { !isPluginIsolated($0) } ?? false
-                }
-            }
-
-            // Acquire consumers before releasing them when changing surfaces.
-            if let (surface, id) = PluginPanelSurface.allCases.lazy.compactMap({ surface in
-                desired[surface, default: []].subtracting(self.visiblePanelSurfacePluginIDs[surface, default: []])
-                    .first.map { (surface, $0) }
-            }).first {
-                visiblePanelSurfacePluginIDs[surface, default: []].insert(id)
-                notifyPanelSurfaceVisible(surface, pluginID: id)
-            } else if let (surface, id) = PluginPanelSurface.allCases.lazy.compactMap({ surface in
-                self.visiblePanelSurfacePluginIDs[surface, default: []].subtracting(desired[surface, default: []])
-                    .first.map { (surface, $0) }
-            }).first {
-                visiblePanelSurfacePluginIDs[surface]?.remove(id)
-                if visiblePanelSurfacePluginIDs[surface]?.isEmpty == true {
-                    visiblePanelSurfacePluginIDs.removeValue(forKey: surface)
-                }
-                notifyPanelSurfaceHidden(surface, pluginID: id)
-            } else {
-                return
-            }
-        }
-    }
-
-    private func hideAllPanelSurfaces() {
-        visiblePanelSurfaces.removeAll()
-        syncVisiblePanelSurfaces()
-    }
-
-    private func notifyPanelSurfaceVisible(_ surface: PluginPanelSurface, pluginID: String) {
-        guard
-            let plugin = corePlugin(for: pluginID),
-            let lifecycleHandler = plugin as? any PluginPanelSurfaceLifecycleHandling
-        else {
-            return
-        }
-
-        guardPluginCall(plugin, operation: "show \(surface) panel surface") {
-            lifecycleHandler.panelSurfaceDidBecomeVisible(surface)
-        }
-    }
-
-    private func notifyPanelSurfaceHidden(_ surface: PluginPanelSurface, pluginID: String) {
-        guard
-            let plugin = corePlugin(for: pluginID),
-            let lifecycleHandler = plugin as? any PluginPanelSurfaceLifecycleHandling
-        else {
-            return
-        }
-
-        guardPluginCall(plugin, operation: "hide \(surface) panel surface") {
-            lifecycleHandler.panelSurfaceDidBecomeHidden(surface)
-        }
-    }
-
-    private func removePluginFromVisiblePanelSurfaces(_ pluginID: String, notify: Bool) {
-        for surface in PluginPanelSurface.allCases {
-            guard var pluginIDs = visiblePanelSurfacePluginIDs[surface] else {
-                continue
-            }
-
-            guard pluginIDs.remove(pluginID) != nil else {
-                continue
-            }
-
-            if pluginIDs.isEmpty {
-                visiblePanelSurfacePluginIDs.removeValue(forKey: surface)
-            } else {
-                visiblePanelSurfacePluginIDs[surface] = pluginIDs
-            }
-
-            if notify {
-                notifyPanelSurfaceHidden(surface, pluginID: pluginID)
-            }
-        }
-    }
 
     private func trimSettingsViewCache(keeping settingsPluginIDs: Set<String>) {
         settingsViewCache = settingsViewCache.filter {
@@ -6732,76 +5845,41 @@ final class PluginHost: ObservableObject {
 
 struct MenuBarPanelContentSnapshot {
     let entries: [MenuBarPanelEntry]
-    let components: [PluginComponentItem]
-    let features: [PluginPanelItem]
+    let components: [PluginPanelWidgetSnapshot]
+    let features: [PluginPanelRowSnapshot]
 }
 
 extension PluginHost {
     var visibleMenuBarPanels: [MenuBarPanelDefinition] { menuBarPanels.filter { !$0.isHidden } }
 
-    func panelItems(in panelID: String) -> [PluginPanelItem] {
-        panelContentSnapshot(in: panelID).features
-    }
-
-    func componentItems(in panelID: String) -> [PluginComponentItem] {
-        panelContentSnapshot(in: panelID).components
-    }
-
-    func panelLayoutItems(in panelID: String, surface: PluginDisplaySurface, hidden: Bool = false) -> [PluginSurfaceLayoutItem] {
-        let items = switch (surface, hidden) {
-        case (.dashboard, false): dashboardLayoutItems
-        case (.dashboard, true): dashboardHiddenLayoutItems
-        case (.featurePanel, false): featurePanelLayoutItems
-        case (.featurePanel, true): featurePanelHiddenLayoutItems
-        }
-        let lookup = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
-        return menuBarPanelStore.configuration.orderedIDs(
-            items.map(\.id), surface: surface, panelID: panelID
-        ).compactMap { lookup[$0] }
-    }
-
-    func panelID(pluginID: String, surface: PluginDisplaySurface) -> String {
-        menuBarPanelStore.configuration.panelID(pluginID: pluginID, surface: surface)
-    }
-
-    func panelEntries(in panelID: String) -> [MenuBarPanelEntry] {
-        panelContentSnapshot(in: panelID).entries
-    }
+    func panelItems(in panelID: String) -> [PluginPanelRowSnapshot] { panelContentSnapshot(in: panelID).features }
+    func componentItems(in panelID: String) -> [PluginPanelWidgetSnapshot] { panelContentSnapshot(in: panelID).components }
+    func panelEntries(in panelID: String) -> [MenuBarPanelEntry] { panelContentSnapshot(in: panelID).entries }
 
     func panelContentSnapshot(in panelID: String) -> MenuBarPanelContentSnapshot {
         if let cached = menuBarPanelContentCache[panelID] { return cached }
-        let entries = self.componentItems.map { MenuBarPanelEntry(pluginID: $0.id, surface: .dashboard) }
-            + self.panelItems.map { MenuBarPanelEntry(pluginID: $0.id, surface: .featurePanel) }
-        let ordered = menuBarPanelStore.configuration.orderedEntries(entries, panelID: panelID)
-        let components = Dictionary(uniqueKeysWithValues: self.componentItems.map { ($0.id, $0) })
-        let features = Dictionary(uniqueKeysWithValues: self.panelItems.map { ($0.id, $0) })
-        var seen: Set<String> = []
-        var componentItems: [PluginComponentItem] = []
-        var panelItems: [PluginPanelItem] = []
-        for entry in ordered where seen.insert(entry.templateID).inserted {
-            switch entry.surface {
-            case .dashboard: if let item = components[entry.pluginID] { componentItems.append(item) }
-            case .featurePanel: if let item = features[entry.pluginID] { panelItems.append(item) }
-            }
-        }
-        let snapshot = MenuBarPanelContentSnapshot(entries: ordered, components: componentItems, features: panelItems)
+        let resolved = panelCoordinator.snapshot(in: panelID)
+        let snapshot = MenuBarPanelContentSnapshot(entries: resolved.map(\.entry),
+            components: resolved.compactMap { panelCoordinator.widgetSnapshot($0.item, id: $0.id) },
+            features: resolved.compactMap { panelCoordinator.rowSnapshot($0.item, id: $0.id) })
         menuBarPanelContentCache[panelID] = snapshot
         return snapshot
     }
 
-    func panelLayoutEntries(in panelID: String, hidden: Bool = false) -> [MenuBarPanelLayoutEntry] {
-        let items = (hidden ? dashboardHiddenLayoutItems : dashboardLayoutItems).map {
-            MenuBarPanelLayoutEntry(item: $0, surface: .dashboard)
-        } + (hidden ? featurePanelHiddenLayoutItems : featurePanelLayoutItems).map {
-            MenuBarPanelLayoutEntry(item: $0, surface: .featurePanel)
-        }
-        let lookup = Dictionary(uniqueKeysWithValues: items.map { ($0.id, $0) })
-        return menuBarPanelStore.configuration.orderedEntries(items.map(\.entry), panelID: panelID)
-            .compactMap { entry in
-                guard var item = lookup[entry.templateID] else { return nil }
-                item.instanceID = entry.instanceID
-                return item
-            }
+    func panelLayoutEntries(in panelID: String) -> [MenuBarPanelLayoutEntry] {
+        panelCoordinator.snapshot(in: panelID).map { MenuBarPanelLayoutEntry(item: $0.item, entry: $0.entry) }
+    }
+
+    func rowIndicator(for id: String) -> PluginPanelRowIndicator? {
+        guard let item = panelCoordinator.item(for: id),
+              case let .row(row) = item.definition.content else { return nil }
+        return row.state.indicator
+    }
+
+    func rowCompactIndicator(for id: String) -> PluginPanelRowCompactIndicator? {
+        guard let item = panelCoordinator.item(for: id),
+              case let .row(row) = item.definition.content else { return nil }
+        return row.state.compactIndicator
     }
 
     @discardableResult
@@ -6836,102 +5914,57 @@ extension PluginHost {
 
     var lastSelectedMenuBarPanelID: String { menuBarPanelStore.lastSelectedPanelID }
 
-    func rememberMenuBarPanelSelection(id: String) {
-        menuBarPanelStore.rememberSelection(id: id)
-    }
+    func rememberMenuBarPanelSelection(id: String) { menuBarPanelStore.rememberSelection(id: id) }
 
     @discardableResult
     func restoreDefaultMenuBarPanelLayout() -> String? {
         let retiredActionIDs = Set(menuBarPanels.filter { !$0.isDefault }.map {
             panelActionReference(id: $0.id).key.actionID
         })
-        // Remove all custom-panel shortcuts in one write before changing the layout.
         if !retiredActionIDs.isEmpty,
            case let .failure(error) = shortcutAssignmentService.removeRetiredAssignments(
-               providerID: "mactools", actionIDs: retiredActionIDs)
-        {
+               providerID: "mactools", actionIDs: retiredActionIDs) {
             return error.localizedDescription
         }
-        menuBarPanelStore.replace(MenuBarPanelConfiguration())
-        for surface in PluginDisplaySurface.allCases {
-            pluginDisplayPreferencesStore.resetOrder(for: surface, defaultPluginIDs: defaultPluginIDs(for: surface))
-        }
-        panelConfigurationDidChange(refreshDisplayPreferences: true)
+        menuBarPanelStore.replace(MenuBarPanelConfiguration(), replacingUnreadable: true)
+        panelConfigurationDidChange()
         return nil
     }
 
-    func assignPanelEntry(pluginID: String, surface: PluginDisplaySurface, to panelID: String) {
-        guard defaultPluginIDs(for: surface).contains(pluginID),
-              menuBarPanels.contains(where: { $0.id == panelID }),
-              self.panelID(pluginID: pluginID, surface: surface) != panelID else { return }
-        let entries = PluginDisplaySurface.allCases.flatMap { surface in
-            pluginDisplayPreferencesStore.orderedPluginIDs(
-                for: surface, defaultPluginIDs: defaultPluginIDs(for: surface)
-            ).map { MenuBarPanelEntry(pluginID: $0, surface: surface) }
-        }
-        let destination = menuBarPanelStore.configuration.orderedEntries(entries, panelID: panelID)
-        menuBarPanelStore.assign(pluginID: pluginID, surface: surface, to: panelID, destinationOrder: destination)
-        panelConfigurationDidChange()
-    }
-
-    /// Every addition creates an independent display instance, leaving existing entries in place.
     @discardableResult
-    func addPanelEntry(_ entry: MenuBarPanelEntry, to panelID: String) -> Bool {
-        let available = entry.surface == .dashboard
-            ? availableComponentItems.contains { $0.id == entry.pluginID }
-            : availablePanelItems.contains { $0.id == entry.pluginID }
-        guard available, visibleMenuBarPanels.contains(where: { $0.id == panelID }) else { return false }
-        let wasVisible = entry.surface == .dashboard
-            ? componentItems.contains { $0.id == entry.pluginID }
-            : panelItems.contains { $0.id == entry.pluginID }
-        guard menuBarPanelStore.addInstance(of: entry, to: panelID,
-            visibleOrder: panelEntries(in: panelID), suppressDefault: !wasVisible) != nil else { return false }
-        pluginDisplayPreferencesStore.setPluginVisible(true, pluginID: entry.pluginID, on: entry.surface,
-            defaultPluginIDs: defaultPluginIDs(for: entry.surface))
-        panelConfigurationDidChange(refreshDisplayPreferences: !wasVisible)
+    func addPanelItem(_ key: PluginPanelItemKey, to panelID: String) -> Bool {
+        guard panelCoordinator.item(for: key)?.isAvailable == true,
+              visibleMenuBarPanels.contains(where: { $0.id == panelID }),
+              menuBarPanelStore.addItem(key, to: panelID) != nil else { return false }
+        panelConfigurationDidChange()
         return true
     }
 
     @discardableResult
     func removePanelEntry(_ entry: MenuBarPanelEntry, from panelID: String) -> Bool {
         guard panelEntries(in: panelID).contains(entry) else { return false }
-        menuBarPanelStore.removeEntry(entry)
+        menuBarPanelStore.removePlacement(id: entry.placement.id)
         panelConfigurationDidChange()
         return true
     }
 
-    func movePanelEntry(pluginID: String, surface: PluginDisplaySurface, panelID: String, toOffset: Int, hidden: Bool = false) {
-        movePanelEntry(MenuBarPanelEntry(pluginID: pluginID, surface: surface), panelID: panelID, toOffset: toOffset, hidden: hidden)
-    }
-
-    func movePanelEntry(_ entry: MenuBarPanelEntry, panelID: String, toOffset: Int, hidden: Bool = false) {
-        var entries = hidden ? panelLayoutEntries(in: panelID, hidden: true).map(\.entry) : panelEntries(in: panelID)
+    func movePanelEntry(_ entry: MenuBarPanelEntry, panelID: String, toOffset: Int) {
+        var entries = panelEntries(in: panelID)
         guard let index = entries.firstIndex(of: entry) else { return }
         entries.move(fromOffsets: IndexSet(integer: index), toOffset: min(max(toOffset, 0), entries.count))
-        let baseline = PluginDisplaySurface.allCases.flatMap { surface in
-            pluginDisplayPreferencesStore.orderedPluginIDs(for: surface, defaultPluginIDs: defaultPluginIDs(for: surface))
-                .map { MenuBarPanelEntry(pluginID: $0, surface: surface) }
-        }
-        menuBarPanelStore.setOrder(entries, panelID: panelID, preserving:
-            menuBarPanelStore.configuration.orderedEntries(baseline, panelID: panelID))
+        menuBarPanelStore.setOrder(entries.map(\.placement.id), panelID: panelID)
         panelConfigurationDidChange()
     }
 
-    /// Persist assignment and insertion order together, so observers never see an intermediate layout.
     func transferPanelEntry(_ entry: MenuBarPanelEntry, from source: String, to destination: String,
                             at offset: Int) -> MenuBarPanelLayoutChange? {
         guard source != destination, panelEntries(in: source).contains(entry),
               visibleMenuBarPanels.contains(where: { $0.id == destination }) else { return nil }
         var visible = panelEntries(in: destination)
-        guard !visible.contains(entry) else { return nil }
         visible.insert(entry, at: min(max(offset, 0), visible.count))
-        let baseline = PluginDisplaySurface.allCases.flatMap { surface in
-            pluginDisplayPreferencesStore.orderedPluginIDs(for: surface, defaultPluginIDs: defaultPluginIDs(for: surface))
-                .map { MenuBarPanelEntry(pluginID: $0, surface: surface) }
-        }
         let before = menuBarPanelStore.configuration
-        menuBarPanelStore.assign(entry, to: destination,
-            destinationOrder: before.orderedEntries(baseline, panelID: destination), visibleOrder: visible)
+        menuBarPanelStore.movePlacement(id: entry.placement.id, to: destination,
+                                        visibleOrder: visible.map(\.placement.id))
         let change = MenuBarPanelLayoutChange(before: before, after: menuBarPanelStore.configuration)
         guard change.before != change.after else { return nil }
         panelConfigurationDidChange()
@@ -6944,16 +5977,14 @@ extension PluginHost {
 
     @discardableResult
     func undoPanelLayoutChange(_ change: MenuBarPanelLayoutChange) -> Bool {
-        guard canUndoPanelLayoutChange(change) else { return false }
-        menuBarPanelStore.replace(change.before)
+        guard canUndoPanelLayoutChange(change), menuBarPanelStore.replace(change.before) else { return false }
         panelConfigurationDidChange()
         return true
     }
 
     func setVisibleMenuBarPanel(_ panelID: String?) {
         visibleMenuBarPanelID = panelID
-        visiblePanelSurfaces = panelID == nil ? [] : Set(PluginPanelSurface.allCases)
-        syncVisiblePanelSurfaces()
+        panelCoordinator.setVisiblePanel(panelID)
     }
 
     func panelActionReference(id: String) -> ActionReference {
@@ -6966,21 +5997,37 @@ extension PluginHost {
         return ActionReference(key: ActionKey(providerID: "mactools", actionID: actionID))
     }
 
-    private func panelConfigurationDidChange(refreshDisplayPreferences: Bool = false) {
+    private func synchronizePanelLayout(pluginOrder: [String]? = nil) {
+        panelCoordinator.onLayoutChange = { [weak self] in
+            guard let self else { return }
+            self.menuBarPanelContentCache.removeAll(keepingCapacity: true)
+            self.menuBarPanelContentDidChange.send()
+        }
+        panelCoordinator.invoke = { [weak self] id, action in
+            guard let self, let plugin = self.corePlugin(for: id), !self.isPluginIsolated(plugin) else { return }
+            self.guardPluginCall(plugin, operation: "panel item callback", action)
+        }
+        let order = pluginOrder ?? orderedPluginIDs()
+        menuBarPanelStore.reconcile(panelCoordinator.initialPlacements(pluginOrder: order),
+                                   discoveredPluginIDs: Set(order.filter { panelCoordinator.hasSnapshot(for: $0) }))
+        menuBarPanelContentCache.removeAll(keepingCapacity: true)
+        panelCoordinator.synchronize(configuration: menuBarPanelStore.configuration,
+                                    pluginOrder: order, visiblePanelID: visibleMenuBarPanelID)
+    }
+
+    private func panelConfigurationDidChange() {
         let panels = menuBarPanelStore.configuration.displayPanels
-        if panels != menuBarPanels || refreshDisplayPreferences {
-            menuBarPanels = panels
-            if let visibleID = visibleMenuBarPanelID,
-               !panels.contains(where: { $0.id == visibleID && !$0.isHidden }) {
-                visibleMenuBarPanelID = panels.first(where: { !$0.isHidden })?.id
-            }
+        let containersChanged = panels != menuBarPanels
+        if containersChanged { menuBarPanels = panels }
+        if let visibleID = visibleMenuBarPanelID,
+           !panels.contains(where: { $0.id == visibleID && !$0.isHidden }) {
+            visibleMenuBarPanelID = panels.first(where: { !$0.isHidden })?.id
+        }
+        if containersChanged {
             rebuildDerivedState(dirtyPluginIDs: [], synchronizingShortcuts: true)
         } else {
-            // Moving/removing an instance changes presentation, not permissions,
-            // action registrations, plugin settings, or background activation.
             objectWillChange.send()
-            menuBarPanelContentCache.removeAll(keepingCapacity: true)
-            syncVisiblePanelSurfaces()
+            synchronizePanelLayout()
             menuBarPanelContentDidChange.send()
         }
     }

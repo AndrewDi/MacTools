@@ -2,6 +2,10 @@
 
 Display Volume adjusts external-display audio through DDC/CI VCP `0x62` on Apple Silicon. Its panel provides per-display sliders; shortcuts can follow the mouse or target all available displays. It requires a compatible display and connection with DDC/CI enabled.
 
+## Panel integration
+
+The plugin requires PluginKit 7 and host 1.3.1 or later. It declares a stable `control` row through `panelItems`, initially placed in the feature panel. The row starts collapsed; the host owns expansion for each placement and requests slider details through the row action. Snapshot reads never reset that demand. The plugin remains row-only because per-display sliders need the full detail layout; shortcuts, canonical actions, and settings keep their existing identifiers.
+
 ## Reading and writing
 
 - `DDCVolumeBackend.cachedVolume` returns an existing snapshot without hardware I/O. A saved zero is preserved; missing or invalid saved values start at 15%.

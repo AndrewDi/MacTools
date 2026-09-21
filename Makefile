@@ -114,7 +114,7 @@ ci: generate
 		-maximum-test-execution-time-allowance 120 \
 		test \
 		-quiet
-	@./scripts/plugins/verify-plugin-kit-v6-binary-compatibility.sh "$(abspath $(DEBUG_BUILD_PRODUCTS_DIR))"
+	@./scripts/plugins/verify-plugin-kit-v7-binary-compatibility.sh "$(abspath $(DEBUG_BUILD_PRODUCTS_DIR))"
 
 sync-debug-plugins: build
 	@if [ -n "$(PLUGIN)" ]; then \

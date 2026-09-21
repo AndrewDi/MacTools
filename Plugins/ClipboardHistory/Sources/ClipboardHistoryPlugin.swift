@@ -21,19 +21,26 @@ private struct ClipboardHistoryPluginProvider: PluginProvider {
 
 @MainActor
 final class ClipboardHistoryPlugin:
-    MacToolsPlugin,
-    PluginPrimaryPanel,
-    PluginActionProviding,
-    PluginGroupedShortcutSettingsProviding,
-    PluginShortcutSettingsGroupPresentationProviding,
-    PluginShortcutBindingValidating,
-    PluginInlineShortcutSettingsContextConsuming,
-    PluginShortcutResetRequesting,
-    PluginWindowLayoutTargetProviding,
-    PluginSettingsPresenting,
-    AccessibilityPermissionRefreshing,
-    DisplayTopologyRefreshing
-{
+    MacToolsPlugin, PluginActionProviding, PluginGroupedShortcutSettingsProviding, PluginShortcutSettingsGroupPresentationProviding, PluginShortcutBindingValidating, PluginInlineShortcutSettingsContextConsuming, PluginShortcutResetRequesting, PluginWindowLayoutTargetProviding, PluginSettingsPresenting, AccessibilityPermissionRefreshing, DisplayTopologyRefreshing {
+    var panelItems: [PluginPanelItem] {
+        let state = rowState
+        let descriptor = rowDescriptor
+        return [
+            .row(id: "control", initialPlacement: .featurePanel,
+                 descriptor: descriptor, state: state,
+                 action: { [weak self] in self?.handleAction($0) }),
+            .iconWidget(
+                id: "quick-control",
+                title: localization.string("metadata.title", defaultValue: metadata.title),
+                systemImage: metadata.iconName,
+                control: .button,
+                state: state,
+                menuActionBehavior: descriptor.menuActionBehavior,
+                action: { [weak self] in self?.handleAction($0) }
+            ),
+        ]
+    }
+
     static let pluginID = "clipboard"
     static let pluginOrder = 125
 
@@ -98,7 +105,7 @@ final class ClipboardHistoryPlugin:
     }
 
     let metadata: PluginMetadata
-    let primaryPanelDescriptor: PluginPrimaryPanelDescriptor
+    let rowDescriptor: PluginPanelRowDescriptor
     let controller: ClipboardHistoryController
     let savedLibraryController: ClipboardSavedLibraryController
 
@@ -551,7 +558,7 @@ final class ClipboardHistoryPlugin:
                 defaultValue: "搜索历史记录并管理可重复使用的片段和已存项目"
             )
         )
-        self.primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+        self.rowDescriptor = PluginPanelRowDescriptor(
             controlStyle: .button,
             menuActionBehavior: .dismissBeforeHandling,
             buttonTitleProvider: {
@@ -744,7 +751,7 @@ final class ClipboardHistoryPlugin:
         }
     }
 
-    var primaryPanelState: PluginPanelState {
+    var rowState: PluginPanelRowState {
         let subtitle: String
         if let errorMessage = controller.errorMessage {
             subtitle = errorMessage
@@ -762,12 +769,11 @@ final class ClipboardHistoryPlugin:
                 controller.savedItemCount + savedLibraryController.items.count
             )
         }
-        return PluginPanelState(
+        return PluginPanelRowState(
             subtitle: subtitle,
             isOn: !settingsStore.isPaused && controller.isCollectionOperational,
-            isExpanded: false,
             isEnabled: controller.isLoaded,
-            isVisible: true,
+            isAvailable: true,
             detail: nil,
             errorMessage: controller.errorMessage
         )

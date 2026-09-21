@@ -2,6 +2,7 @@
 // plugins and user data. The runner appends the unmodified production UI sources.
 import AppKit
 import Combine
+import MacToolsPluginKit
 import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
@@ -39,7 +40,6 @@ extension EnvironmentValues {
         set { self[ThemeKey.self] = newValue }
     }
 }
-enum PluginSystemImage { static func resolvedName(_ s: String) -> String { s } }
 enum FeatureL10n {
     static func string(_ value: String) -> String { value }
     static func format(_ value: String, _ args: CVarArg...) -> String { String(format: value, arguments: args) }
@@ -52,48 +52,28 @@ enum AppL10n {
         String(format: defaultValue, arguments: args)
     }
 }
-enum PluginDisplaySurface: String, Codable, CaseIterable, Hashable, Sendable { case dashboard, featurePanel }
-struct PluginComponentSpan: Equatable, Hashable, Sendable {
-    let width: Int
-    let height: Int
+enum FixtureSurface {
+    case dashboard, featurePanel
+    var panelID: String { self == .dashboard ? "components" : "features" }
 }
-struct PluginComponentItem: Identifiable {
-    let id: String
-    var title: String { id }
-    let iconName = "circle"
-    let iconTint = Color.blue
-    let span: PluginComponentSpan
+
+// Every storage access stays in memory; the real layout store never sees user preferences.
+private final class FixtureDefaults: UserDefaults, @unchecked Sendable {
+    private var values: [String: Any] = [:]
+    override func object(forKey key: String) -> Any? { values[key] }
+    override func data(forKey key: String) -> Data? { values[key] as? Data }
+    override func string(forKey key: String) -> String? { values[key] as? String }
+    override func array(forKey key: String) -> [Any]? { values[key] as? [Any] }
+    override func set(_ value: Any?, forKey key: String) { values[key] = value }
+    override func removeObject(forKey key: String) { values.removeValue(forKey: key) }
 }
-struct ComponentGridPlacement: Identifiable, Equatable {
-    let id: String
-    let row: Int
-    let column: Int
-    let span: PluginComponentSpan
-    let yOffset: CGFloat
-}
-enum ComponentPanelLayout {
-    static let columns = 4
-    static let gridWidth: CGFloat = 304
-    static let verticalSpacing: CGFloat = 6
-    static func itemWidth(for span: PluginComponentSpan) -> CGFloat { CGFloat(span.width) * 78 - 8 }
-    static func itemHeight(for span: PluginComponentSpan) -> CGFloat { CGFloat(span.height) * 8 }
-    static func xOffset(for p: ComponentGridPlacement) -> CGFloat { CGFloat(p.column) * 78 }
-    static func gridContentHeight(for ps: [ComponentGridPlacement]) -> CGFloat {
-        ps.map { $0.yOffset + itemHeight(for: $0.span) }.max() ?? 164
-    }
-}
-typealias PluginPanelItem = PluginComponentItem
-typealias PluginPrimaryPanelIndicator = Int
-typealias PluginPrimaryPanelCompactIndicator = Int
-enum PluginPanelAction { enum SliderPhase { case changed } }
-enum PluginMenuActionBehavior { case keepPresented }
 
 // XCTest covers the real feature renderer. Native drag acceptance only needs
 // a row with the same geometry and inert callback contract.
 struct FeatureRowView: View {
-    let item: PluginPanelItem
-    let indicator: PluginPrimaryPanelIndicator?
-    let compactIndicator: PluginPrimaryPanelCompactIndicator?
+    let item: PluginPanelRowSnapshot
+    let indicator: PluginPanelRowIndicator?
+    let compactIndicator: PluginPanelRowCompactIndicator?
     let onDisclosureToggle: (Bool) -> Void
     let onSelectionChange: (String, String) -> Void
     let onNavigationSelectionChange: (String, String) -> Void
@@ -114,54 +94,79 @@ struct FeatureRowView: View {
     }
 }
 struct MenuBarPanelLayoutEntry: Identifiable {
-    let item: PluginComponentItem
-    let surface: PluginDisplaySurface
-    var entry: MenuBarPanelEntry { .init(pluginID: item.id, surface: surface) }
+    struct Item {
+        let title: String
+        let iconName = "circle"
+    }
+    let item: Item
+    let entry: MenuBarPanelEntry
     var id: String { entry.id }
 }
 @MainActor final class PluginHost: ObservableObject {
-    let primaryPanelIndicatorsByID: [String: PluginPrimaryPanelIndicator] = [:]
-    let primaryPanelCompactIndicatorsByID: [String: PluginPrimaryPanelCompactIndicator] = [:]
-    @Published var configuration = MenuBarPanelConfiguration()
-    var menuBarPanels: [MenuBarPanelDefinition] { configuration.panels }
-    var visibleMenuBarPanels: [MenuBarPanelDefinition] { menuBarPanels }
-    func componentItems(in id: String) -> [PluginComponentItem] {
-        panelEntries(in: id).filter { $0.surface == .dashboard }.compactMap { entry in componentItems.first { $0.id == entry.pluginID } }
-    }
-    func panelItems(in id: String) -> [PluginPanelItem] {
-        panelEntries(in: id).filter { $0.surface == .featurePanel }.compactMap { entry in componentItems.first { $0.id == entry.pluginID } }
-    }
-    func panelEntries(in id: String) -> [MenuBarPanelEntry] {
-        configuration.orderedEntries(PluginDisplaySurface.allCases.flatMap { surface in
-            componentItems.map { MenuBarPanelEntry(pluginID: $0.id, surface: surface) }
-        }, panelID: id)
-    }
-    func panelLayoutEntries(in id: String, hidden: Bool = false) -> [MenuBarPanelLayoutEntry] {
-        guard !hidden else { return [] }
-        return panelEntries(in: id).compactMap { entry in
-            componentItems.first { $0.id == entry.pluginID }.map { .init(item: $0, surface: entry.surface) }
+    private let store = MenuBarPanelStore(userDefaults: FixtureDefaults())
+    private let spans: [String: PluginPanelWidgetSpan]
+    init(pluginIDs: [String] = ["a", "b", "c"], compact: Bool = false) {
+        spans = compact ? Dictionary(uniqueKeysWithValues: pluginIDs.map {
+            ($0, PluginPanelWidgetSpan(width: 1, height: 8, grid: .compact)!)
+        }) : ["a": .init(width: 2, height: 12)!, "b": .init(width: 1, height: 24)!,
+              "c": .init(width: 4, height: 12)!]
+        for id in pluginIDs {
+            store.addItem(.init(pluginID: id, itemID: "widget"), to: "components")
+            store.addItem(.init(pluginID: id, itemID: "control"), to: "features")
         }
     }
-    func movePanelEntry(_ entry: MenuBarPanelEntry, panelID: String, toOffset: Int, hidden: Bool = false) {
-        moveRenderedPlugin(id: entry.pluginID, toOffset: toOffset, on: entry.surface)
+    var configuration: MenuBarPanelConfiguration {
+        get { store.configuration }
+        set { objectWillChange.send(); store.replace(newValue) }
     }
-    func movePanelEntry(pluginID: String, surface: PluginDisplaySurface, panelID: String, toOffset: Int, hidden: Bool = false) {
-        moveRenderedPlugin(id: pluginID, toOffset: toOffset, on: surface)
+    var menuBarPanels: [MenuBarPanelDefinition] { configuration.panels }
+    var visibleMenuBarPanels: [MenuBarPanelDefinition] { menuBarPanels }
+    func rowIndicator(for id: String) -> PluginPanelRowIndicator? { nil }
+    func rowCompactIndicator(for id: String) -> PluginPanelRowCompactIndicator? { nil }
+    func componentItems(in id: String) -> [PluginPanelWidgetSnapshot] {
+        panelEntries(in: id).filter { $0.kind == .widget }.map { entry in
+            .init(id: entry.id, title: entry.pluginID, iconName: "circle", iconTint: .blue,
+                  description: "", helpText: "", descriptionTone: .secondary,
+                  span: spans[entry.pluginID]!, isActive: false, isEnabled: true, pluginID: entry.pluginID)
+        }
     }
-    func removePanelEntry(_ entry: MenuBarPanelEntry, from panelID: String) -> Bool { false }
-    func assignPanelEntry(pluginID: String, surface: PluginDisplaySurface, to: String) {}
+    func panelItems(in id: String) -> [PluginPanelRowSnapshot] {
+        panelEntries(in: id).filter { $0.kind == .row }.map { entry in
+            .init(id: entry.id, title: entry.pluginID, iconName: "circle", iconTint: .blue,
+                  controlStyle: .switch, menuActionBehavior: .keepPresented, description: "", helpText: "",
+                  descriptionTone: .secondary, isOn: true, isExpanded: false, isEnabled: true,
+                  detail: nil, buttonActionID: nil, buttonTitle: nil, pluginID: entry.pluginID)
+        }
+    }
+    func panelEntries(in id: String) -> [MenuBarPanelEntry] {
+        configuration.placementsByPanelID[id, default: []].map {
+            .init(placement: $0, kind: $0.item.itemID == "widget" ? .widget : .row)
+        }
+    }
+    func panelLayoutEntries(in id: String) -> [MenuBarPanelLayoutEntry] {
+        panelEntries(in: id).map { .init(item: .init(title: $0.pluginID), entry: $0) }
+    }
+    func movePanelEntry(_ entry: MenuBarPanelEntry, panelID: String, toOffset: Int) {
+        let ids = PanelLayoutDestination.moving(entry.id, toOffset: toOffset, in: panelEntries(in: panelID).map(\.id))
+        objectWillChange.send()
+        store.setOrder(ids.compactMap(UUID.init(uuidString:)), panelID: panelID)
+    }
+    func removePanelEntry(_ entry: MenuBarPanelEntry, from panelID: String) -> Bool {
+        guard panelEntries(in: panelID).contains(entry) else { return false }
+        objectWillChange.send()
+        store.removePlacement(id: entry.placement.id)
+        return true
+    }
 
     func transferPanelEntry(_ entry: MenuBarPanelEntry, from source: String, to destination: String,
                             at offset: Int) -> MenuBarPanelLayoutChange? {
         guard panelEntries(in: source).contains(entry) else { return nil }
-        var ids = panelEntries(in: destination).map(\.id)
-        ids.insert(entry.id, at: min(max(offset, 0), ids.count))
+        var ids = panelEntries(in: destination).map(\.placement.id)
+        ids.insert(entry.placement.id, at: min(max(offset, 0), ids.count))
         let before = configuration
-        var next = before
-        next.assignments[entry.id] = destination
-        next.orders[destination] = ids
-        configuration = next
-        return MenuBarPanelLayoutChange(before: before, after: next)
+        objectWillChange.send()
+        store.movePlacement(id: entry.placement.id, to: destination, visibleOrder: ids)
+        return MenuBarPanelLayoutChange(before: before, after: configuration)
     }
     func canUndoPanelLayoutChange(_ change: MenuBarPanelLayoutChange) -> Bool { configuration == change.after }
     func undoPanelLayoutChange(_ change: MenuBarPanelLayoutChange) -> Bool {
@@ -169,22 +174,9 @@ struct MenuBarPanelLayoutEntry: Identifiable {
         configuration = change.before
         return true
     }
-
-    @Published var componentItems = [
-        PluginComponentItem(id: "a", span: .init(width: 2, height: 12)),
-        PluginComponentItem(id: "b", span: .init(width: 1, height: 24)),
-        PluginComponentItem(id: "c", span: .init(width: 4, height: 12)),
-    ]
-    var panelItems: [PluginComponentItem] { componentItems }
-    struct ViewItem { let content: AnyView }
-    func componentViewItem(for id: String, dismiss: @escaping () -> Void) -> ViewItem {
-        ViewItem(
-            content: AnyView(
-                Text(id).frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.blue.opacity(0.15))))
-    }
-    func moveRenderedPlugin(id: String, toOffset: Int, on: PluginDisplaySurface) {
-        let ids = PanelLayoutDestination.moving(id, toOffset: toOffset, in: componentItems.map(\.id))
-        componentItems = ids.compactMap { i in componentItems.first { $0.id == i } }
+    func componentViewItem(for id: String, dismiss: @escaping () -> Void) -> PluginPanelWidgetViewItem {
+        PluginPanelWidgetViewItem(id: id,
+            content: AnyView(Text(id).frame(maxWidth: .infinity, maxHeight: .infinity).background(Color.blue.opacity(0.15))))
     }
 }
 struct MenuBarPanelTab: Hashable {
@@ -206,10 +198,17 @@ enum MenuBarPanelLayout {
     static let headerAccessorySpacing: CGFloat = 4
     static let cornerRadius: CGFloat = 12
     static let featureRowSpacing: CGFloat = 8
-    static func rowHeight(for item: PluginPanelItem) -> CGFloat { 44 }
+    static func rowHeight(for item: PluginPanelRowSnapshot) -> CGFloat { 44 }
     static let minimumContentHeight: CGFloat = 184
     static let contentVerticalPadding: CGFloat = 10
+    static let contentTopPadding: CGFloat = 6
+    static let contentBottomPadding: CGFloat = 4
     static let outerPadding: CGFloat = 6
+    static let minimumPanelHeight: CGFloat = 200
+    static let maximumPanelHeight: CGFloat = 600
+    static let editingPanelChromeHeight = headerHeight + editingActionBarHeight + outerPadding * 2
+    static func maximumContentHeight(for screen: NSScreen?) -> CGFloat { maximumPanelHeight - headerHeight }
+    static func panelHeight(forContentHeight height: CGFloat) -> CGFloat { height + headerHeight }
 }
 
 @MainActor
@@ -245,13 +244,13 @@ private struct CrossPanelFixtureRoot: View {
 private struct FixtureRoot: View {
     @ObservedObject var host: PluginHost
     @ObservedObject var state: FixtureState
-    let surface: PluginDisplaySurface
-    let session: PanelLayoutEditingSession
+    let surface: FixtureSurface
+    @ObservedObject var session: PanelLayoutEditingSession
 
     var body: some View {
         VStack(spacing: 4) {
             MenuBarPanelEditingControls(
-                canUndoLayout: session.canUndo(ids: host.panelEntries(in: surface.defaultPanelID).map(\.id)),
+                canUndoLayout: session.canUndo(in: host, panelID: surface.panelID),
                 feedback: state.editingFeedback, onUndoLayout: undo, onDone: { state.editing = false }) {
                     MenuBarPanelTabs(
                         panels: MenuBarPanelDefinition.defaults,
@@ -264,7 +263,7 @@ private struct FixtureRoot: View {
                 VStack(spacing: 0) {
                     PanelLayoutEditor(
                         pluginHost: host,
-                        surface: surface,
+                        panelID: surface.panelID,
                         onDismiss: {},
                         session: session
                     )
@@ -282,20 +281,12 @@ private struct FixtureRoot: View {
     }
 
     private func undo() {
-        let before = host.panelEntries(in: surface.defaultPanelID).map(\.id)
-        guard let move = session.takeUndo(ids: before) else { return }
-        let result = PanelLayoutDestination.moving(move.id, toOffset: move.offset, in: before)
-        guard let entry = host.panelEntries(in: surface.defaultPanelID).first(where: { $0.id == move.id }) else { return }
-        host.movePanelEntry(pluginID: entry.pluginID, surface: surface, panelID: surface.defaultPanelID, toOffset: move.offset)
-        guard host.panelEntries(in: surface.defaultPanelID).map(\.id) == result else {
-            session.rejectMove()
-            return
-        }
-        session.didUndo()
+        session.undo(in: host, panelID: surface.panelID)
     }
 }
 
 @main
+@MainActor
 private struct PanelLayoutInteractionFixture {
     private static var originalPointer: CGPoint?
 
@@ -320,11 +311,14 @@ private struct PanelLayoutInteractionFixture {
             runTabInteractions(application)
             return
         }
-        let surface: PluginDisplaySurface = CommandLine.arguments[1] == "dashboard" ? .dashboard : .featurePanel
+        let surface: FixtureSurface = CommandLine.arguments[1] == "features" ? .featurePanel : .dashboard
         let rtl = CommandLine.arguments[2] == "rtl"
-        let host = PluginHost()
+        let host = PluginHost(compact: CommandLine.arguments[1] == "compact")
         let state = FixtureState()
         let session = PanelLayoutEditingSession()
+        var previewOffsets: [Int?] = []
+        let previewSubscription = session.dragPreview.$target.sink { previewOffsets.append($0?.offset) }
+        defer { previewSubscription.cancel() }
         let window = NSWindow(
             contentRect: CGRect(x: 200, y: 200, width: 360, height: 70),
             styleMask: [.titled], backing: .buffered, defer: false)
@@ -343,17 +337,19 @@ private struct PanelLayoutInteractionFixture {
 
         func source(_ id: String) -> PanelLayoutDragSourceView {
             guard
+                let entry = host.panelEntries(in: surface.panelID).first(where: { $0.pluginID == id }),
                 let view = descendants(controller.view).compactMap({ $0 as? PanelLayoutDragSourceView })
-                    .first(where: { $0.identifier?.rawValue == "panel.layout.drag.\(surface.panelEntryID(pluginID: id))" })
+                    .first(where: { $0.identifier?.rawValue == "panel.layout.drag.\(entry.id)" })
             else {
                 fail("Missing drag source \(id)")
             }
             return view
         }
         func requireOrder(_ ids: [String], feedback: PanelLayoutEditingSession.Feedback) {
-            guard host.componentItems.map(\.id) == ids, session.token == nil, session.feedback == feedback else {
+            let actual = host.panelEntries(in: surface.panelID).map(\.pluginID)
+            guard actual == ids, session.token == nil, session.feedback == feedback else {
                 fail(
-                    "Expected \(ids)/\(feedback), got \(host.componentItems.map(\.id))/\(session.feedback); active=\(session.token != nil)"
+                    "Expected \(ids)/\(feedback), got \(actual)/\(session.feedback); active=\(session.token != nil), previews=\(previewOffsets)"
                 )
             }
         }
@@ -478,10 +474,10 @@ private struct PanelLayoutInteractionFixture {
     }
 
     @MainActor private static func runCrossPanelInteraction(_ application: NSApplication) {
-        let host = PluginHost()
-        host.componentItems = [host.componentItems[0]]
+        let host = PluginHost(pluginIDs: ["a"])
         host.configuration.panels.append(.init(id: "work", name: "Work", systemImage: "star"))
         let before = host.configuration
+        let entry = host.panelEntries(in: "components")[0]
         let state = FixtureState()
         let session = PanelLayoutEditingSession()
         let window = NSWindow(contentRect: CGRect(x: 200, y: 200, width: 360, height: 70),
@@ -524,7 +520,6 @@ private struct PanelLayoutInteractionFixture {
                 post(.leftMouseDragged, at: drop, in: dragWindow)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { post(.leftMouseUp, at: drop, in: dragWindow) }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    let entry = MenuBarPanelEntry(pluginID: "a", surface: .dashboard)
                     guard host.panelEntries(in: "work") == [entry], session.token == nil,
                           session.feedback == .saved, session.canUndo(in: host, panelID: "work")
                     else { fail("Cross-panel drop failed: \(host.panelEntries(in: "work")), feedback=\(session.feedback)") }

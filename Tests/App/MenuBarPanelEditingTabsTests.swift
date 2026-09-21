@@ -12,7 +12,7 @@ final class MenuBarPanelEditingTabsTests: XCTestCase {
         strip.itemDragSession = session
         var selections: [String] = []
         strip.onItemDragHover = { selections.append($0) }
-        let entry = MenuBarPanelEntry(pluginID: "a", surface: .dashboard)
+        let entry = MenuBarPanelEntry(placement: .init(item: .init(pluginID: "a", itemID: "widget")), kind: .widget)
         _ = session.begin(entry: entry, panelID: "components", ids: [entry.id])
         strip.updateItemDragHover(panelID: "work")
         try await Task.sleep(for: .milliseconds(180))

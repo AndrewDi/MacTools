@@ -155,7 +155,7 @@ final class PluginHostShortcutUpdateTests: XCTestCase {
         let registrar = FakeCarbonHotKeyRegistrar()
         let manager = GlobalShortcutManager(registrar: registrar)
         let host = PluginHost(plugins: [plugin], shortcutStore: store,
-                              pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+                              pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
                               preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
                               globalShortcutManager: manager)
         XCTAssertTrue(Set(bindings).isSubset(of: Set(registrar.registeredBindings)))

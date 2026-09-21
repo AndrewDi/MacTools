@@ -20,6 +20,26 @@ PLUGIN_INTERFACES = REPO_ROOT / "Sources/MacToolsPluginKit/PluginInterfaces.swif
 PLUGIN_SETTINGS_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/PluginSettingsModels.swift"
 APP_VERSION_CONFIG = REPO_ROOT / "Configs/AppVersion.xcconfig"
 NEW_API_MINIMUM_HOSTS = {
+    "PluginPanelWidgetGrid": "1.3.1",
+    "PluginPanelIconControl": "1.3.1",
+    "iconWidget": "1.3.1",
+    "PluginPanelItem": "1.3.1",
+    "PluginPanelItemKind": "1.3.1",
+    "PluginPanelInitialPlacement": "1.3.1",
+    "PluginPanelContent": "1.3.1",
+    "PluginPanelRow": "1.3.1",
+    "PluginPanelWidget": "1.3.1",
+    "PluginPanelRowDescriptor": "1.3.1",
+    "PluginPanelRowState": "1.3.1",
+    "PluginPanelRowIndicator": "1.3.1",
+    "PluginPanelRowCompactIndicator": "1.3.1",
+    "PluginPanelRowIndicatorIcon": "1.3.1",
+    "PluginPanelWidgetDescriptor": "1.3.1",
+    "PluginPanelWidgetState": "1.3.1",
+    "PluginPanelWidgetContext": "1.3.1",
+    "PluginPanelWidgetSpan": "1.3.1",
+    "PluginPanelWidgetLayoutMetrics": "1.3.1",
+    "PluginPanelDetailContent": "1.3.1",
     "PluginPanelPresentation": "1.3.1",
     "PluginPanelFocusRestoration": "1.3.1",
     "PluginPanelDismissalMonitor": "1.3.1",
@@ -109,8 +129,6 @@ NEW_API_MINIMUM_HOSTS = {
     "PluginCallbackContext": "1.2.0",
     "PluginPresentationSafety": "1.2.0",
     "PluginDashboardPresenting": "1.2.1",
-    "PluginComponentDetailContent": "1.2.1",
-    "PluginComponentDetailPresenting": "1.2.1",
     "PluginProcessGroupLease": "1.2.0",
     "PluginSystemImage": "1.2.0",
     # Contextual plugin-settings search contracts introduced in host 1.2.1.
@@ -268,15 +286,15 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
         self.assertIn("if (( PLUGIN_KIT_VERSION < 5 )); then", workflow)
         self.assertIn('case " 1 2 3 4 " in', makefile)
 
-    def test_every_current_plugin_targets_plugin_kit6_and_host_1_3(self) -> None:
+    def test_every_current_plugin_targets_plugin_kit7_and_host_1_3_1(self) -> None:
         compatibility = (REPO_ROOT / "Sources/MacToolsPluginKit/PluginKitCompatibility.swift").read_text()
-        self.assertIn("currentVersion = 6", compatibility)
+        self.assertIn("currentVersion = 7", compatibility)
         incompatible = []
         for manifest_path in sorted(PLUGINS_ROOT.glob("*/plugin.json")):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             if (
-                manifest["pluginKitVersion"] != 6
-                or version_tuple(manifest["minHostVersion"]) < version_tuple("1.3.0")
+                manifest["pluginKitVersion"] != 7
+                or version_tuple(manifest["minHostVersion"]) < version_tuple("1.3.1")
                 or version_tuple(manifest["minHostVersion"])
                 > version_tuple(declared_app_version())
             ):
@@ -382,8 +400,6 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
     def test_dashboard_presentation_apis_reject_host_1_2_0(self) -> None:
         symbols = {
             "PluginDashboardPresenting",
-            "PluginComponentDetailContent",
-            "PluginComponentDetailPresenting",
         }
         interfaces = (REPO_ROOT / "Sources/MacToolsPluginKit/PluginInterfaces.swift").read_text(
             encoding="utf-8"
@@ -401,6 +417,12 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
                 self.assertEqual(NEW_API_MINIMUM_HOSTS.get(symbol), "1.3.1")
                 self.assertTrue(minimum_host_violations("probe", "1.3.0", symbol))
                 self.assertEqual(minimum_host_violations("probe", "1.3.1", symbol), [])
+
+    def test_icon_widget_inventory_requires_host_1_3_1(self) -> None:
+        for symbol in ("PluginPanelIconControl", "iconWidget"):
+            self.assertEqual(NEW_API_MINIMUM_HOSTS[symbol], "1.3.1")
+            self.assertTrue(minimum_host_violations("probe", "1.3.0", symbol))
+            self.assertEqual(minimum_host_violations("probe", "1.3.1", symbol), [])
 
     def test_centered_window_snap_inventory_requires_host_1_3_1(self) -> None:
         for filename in ("WindowSnapGeometry.swift", "WindowSnapOverlayController.swift", "PluginWindowSnapCoordinator.swift"):

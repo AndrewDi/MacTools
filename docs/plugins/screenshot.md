@@ -45,7 +45,7 @@ The package declares `uninstallDataPolicy: removePrivateData`. The host removes 
 | Factory | `ScreenshotPlugin.ScreenshotPluginFactory` |
 | Bundle / scheme | `Screenshot.bundle` / `ScreenshotPlugin` |
 | Initial package version | `1.0.0` |
-| Compatibility | PluginKit 6, MacTools 1.3.0 or later |
+| Compatibility | PluginKit 7, MacTools 1.3.1 or later |
 | Host surfaces | Primary panel and settings form; no component panel |
 | Permission | `screen-recording` |
 | Canonical actions and shortcut IDs | `capture`, `quick-capture` |

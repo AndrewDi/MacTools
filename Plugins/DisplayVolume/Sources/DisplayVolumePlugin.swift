@@ -126,13 +126,13 @@ private struct DisplayVolumeShortcutSession {
 @MainActor
 final class DisplayVolumePlugin:
     MacToolsPlugin,
-    PluginPrimaryPanel,
     PluginShortcutEventHandling,
     DisplayTopologyRefreshing,
     PluginSettingsSearchProviding,
     PluginActionProviding
 {
     private enum Constants {
+        static let panelItemID = "control"
         static let displayControlPrefix = "display."
         static let volumeControlSuffix = ".volume"
         static let shortcutGroupID = "display-volume.shortcuts"
@@ -140,7 +140,7 @@ final class DisplayVolumePlugin:
 
     let metadata: PluginMetadata
 
-    let primaryPanelDescriptor = PluginPrimaryPanelDescriptor(
+    let rowDescriptor = PluginPanelRowDescriptor(
         controlStyle: .disclosure,
         menuActionBehavior: .keepPresented
     )
@@ -153,7 +153,7 @@ final class DisplayVolumePlugin:
     private let shortcutPreferences: DisplayVolumeShortcutPreferences
     private let mouseDisplayIDProvider: @MainActor () -> CGDirectDisplayID?
     private let localization: PluginLocalization
-    private var isExpanded = false
+    private var isDetailRequested = false
     private var displayTopologyTask: Task<Void, Never>?
     private var shortcutAcceleration = DisplayVolumeShortcutAcceleration()
     private var shortcutSessions: [String: DisplayVolumeShortcutSession] = [:]
@@ -186,32 +186,41 @@ final class DisplayVolumePlugin:
         }
     }
 
-    var primaryPanelState: PluginPanelState {
+    var panelItems: [PluginPanelItem] {
+        [
+            .row(
+                id: Constants.panelItemID,
+                initialPlacement: .featurePanel,
+                descriptor: rowDescriptor,
+                state: rowState,
+                action: { [weak self] in self?.handleAction($0) }
+            )
+        ]
+    }
+
+    var rowState: PluginPanelRowState {
         let snapshot = controller.snapshot()
 
         guard !snapshot.displays.isEmpty else {
-            isExpanded = false
-            return PluginPanelState(
+            return PluginPanelRowState(
                 subtitle: localization.string(
                     "panel.subtitle.noDisplays",
                     defaultValue: "未检测到可调节音量的显示器"
                 ),
                 isOn: false,
-                isExpanded: false,
                 isEnabled: false,
-                isVisible: true,
+                isAvailable: true,
                 detail: nil,
                 errorMessage: snapshot.errorMessage
             )
         }
 
-        return PluginPanelState(
+        return PluginPanelRowState(
             subtitle: subtitle(for: snapshot.displays),
             isOn: false,
-            isExpanded: isExpanded,
             isEnabled: true,
-            isVisible: true,
-            detail: isExpanded ? buildDetail(for: snapshot.displays) : nil,
+            isAvailable: true,
+            detail: isDetailRequested ? buildDetail(for: snapshot.displays) : nil,
             errorMessage: snapshot.errorMessage
         )
     }
@@ -384,7 +393,7 @@ final class DisplayVolumePlugin:
     func handleAction(_ action: PluginPanelAction) {
         switch action {
         case let .setDisclosureExpanded(value):
-            isExpanded = value
+            isDetailRequested = value
             onStateChange?()
         case let .setSlider(controlID, value, phase):
             guard let displayID = Self.parseDisplayID(from: controlID) else {
