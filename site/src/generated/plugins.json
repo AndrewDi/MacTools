@@ -7545,6 +7545,361 @@
     {
       "capabilities": {
         "panelItems": [
+          "row"
+        ],
+        "settings": "form"
+      },
+      "category": "display",
+      "displayName": "显示器音量",
+      "id": "display-volume",
+      "localizedMetadata": {
+        "ar": {
+          "displayName": "مستوى صوت الشاشة",
+          "summary": "اضبط مستوى الصوت لكل شاشة بسرعة."
+        },
+        "de": {
+          "displayName": "Displaylautstärke",
+          "summary": "Passen Sie die Lautstärke für jedes Display schnell an."
+        },
+        "en": {
+          "displayName": "Display Volume",
+          "summary": "Adjust volume for each display quickly."
+        },
+        "es": {
+          "displayName": "Volumen de pantalla",
+          "summary": "Ajuste el volumen de cada pantalla rápidamente."
+        },
+        "fr": {
+          "displayName": "Volume de l'écran",
+          "summary": "Ajustez rapidement le volume de chaque écran."
+        },
+        "ja": {
+          "displayName": "ディスプレイ音量",
+          "summary": "各ディスプレイの音量を素早く調整します。"
+        },
+        "ko": {
+          "displayName": "디스플레이 볼륨",
+          "summary": "각 디스플레이의 볼륨을 빠르게 조정하세요."
+        },
+        "pt": {
+          "displayName": "Volume da tela",
+          "summary": "Ajuste o volume de cada tela rapidamente."
+        },
+        "ru": {
+          "displayName": "Громкость дисплея",
+          "summary": "Быстро отрегулируйте громкость каждого дисплея."
+        },
+        "zh-Hans": {
+          "displayName": "显示器音量",
+          "summary": "快速调节每个显示器的音量"
+        },
+        "zh-Hant": {
+          "displayName": "顯示器音量",
+          "summary": "快速調節每個顯示器的音量"
+        }
+      },
+      "openInMacToolsURL": "mactools://app/settings/plugins/marketplace/display-volume",
+      "product": {
+        "actions": {
+          "providers": [
+            {
+              "dynamicTemplates": [],
+              "id": "display-volume",
+              "kind": "static",
+              "staticActions": [
+                {
+                  "automaticEligible": true,
+                  "description": {
+                    "ar": "خفض",
+                    "de": "Senken",
+                    "en": "Decrease",
+                    "es": "Disminuir",
+                    "fr": "Diminuer",
+                    "ja": "減らす",
+                    "ko": "줄이기",
+                    "pt": "Diminuir",
+                    "ru": "Уменьшить",
+                    "zh-Hans": "降低",
+                    "zh-Hant": "降低"
+                  },
+                  "externalInvocation": "allowed",
+                  "id": "display-volume.decrease",
+                  "keywords": [
+                    "显示器音量",
+                    "降低",
+                    "display",
+                    "volume",
+                    "decrease"
+                  ],
+                  "parameters": [],
+                  "permissionIDs": [],
+                  "risk": "safe",
+                  "surfaces": [
+                    "unified-search",
+                    "global-shortcut",
+                    "run-link",
+                    "workflow",
+                    "automatic-rule",
+                    "action-grid",
+                    "trackpad-gesture",
+                    "app-intent",
+                    "manual"
+                  ],
+                  "systemImage": "speaker.wave.1.fill",
+                  "title": {
+                    "ar": "خفض",
+                    "de": "Senken",
+                    "en": "Decrease",
+                    "es": "Disminuir",
+                    "fr": "Diminuer",
+                    "ja": "減らす",
+                    "ko": "줄이기",
+                    "pt": "Diminuir",
+                    "ru": "Уменьшить",
+                    "zh-Hans": "降低",
+                    "zh-Hant": "降低"
+                  }
+                },
+                {
+                  "automaticEligible": true,
+                  "description": {
+                    "ar": "رفع",
+                    "de": "Erhöhen",
+                    "en": "Increase",
+                    "es": "Aumentar",
+                    "fr": "Augmenter",
+                    "ja": "増やす",
+                    "ko": "늘리기",
+                    "pt": "Aumentar",
+                    "ru": "Увеличить",
+                    "zh-Hans": "增加",
+                    "zh-Hant": "增加"
+                  },
+                  "externalInvocation": "allowed",
+                  "id": "display-volume.increase",
+                  "keywords": [
+                    "显示器音量",
+                    "增加",
+                    "display",
+                    "volume",
+                    "increase"
+                  ],
+                  "parameters": [],
+                  "permissionIDs": [],
+                  "risk": "safe",
+                  "surfaces": [
+                    "unified-search",
+                    "global-shortcut",
+                    "run-link",
+                    "workflow",
+                    "automatic-rule",
+                    "action-grid",
+                    "trackpad-gesture",
+                    "app-intent",
+                    "manual"
+                  ],
+                  "systemImage": "speaker.wave.3.fill",
+                  "title": {
+                    "ar": "رفع",
+                    "de": "Erhöhen",
+                    "en": "Increase",
+                    "es": "Aumentar",
+                    "fr": "Augmenter",
+                    "ja": "増やす",
+                    "ko": "늘리기",
+                    "pt": "Aumentar",
+                    "ru": "Увеличить",
+                    "zh-Hans": "增加",
+                    "zh-Hant": "增加"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "discovery": {
+          "alternativePluginIDs": [],
+          "goalCategories": [
+            "display"
+          ],
+          "keywords": [
+            "display",
+            "volume"
+          ],
+          "localizedSynonyms": {
+            "ar": [
+              "مستوى صوت الشاشة"
+            ],
+            "de": [
+              "Displaylautstärke"
+            ],
+            "en": [
+              "Display Volume"
+            ],
+            "es": [
+              "Volumen de pantalla"
+            ],
+            "fr": [
+              "Volume de l'écran"
+            ],
+            "ja": [
+              "ディスプレイ音量"
+            ],
+            "ko": [
+              "디스플레이 볼륨"
+            ],
+            "pt": [
+              "Volume da tela"
+            ],
+            "ru": [
+              "Громкость дисплея"
+            ],
+            "zh-Hans": [
+              "显示器音量"
+            ],
+            "zh-Hant": [
+              "顯示器音量"
+            ]
+          },
+          "relatedPluginIDs": [],
+          "useCases": [
+            {
+              "id": "primary-use",
+              "title": {
+                "ar": "مستوى صوت الشاشة",
+                "de": "Displaylautstärke",
+                "en": "Display Volume",
+                "es": "Volumen de pantalla",
+                "fr": "Volume de l'écran",
+                "ja": "ディスプレイ音量",
+                "ko": "디스플레이 볼륨",
+                "pt": "Volume da tela",
+                "ru": "Громкость дисплея",
+                "zh-Hans": "显示器音量",
+                "zh-Hant": "顯示器音量"
+              }
+            }
+          ]
+        },
+        "presentation": {
+          "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+          "examples": [
+            {
+              "id": "primary-use",
+              "text": {
+                "ar": "اضبط مستوى الصوت لكل شاشة بسرعة.",
+                "de": "Passen Sie die Lautstärke für jedes Display schnell an.",
+                "en": "Adjust volume for each display quickly.",
+                "es": "Ajuste el volumen de cada pantalla rápidamente.",
+                "fr": "Ajustez rapidement le volume de chaque écran.",
+                "ja": "各ディスプレイの音量を素早く調整します。",
+                "ko": "각 디스플레이의 볼륨을 빠르게 조정하세요.",
+                "pt": "Ajuste o volume de cada tela rapidamente.",
+                "ru": "Быстро отрегулируйте громкость каждого дисплея.",
+                "zh-Hans": "快速调节每个显示器的音量",
+                "zh-Hant": "快速調節每個顯示器的音量"
+              }
+            }
+          ],
+          "license": "GPL-3.0-only",
+          "longDescription": {
+            "ar": "اضبط مستوى الصوت لكل شاشة بسرعة.",
+            "de": "Passen Sie die Lautstärke für jedes Display schnell an.",
+            "en": "Adjust volume for each display quickly.",
+            "es": "Ajuste el volumen de cada pantalla rápidamente.",
+            "fr": "Ajustez rapidement le volume de chaque écran.",
+            "ja": "各ディスプレイの音量を素早く調整します。",
+            "ko": "각 디스플레이의 볼륨을 빠르게 조정하세요.",
+            "pt": "Ajuste o volume de cada tela rapidamente.",
+            "ru": "Быстро отрегулируйте громкость каждого дисплея.",
+            "zh-Hans": "快速调节每个显示器的音量",
+            "zh-Hant": "快速調節每個顯示器的音量"
+          },
+          "publisher": "MacTools",
+          "screenshots": [],
+          "supportURL": "https://github.com/ggbond268/MacTools/issues"
+        },
+        "privacy": {
+          "allowsUserConfiguredDomains": false,
+          "dataObserved": [
+            "display-state"
+          ],
+          "dataPersisted": [
+            "plugin-configuration"
+          ],
+          "diagnosticExportsContainUserData": false,
+          "networkDomains": [],
+          "networkUse": "none",
+          "processesSensitiveUserContent": false,
+          "retention": {
+            "policy": "user-controlled"
+          },
+          "telemetry": "none"
+        },
+        "relationships": {
+          "includedPackIDs": [],
+          "relatedPluginIDs": [],
+          "suggestedRecipeIDs": [],
+          "supersedesPluginIDs": []
+        },
+        "requirements": {
+          "applications": [],
+          "architectures": [
+            "arm64"
+          ],
+          "executables": [],
+          "hardware": [
+            "connected display"
+          ],
+          "minimumMacOSVersion": "14.0",
+          "permissionIDs": [],
+          "requiresRelaunch": false,
+          "setupComplexity": "guided"
+        },
+        "setup": {
+          "optionalSurfaces": [],
+          "steps": [
+            {
+              "description": {
+                "ar": "قبل استخدام هذه الإضافة، راجع المتطلبات التالية واستوفها: شاشة متصلة.",
+                "de": "Prüfe und erfülle vor der Verwendung dieses Plugins folgende Anforderungen: angeschlossenes Display.",
+                "en": "Before using this plugin, review and satisfy these requirements: connected display.",
+                "es": "Antes de usar este plugin, revisa y cumple estos requisitos: pantalla conectada.",
+                "fr": "Avant d’utiliser ce module, vérifiez et remplissez les conditions suivantes : écran connecté.",
+                "ja": "このプラグインを使用する前に、次の要件を確認して満たしてください：接続済みディスプレイ。",
+                "ko": "이 플러그인을 사용하기 전에 다음 요구 사항을 확인하고 충족하세요: 연결된 디스플레이.",
+                "pt": "Antes de usar este plugin, revise e cumpra estes requisitos: monitor conectado.",
+                "ru": "Перед использованием плагина проверьте и выполните следующие требования: подключённый дисплей.",
+                "zh-Hans": "使用此插件前，请检查并满足以下要求：已连接的显示器。",
+                "zh-Hant": "使用此外掛程式前，請檢查並滿足以下要求：已連接的顯示器。"
+              },
+              "id": "review-requirements",
+              "title": {
+                "ar": "إعداد مستوى صوت الشاشة",
+                "de": "Displaylautstärke einrichten",
+                "en": "Set Up Display Volume",
+                "es": "Configurar Volumen de pantalla",
+                "fr": "Configurer Volume de l'écran",
+                "ja": "ディスプレイ音量を設定",
+                "ko": "디스플레이 볼륨 설정",
+                "pt": "Configurar Volume da tela",
+                "ru": "Настройка «Громкость дисплея»",
+                "zh-Hans": "设置显示器音量",
+                "zh-Hant": "設定顯示器音量"
+              }
+            }
+          ]
+        }
+      },
+      "releaseChannel": null,
+      "releaseNotesURL": null,
+      "route": "/plugins/display-volume/",
+      "summary": "快速调节每个显示器的音量",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
+        "panelItems": [
           "row",
           "widget"
         ],
