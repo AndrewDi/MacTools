@@ -4,6 +4,26 @@ import MacToolsPluginKit
 
 @MainActor
 final class EjectDiskPluginTests: XCTestCase {
+    func testWidgetDiscoversVolumesAndSharesVisibilityWithRow() async throws {
+        let probe = VolumeDiscoveryProbe(volumes: [makeVolume("Disk4")])
+        let plugin = EjectDiskPlugin(discoverVolumes: { try await probe.discover() })
+        let items = plugin.panelItems
+        let rowVisibility = try XCTUnwrap(items.first { $0.id == "control" }?.visibilityHandler)
+        let widgetVisibility = try XCTUnwrap(items.first { $0.id == "quick-control" }?.visibilityHandler)
+        widgetVisibility(true)
+        rowVisibility(true)
+        rowVisibility(false)
+        await waitUntil { plugin.rowState.isEnabled }
+        let requestCount = await probe.requestCountValue()
+        XCTAssertEqual(requestCount, 1, "Both renderers share one discovery and hiding the row keeps the widget active")
+        widgetVisibility(false)
+        widgetVisibility(true)
+        await waitUntil { plugin.rowState.isEnabled }
+        let reopenedCount = await probe.requestCountValue()
+        XCTAssertEqual(reopenedCount, 2)
+        widgetVisibility(false)
+    }
+
     func testRefreshDoesNotDiscoverVolumesWhilePanelIsHidden() async {
         let probe = VolumeDiscoveryProbe(volumes: [makeVolume("Disk4")])
         let plugin = EjectDiskPlugin(discoverVolumes: { try await probe.discover() })

@@ -72,6 +72,76 @@ final class ComponentPanelLayoutTests: XCTestCase {
         }
     }
 
+    func testCompactControlsFillFiveColumnsThenWrap() throws {
+        let span = try XCTUnwrap(PluginPanelWidgetSpan(width: 1, height: 8, grid: .compact))
+        let placements = ComponentGridPlacementEngine.placements(for: (0..<13).map { ("icon-\($0)", span) })
+        for (index, placement) in placements.enumerated() {
+            let frame = PanelLayoutDestination.frame(placement)
+            XCTAssertEqual(frame.minX, CGFloat(index % 5) * 62.8, accuracy: 0.001)
+            XCTAssertEqual(frame.minY, CGFloat(index / 5) * 74, accuracy: 0.001)
+            XCTAssertEqual(frame.width, 52.8, accuracy: 0.001)
+            XCTAssertEqual(frame.height, 64)
+            XCTAssertLessThanOrEqual(frame.maxX, ComponentPanelLayout.gridWidth + 0.001)
+        }
+        XCTAssertEqual(PanelLayoutDestination.frame(placements[4]).maxX, ComponentPanelLayout.gridWidth, accuracy: 0.001)
+    }
+
+    func testCompactControlsShareRowsWithCardsWithoutResizingThem() throws {
+        let compact = try XCTUnwrap(PluginPanelWidgetSpan(width: 1, height: 8, grid: .compact))
+        let placements = ComponentGridPlacementEngine.placements(for: [
+            ("half", PluginPanelWidgetSpan(width: 2, height: 12)!),
+            ("icon-a", compact), ("icon-b", compact),
+            ("full", PluginPanelWidgetSpan(width: 4, height: 12)!), ("quarter", .oneByOne)
+        ])
+        let frames = placements.map(PanelLayoutDestination.frame)
+        for (frame, width) in zip(frames, [148, 52.8, 52.8, 304, 70]) {
+            XCTAssertEqual(frame.width, width, accuracy: 0.001)
+        }
+        XCTAssertEqual(frames[1].minY, 0)
+        XCTAssertEqual(frames[2].minY, 0)
+        XCTAssertGreaterThanOrEqual(frames[1].minX - frames[0].maxX, ComponentPanelLayout.horizontalSpacing)
+        XCTAssertEqual(frames[2].minX - frames[1].maxX, PluginPanelWidgetLayoutMetrics.compactSpacing, accuracy: 0.001)
+        XCTAssertEqual(frames[3].minY, frames[0].maxY + ComponentPanelLayout.verticalSpacing)
+        for (index, frame) in frames.enumerated() {
+            XCTAssertLessThanOrEqual(frame.maxX, ComponentPanelLayout.gridWidth)
+            for other in frames.dropFirst(index + 1) { XCTAssertFalse(frame.intersects(other)) }
+        }
+    }
+
+    func testCompactGridDragTargetsAndInsertionMarkersMirrorCorrectly() throws {
+        let span = try XCTUnwrap(PluginPanelWidgetSpan(width: 1, height: 8, grid: .compact))
+        let placements = ComponentGridPlacementEngine.placements(for: (0..<10).map { ("icon-\($0)", span) })
+        for (index, placement) in placements.enumerated() {
+            let frame = PanelLayoutDestination.frame(placement)
+            for (x, expected) in [(frame.minX + 1, index), (frame.maxX - 1, index + 1)] {
+                XCTAssertEqual(PanelLayoutDestination.gridOffset(at: CGPoint(x: x, y: frame.midY),
+                    placements: placements, rightToLeft: false), expected)
+                XCTAssertEqual(PanelLayoutDestination.gridOffset(
+                    at: CGPoint(x: ComponentPanelLayout.gridWidth - x, y: frame.midY),
+                    placements: placements, rightToLeft: true), expected)
+            }
+            let marker = try XCTUnwrap(PanelLayoutDestination.gridInsertionFrame(
+                offset: index, placements: placements, rightToLeft: false))
+            let mirrored = try XCTUnwrap(PanelLayoutDestination.gridInsertionFrame(
+                offset: index, placements: placements, rightToLeft: true))
+            XCTAssertEqual(marker.minX, frame.minX)
+            XCTAssertEqual(marker.minX, ComponentPanelLayout.gridWidth - mirrored.maxX, accuracy: 0.001)
+        }
+    }
+
+    @MainActor
+    func testLayoutCacheInvalidatesWhenOnlyGridDensityChanges() throws {
+        let cache = ComponentGridLayoutCache()
+        let standard = PluginPanelWidgetSpan(width: 1, height: 9)!
+        let compact = PluginPanelWidgetSpan(width: 1, height: 9, grid: .compact)!
+        let before = cache.placements(for: (0..<6).map { makeItem(id: "\($0)", span: standard) })
+        let after = cache.placements(for: (0..<6).map { makeItem(id: "\($0)", span: compact) })
+        XCTAssertGreaterThan(before[4].yOffset, 0)
+        XCTAssertEqual(after[4].yOffset, 0)
+        XCTAssertGreaterThan(after[5].yOffset, 0)
+        XCTAssertEqual(PanelLayoutDestination.frame(after[4]).maxX, ComponentPanelLayout.gridWidth, accuracy: 0.001)
+    }
+
     func testEmptyLayoutUsesEmptyStateHeight() {
         XCTAssertEqual(
             ComponentPanelLayout.gridContentHeight(for: []),

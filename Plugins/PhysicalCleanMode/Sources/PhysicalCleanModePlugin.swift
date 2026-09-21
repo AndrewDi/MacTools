@@ -23,10 +23,20 @@ private struct PhysicalCleanModePluginProvider: PluginProvider {
 @MainActor
 final class PhysicalCleanModePlugin: MacToolsPlugin, AccessibilityPermissionRefreshing, PluginActionProviding, PluginActionPermissionProviding {
     var panelItems: [PluginPanelItem] {
+        let state = rowState
         return [
             .row(id: "control", initialPlacement: .featurePanel,
-                 descriptor: rowDescriptor, state: rowState,
+                 descriptor: rowDescriptor, state: state,
                  action: { [weak self] in self?.handleAction($0) }),
+            .iconWidget(
+                id: "quick-control",
+                title: localization.string("metadata.title", defaultValue: metadata.title),
+                systemImage: metadata.iconName,
+                control: .button,
+                state: state,
+                menuActionBehavior: rowDescriptor.menuActionBehavior,
+                action: { [weak self] in self?.handleAction($0) }
+            ),
         ]
     }
 
@@ -53,10 +63,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, AccessibilityPermissionRefr
 
     let metadata: PluginMetadata
 
-    let rowDescriptor = PluginPanelRowDescriptor(
-        controlStyle: .switch,
-        menuActionBehavior: .dismissBeforeHandling
-    )
+    let rowDescriptor: PluginPanelRowDescriptor
 
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
@@ -97,6 +104,11 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, AccessibilityPermissionRefr
             )
         )
         self.isAccessibilityGranted = accessibilityReader()
+        self.rowDescriptor = PluginPanelRowDescriptor(
+            controlStyle: .button,
+            menuActionBehavior: .dismissBeforeHandling,
+            buttonTitleProvider: { localization.string("panel.button.enter", defaultValue: "开启") }
+        )
 
         storage.migrateValueIfNeeded(
             fromLegacyKey: StorageKey.legacyEnabledState,
@@ -108,8 +120,9 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, AccessibilityPermissionRefr
     var rowState: PluginPanelRowState {
         PluginPanelRowState(
             subtitle: panelSubtitle,
+            // Preserve session activity for host status, not a toggle control.
             isOn: session != nil,
-            isEnabled: true,
+            isEnabled: session == nil,
             isAvailable: true,
             detail: nil,
             errorMessage: lastErrorMessage
@@ -217,21 +230,11 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, AccessibilityPermissionRefr
     }
 
     func handleAction(_ action: PluginPanelAction) {
-        switch action {
-        case let .setSwitch(isEnabled):
-            if PhysicalCleanModeLog.isVerboseLoggingEnabled {
-                logger.debug("panel action setSwitch isEnabled=\(isEnabled, privacy: .public)")
-            }
-            setPhysicalCleanModeEnabled(isEnabled)
-        case .setDisclosureExpanded,
-             .setSelection,
-             .setNavigationSelection,
-             .clearNavigationSelection,
-             .setDate,
-             .setSlider,
-             .invokeAction:
-            break
+        guard case let .invokeAction(controlID) = action, controlID == "execute" else { return }
+        if PhysicalCleanModeLog.isVerboseLoggingEnabled {
+            logger.debug("panel action enter")
         }
+        enterPhysicalCleanModeIfPossible()
     }
 
     func permissionState(for permissionID: String) -> PluginPermissionState {
@@ -275,7 +278,7 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, AccessibilityPermissionRefr
                 .failed(message: availability.reason ?? PluginKitLocalization.actionUnavailable)
             }
         }
-        enablePhysicalCleanModeIfPossible()
+        enterPhysicalCleanModeIfPossible()
         let succeeded = session != nil
         let failureMessage = lastErrorMessage ?? PluginKitLocalization.actionUnavailable
         return ActionExecutionHandle {
@@ -319,21 +322,8 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, AccessibilityPermissionRefr
         notifyChange()
     }
 
-    private func setPhysicalCleanModeEnabled(_ isEnabled: Bool) {
-        guard isEnabled else {
-            clearError()
-            if let session {
-                session.requestStop(reason: .userRequested)
-            } else {
-                notifyChange()
-            }
-            return
-        }
-
-        enablePhysicalCleanModeIfPossible()
-    }
-
-    private func enablePhysicalCleanModeIfPossible() {
+    private func enterPhysicalCleanModeIfPossible() {
+        guard session == nil else { return }
         isAccessibilityGranted = accessibilityReader()
 
         guard isAccessibilityGranted else {
@@ -342,13 +332,9 @@ final class PhysicalCleanModePlugin: MacToolsPlugin, AccessibilityPermissionRefr
         }
 
         guard let exitBinding = shortcutBindingResolver?(ShortcutID.exitPhysicalCleanMode), exitBinding.isValid else {
-            logger.error("enable aborted because exit shortcut is missing or invalid")
+            logger.error("entry aborted because exit shortcut is missing or invalid")
             setError("error.invalidExitShortcut")
             notifyChange()
-            return
-        }
-
-        if session != nil {
             return
         }
 

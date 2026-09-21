@@ -586,8 +586,6 @@ struct MenuBarContent: View {
     static let launchControlOpenManagerActionID = "launch-control-open-manager"
     static let fanControlPluginID = "fan-control"
     static let fanControlManagePresetsActionID = "fan-add-preset"
-    static let zshConfigPluginID = "zsh-config"
-    static let zshConfigOpenSettingsActionID = "execute"
     static let batteryChargeLimitPluginID = "battery-charge-limit"
     static let batteryChargeLimitManageSettingsActionID = "battery-manage-settings"
 
@@ -825,12 +823,6 @@ struct MenuBarContent: View {
             return
         }
 
-        if isZshConfigOpenSettingsAction(pluginID: item.pluginID, controlID: controlID) {
-            pluginHost.presentPluginSettings(pluginID: Self.zshConfigPluginID)
-            onDismiss()
-            return
-        }
-
         switch behavior {
         case .keepPresented:
             pluginHost.invokePanelAction(controlID: controlID, for: item.id)
@@ -883,11 +875,6 @@ struct MenuBarContent: View {
             return
         }
 
-        if isZshConfigOpenSettingsAction(pluginID: action.pluginID, controlID: action.controlID) {
-            pluginHost.presentPluginSettings(pluginID: Self.zshConfigPluginID)
-            return
-        }
-
         if isBatteryChargeLimitManageSettingsAction(pluginID: action.pluginID, controlID: action.controlID) {
             pluginHost.presentPluginSettings(pluginID: Self.batteryChargeLimitPluginID)
             return
@@ -909,10 +896,6 @@ struct MenuBarContent: View {
 
     private func isFanControlManagePresetsAction(pluginID: String, controlID: String) -> Bool {
         pluginID == Self.fanControlPluginID && controlID == Self.fanControlManagePresetsActionID
-    }
-
-    private func isZshConfigOpenSettingsAction(pluginID: String, controlID: String) -> Bool {
-        pluginID == Self.zshConfigPluginID && controlID == Self.zshConfigOpenSettingsActionID
     }
 
     private func isBatteryChargeLimitManageSettingsAction(pluginID: String, controlID: String) -> Bool {

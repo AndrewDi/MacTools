@@ -16,9 +16,10 @@ final class PluginPanelCoordinatorTests: XCTestCase {
                                         isAvailable: visible, detail: nil, errorMessage: nil), action: action)
     }
 
-    private func widget(_ id: String, make: @escaping (PluginPanelWidgetContext) -> AnyView) -> PluginPanelItem {
+    private func widget(_ id: String, grid: PluginPanelWidgetGrid = .standard,
+                        make: @escaping (PluginPanelWidgetContext) -> AnyView) -> PluginPanelItem {
         .widget(id: id, initialPlacement: .dashboard,
-                descriptor: PluginPanelWidgetDescriptor(span: PluginPanelWidgetSpan(width: 2, height: 8)!),
+                descriptor: PluginPanelWidgetDescriptor(span: PluginPanelWidgetSpan(width: 2, height: 8, grid: grid)!),
                 state: PluginPanelWidgetState(subtitle: id, isActive: false, isEnabled: true, isAvailable: true, errorMessage: nil),
                 content: make)
     }
@@ -192,5 +193,30 @@ final class PluginPanelCoordinatorTests: XCTestCase {
         coordinator.clearWidgetViews()
         contexts[1].reportContentHeight(1000)
         XCTAssertEqual(coordinator.widgetSnapshot(item, id: id)?.span.height, 8)
+    }
+
+    func testWidgetMeasurementsPreserveDensityAndRejectPreviousGridMeasurements() throws {
+        let coordinator = PluginPanelCoordinator()
+        var contexts: [PluginPanelWidgetContext] = []
+        let placement = MenuBarPanelPlacement(item: .init(pluginID: "example", itemID: "chart"))
+        let id = placement.id.uuidString.lowercased()
+        var layout = MenuBarPanelConfiguration()
+        layout.placementsByPanelID["components"] = [placement]
+        for grid in [PluginPanelWidgetGrid.standard, .compact] {
+            let definition = widget("chart", grid: grid) { contexts.append($0); return AnyView(EmptyView()) }
+            try coordinator.update(pluginID: "example", metadata: metadata(), definitions: [definition], allowedKinds: [.widget])
+            coordinator.synchronize(configuration: layout, pluginOrder: ["example"], visiblePanelID: nil)
+            let item = try XCTUnwrap(coordinator.item(for: placement.item))
+            _ = coordinator.widgetView(for: id, dismiss: {}, presentDetail: { _ in })
+            if grid == .compact {
+                contexts[0].reportContentHeight(800)
+                XCTAssertEqual(coordinator.widgetSnapshot(item, id: id)?.span.height, 8)
+            }
+            contexts.last?.reportContentHeight(80)
+            let measured = try XCTUnwrap(coordinator.widgetSnapshot(item, id: id)?.span)
+            XCTAssertEqual(measured, PluginPanelWidgetSpan(width: 2, height: 10, grid: grid))
+            XCTAssertEqual(ComponentPanelLayout.itemWidth(for: measured), grid == .standard ? 148 : 115.6,
+                           accuracy: 0.001)
+        }
     }
 }

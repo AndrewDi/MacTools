@@ -71,6 +71,63 @@ must use a declared kind. Invalid or duplicate IDs do not replace a valid catalo
 silently. Installed packages from older PluginKit versions remain on disk and
 must be updated before the host loads their code.
 
+## Compact icon controls
+
+For a simple primary toggle, fixed action button, or settings-page entry point, use the shared `iconWidget` factory alongside
+the existing row. It produces a library-only widget with no initial placement and
+uses a 52.8-by-64-point hit target with a centered, single-line title below the icon.
+Long titles truncate at the tail; the full title, description, and error remain available on hover.
+Five controls fit across the existing 304-point panel, with 42-point surfaces,
+20-point symbols, and 10-point gaps between hit targets in both directions.
+Centered surfaces leave 20.8-point horizontal gaps. Use
+`compactCellSize` and `compactRowSpacing` from the layout metrics when reproducing
+the icon grid. Standard cards keep their four-column widths; both densities can share the same row.
+`PluginPanelWidgetSpan.grid` defaults to `.standard`; the shared icon factory
+selects `.compact`. Use layout metrics' `itemWidth(for:)` when resolving a span
+so its grid density is preserved.
+
+```swift
+.iconWidget(
+    id: "quick-control",
+    title: localization.string("metadata.title", defaultValue: metadata.title),
+    systemImage: metadata.iconName,
+    control: .toggle,
+    state: state,
+    menuActionBehavior: rowDescriptor.menuActionBehavior,
+    action: { [weak self] in self?.handleAction($0) }
+)
+```
+
+Declare both `row` and `widget` in manifest capabilities. Read the row state once
+and share that snapshot between the two definitions. `.toggle` sends
+`.setSwitch(!state.isOn)`; `.button` sends `.invokeAction(controlID: "execute")`.
+Only toggles use the on-state highlight. The shared renderer uses circular toggle
+surfaces and rounded-square button surfaces without an outer card or switch badge.
+Surfaces and accent-filled active states follow the panel theme, including library
+previews. Names, descriptions, and errors remain in tooltips, with duplicate lines
+removed. Error badges and native
+toggle/button accessibility semantics remain available. It does not optimistically change state.
+Plugins continue to publish the actual outcome through `onStateChange`.
+
+Disabled or unavailable controls and library previews cannot perform actions.
+Dismiss-before-handling controls close the panel before dispatching on the next
+main-actor turn. Existing permission checks, confirmations, and emergency exits
+remain in the plugin's handler. A chooser or confirmation must still open through
+that handler; never replace it with immediate execution. Settings entry points
+should use `PluginSettingsPresenting` from their shared handler, not host-specific
+row routing. Do not use this shortcut for rows with additional controls, including
+details that appear only after enabling, or controls whose primary action changes
+during a session. Keep Awake, IP Overview, Siri, and Screenshot remain row-only
+until their additional actions or multi-state interactions have a dedicated design.
+
+The shared renderer owns symbol size, centered icon frames, and spacing. Prefer the
+plugin's existing SF Symbol and a localized name for tooltips and accessibility;
+do not add per-plugin padding or symbol offsets.
+For foreground data refresh, attach visibility callbacks to both definitions and
+track the set of visible item IDs in the plugin. Start shared work when the first
+item appears and stop it only when the last item disappears; widget previews must
+not initiate that work.
+
 ## Identity and state
 
 An item definition is identified by `(pluginID, itemID)`. Each user-added placement
@@ -99,8 +156,12 @@ The host localizes inherited default descriptions when the app language changes.
 Plugins remain responsible for localizing explicit item descriptions, dynamic
 subtitles, and errors. Library previews render the view itself without additional
 title labels; item names remain available for library search, tooltips, and
-accessibility. The library preserves plugin order and previews widgets before
-rows, preserving declaration order within each renderer. Adding and removing
+accessibility. The library preserves plugin order and packs widgets before
+rows, processing declaration order within each renderer. All previews share a
+scale that fits two full panel widths, but each occupies only its actual bounds.
+Masonry placement chooses the topmost available position, then the leftmost;
+narrow previews do not reserve half-column slots. Only nearby previews mount,
+and scrolling back reuses snapshots cached for the selected plugin. Adding and removing
 placements belong to panel editing, not command-palette commands.
 
 For content-driven height, call `context.reportContentHeight(height)` from the

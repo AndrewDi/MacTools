@@ -62,7 +62,7 @@
     "scheme": "QuitAppsPlugin"
   },
   "capabilities": {
-    "panelItems": ["row"],
+    "panelItems": ["row", "widget"],
     "settings": "none"
   },
   "permissions": [],

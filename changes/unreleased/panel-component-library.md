@@ -2,4 +2,4 @@
 release: app
 type: changed
 ---
-Add repeated widgets from a side popover with a glass capsule search field and two-column previews. The library closes after a successful addition and supports a circular close button and Escape.
+Add repeated widgets from a searchable side popover with uniformly scaled, compact previews that leave no empty half-column beside narrow widgets. Adding a widget, Close, or Escape dismisses the library.

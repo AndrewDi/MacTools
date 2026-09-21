@@ -4,6 +4,36 @@ import MacToolsPluginKit
 
 @MainActor
 final class NightShiftPluginTests: XCTestCase {
+    func testOptionalIconWidgetTracksRowActionsAndFailures() throws {
+        let controller = MockController(status: false)
+        let plugin = NightShiftPlugin(controller: controller)
+        var notifications = 0
+        plugin.onStateChange = { notifications += 1 }
+
+        func widget() throws -> PluginPanelWidget {
+            XCTAssertEqual(plugin.panelItems.map(\.id), ["control", "quick-control"])
+            let item = try XCTUnwrap(plugin.panelItems.last)
+            XCTAssertNil(item.initialPlacement)
+            guard case let .widget(widget) = item.content else {
+                throw CocoaError(.coderInvalidValue)
+            }
+            return widget
+        }
+
+        XCTAssertFalse(try widget().state.isActive)
+        guard case let .row(row) = plugin.panelItems[0].content else { return XCTFail("Expected row") }
+        row.action(.setSwitch(true))
+        XCTAssertTrue(try widget().state.isActive)
+        XCTAssertTrue(plugin.rowState.isOn)
+        XCTAssertGreaterThan(notifications, 0)
+
+        controller.setEnabledResult = false
+        row.action(.setSwitch(false))
+        XCTAssertTrue(try widget().state.isActive)
+        XCTAssertNotNil(try widget().state.errorMessage)
+        XCTAssertEqual(try widget().state.errorMessage, plugin.rowState.errorMessage)
+    }
+
     private final class MockController: NightShiftControlling {
         var status: Bool
         var setEnabledResult: Bool

@@ -62,7 +62,7 @@
     "scheme": "EjectDiskPlugin"
   },
   "capabilities": {
-    "panelItems": ["row"],
+    "panelItems": ["row", "widget"],
     "settings": "none"
   },
   "permissions": [],

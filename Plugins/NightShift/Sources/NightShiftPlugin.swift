@@ -21,10 +21,20 @@ private struct NightShiftPluginProvider: PluginProvider {
 @MainActor
 final class NightShiftPlugin: MacToolsPlugin, PluginActionProviding {
     var panelItems: [PluginPanelItem] {
+        let state = rowState
         return [
             .row(id: "control", initialPlacement: .featurePanel,
-                 descriptor: rowDescriptor, state: rowState,
+                 descriptor: rowDescriptor, state: state,
                  action: { [weak self] in self?.handleAction($0) }),
+            .iconWidget(
+                id: "quick-control",
+                title: localization.string("metadata.title", defaultValue: metadata.title),
+                systemImage: metadata.iconName,
+                control: .toggle,
+                state: state,
+                menuActionBehavior: rowDescriptor.menuActionBehavior,
+                action: { [weak self] in self?.handleAction($0) }
+            ),
         ]
     }
 

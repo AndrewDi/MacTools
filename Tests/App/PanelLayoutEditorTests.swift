@@ -136,22 +136,6 @@ final class PanelLayoutEditorTests: XCTestCase {
         follower.detach()
     }
 
-    func testLibraryMasonryPreservesPanelScaleAndFillsTheShorterColumn() {
-        let panelWidth = ComponentPanelLayout.gridWidth
-        let width = PanelComponentLibraryLayout.columnWidth(availableWidth: panelWidth + PanelComponentLibraryLayout.spacing)
-        XCTAssertEqual(width, panelWidth / 2)
-        let source = CGSize(width: panelWidth / 2, height: 200)
-        XCTAssertEqual(PanelComponentLibraryLayout.previewSize(source, columnWidth: width),
-                       CGSize(width: panelWidth / 4, height: 100))
-        let sizes = [200, 50, 100, 50, 80].map { CGSize(width: panelWidth, height: CGFloat($0)) }
-        let columns = PanelComponentLibraryLayout.columns(for: sizes, columnWidth: panelWidth)
-        XCTAssertEqual(columns, [[0, 4], [1, 2, 3]])
-        XCTAssertEqual(Set(columns.flatMap { $0 }).count, sizes.count)
-        XCTAssertEqual(PanelComponentLibraryLayout.columns(for: [source, source, source, source], columnWidth: width),
-                       [[0, 2], [1, 3]], "Equal-height columns place the next preview on the left")
-        XCTAssertEqual(PanelComponentLibraryLayout.columns(for: [], columnWidth: width), [[], []])
-    }
-
     func testLibraryCanReopenAfterDismissingFocusedSearch() async throws {
         let host = makeHost([LayoutEditorTestPlugin("a", order: 0)])
         let presentation = LibraryPopoverTestPresentation()
@@ -237,6 +221,85 @@ final class PanelLayoutEditorTests: XCTestCase {
             to: URL(fileURLWithPath: "/private/tmp/mactools-widget-thumbnails.png"))
         XCTAssertEqual(a.contexts.count, 1, "Adding must reuse the current preview")
         XCTAssertTrue(b.contexts.isEmpty)
+    }
+
+    func testLibraryNarrowPreviewUsesOnlyItsBoundsAndAdjacentRowRemainsClickable() async throws {
+        try await assertLibraryNarrowPreview(grid: .standard, height: 11)
+    }
+
+    func testLibraryCompactPreviewUsesFiveColumnWidthAndDoesNotInvokeControls() async throws {
+        try await assertLibraryNarrowPreview(grid: .compact, height: 8)
+    }
+
+    private func assertLibraryNarrowPreview(grid: PluginPanelWidgetGrid, height: Int) async throws {
+        let plugin = LayoutEditorTestPlugin("a", order: 0)
+        plugin.spanWidth = 1
+        plugin.spanHeight = height
+        plugin.grid = grid
+        let host = makeHost([plugin])
+        var added: [String] = []
+        let hosting = NSHostingView(rootView: PanelComponentLibrary(pluginHost: host, panelID: "components") {
+            added.append($0.itemID)
+            return true
+        })
+        let window = NSWindow(contentRect: CGRect(x: 100, y: 100, width: 660, height: 440),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.makeKeyAndOrderFront(nil)
+        defer { window.close() }
+        try await settle()
+        let scroll = try XCTUnwrap(descendants(hosting).compactMap { $0 as? NSScrollView }.first { $0.bounds.width > 400 })
+        let document = try XCTUnwrap(scroll.documentView)
+        let layout = PanelComponentLibraryLayout(sourceSizes: [CGSize(width: grid == .standard ? 70 : 52.8,
+                                                                      height: CGFloat(height) * 8)],
+            availableWidth: scroll.bounds.width - PanelComponentLibraryLayout.horizontalPadding * 2)
+        let icon = try XCTUnwrap(layout.frames.first)
+        func click(x: CGFloat, y: CGFloat) {
+            let location = document.convert(CGPoint(x: x + PanelComponentLibraryLayout.horizontalPadding, y: y + 8), to: nil)
+            sendMouse(.leftMouseDown, at: location, to: window)
+            sendMouse(.leftMouseUp, at: location, to: window)
+        }
+        click(x: icon.maxX + PanelComponentLibraryLayout.spacing / 2, y: 10)
+        XCTAssertTrue(added.isEmpty, "The gap beside an icon is not part of its add target")
+        click(x: icon.maxX + PanelComponentLibraryLayout.spacing + 20, y: 10)
+        XCTAssertEqual(added, ["control"], "The row starts immediately after the narrow preview")
+        click(x: icon.midX, y: icon.midY)
+        XCTAssertEqual(added, ["control", "widget"])
+        XCTAssertEqual(plugin.contexts.count, 1)
+        XCTAssertEqual(plugin.controlInvocations, 0)
+    }
+
+    func testLibraryScrollLoadsNearbyPreviewsAndReusesSnapshotsOnReturn() async throws {
+        let plugin = LayoutEditorTestPlugin("a", order: 0)
+        plugin.libraryWidgetCount = 100
+        plugin.spanWidth = 4
+        plugin.spanHeight = 50
+        let host = makeHost([plugin])
+        let hosting = NSHostingView(rootView: PanelComponentLibrary(pluginHost: host, panelID: "components", onAdd: { _ in true }))
+        let window = NSWindow(contentRect: CGRect(x: 100, y: 100, width: 660, height: 440),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.contentView = hosting
+        window.orderFront(nil)
+        defer { window.close() }
+        try await settle()
+        XCTAssertTrue(plugin.contexts.contains { $0.itemID == "widget" })
+        XCTAssertLessThan(plugin.contexts.count, 20, "Opening the library must not render the whole catalog")
+        let scroll = try XCTUnwrap(descendants(hosting).compactMap { $0 as? NSScrollView }.first { $0.bounds.width > 400 })
+        let document = try XCTUnwrap(scroll.documentView)
+        scroll.contentView.scroll(to: CGPoint(x: 0, y: document.bounds.height - scroll.contentView.bounds.height))
+        scroll.reflectScrolledClipView(scroll.contentView)
+        try await settle()
+        XCTAssertTrue(plugin.contexts.contains { $0.itemID == "widget-99" })
+        XCTAssertLessThan(plugin.contexts.count, 30)
+        let count = plugin.contexts.count
+        scroll.contentView.scroll(to: .zero)
+        scroll.reflectScrolledClipView(scroll.contentView)
+        try await settle()
+        XCTAssertEqual(plugin.contexts.count, count, "Returning to rendered previews must reuse their bitmaps")
+        XCTAssertTrue(plugin.contexts.allSatisfy(\.isPreview))
+        XCTAssertEqual(plugin.controlInvocations, 0)
     }
 
     func testCrossPanelDragCommitsAtInsertionAndUndoRestoresBothLayouts() throws {
@@ -447,8 +510,10 @@ final class PanelLayoutEditorTests: XCTestCase {
     }
 
     func testRemovalRequiresConfirmationAndRemovesOnlyTheCurrentEntry() async throws {
-        for surface in [PluginPanelItemKind.widget, .row] {
-            let host = makeHost([LayoutEditorTestPlugin("a", order: 0), LayoutEditorTestPlugin("b", order: 1)])
+        for (surface, compact) in [(PluginPanelItemKind.widget, false), (.row, false), (.widget, true)] {
+            let plugin = LayoutEditorTestPlugin("a", order: 0)
+            if compact { plugin.spanWidth = 1; plugin.spanHeight = 6; plugin.grid = .compact }
+            let host = makeHost([plugin, LayoutEditorTestPlugin("b", order: 1)])
             let entryID = host.testEntry(pluginID: "a", kind: surface).id
             let window = mount(PanelLayoutEditor(pluginHost: host, panelID: surface.testPanelID, onDismiss: {}))
             defer { window.close() }
@@ -458,7 +523,9 @@ final class PanelLayoutEditorTests: XCTestCase {
                 .first { $0.identifier?.rawValue == "panel.layout.drag.\(entryID)" })
             setHover(source, inside: true)
             try await settle()
-            let location = source.convert(CGPoint(x: source.menuFrame.minX + PanelLayoutItemControlsLayout(size: source.bounds.size).buttonSide / 2, y: source.menuFrame.midY), to: nil)
+            let removeButton = PanelLayoutItemControlsLayout(size: source.bounds.size).buttonFrame(at: 0)
+            let location = source.convert(CGPoint(x: source.menuFrame.minX + removeButton.midX,
+                                                  y: source.menuFrame.minY + removeButton.midY), to: nil)
             XCTAssertFalse(root.hitTest(location) === source)
             sendMouse(.leftMouseDown, at: location, to: window)
             sendMouse(.leftMouseUp, at: location, to: window)
@@ -790,20 +857,25 @@ private final class LayoutEditorTestPlugin: MacToolsPlugin {
             .row(id: "control", initialPlacement: .featurePanel,
                  descriptor: rowDescriptor, state: rowState,
                  action: { [weak self] in self?.handleAction($0) }),
-            .widget(id: "widget", initialPlacement: .dashboard,
+        ] + (0..<libraryWidgetCount).map { index in
+            .widget(id: index == 0 ? "widget" : "widget-\(index)", initialPlacement: index == 0 ? .dashboard : nil,
                     descriptor: descriptor, state: widgetState,
                     content: { [weak self] context in
                         self?.makeView(context: context) ?? AnyView(EmptyView())
-                    }),
-        ]
+                    })
+        }
     }
 
     let metadata: PluginMetadata
     let rowDescriptor = PluginPanelRowDescriptor(controlStyle: .switch, menuActionBehavior: .keepPresented)
-    var descriptor: PluginPanelWidgetDescriptor { .init(span: PluginPanelWidgetSpan(width: spanWidth, height: spanHeight)!) }
+    var descriptor: PluginPanelWidgetDescriptor {
+        .init(span: PluginPanelWidgetSpan(width: spanWidth, height: spanHeight, grid: grid)!)
+    }
     var runtimeVisible = true
     var spanWidth = 2
     var spanHeight = 12
+    var grid: PluginPanelWidgetGrid = .standard
+    var libraryWidgetCount = 1
     var subtitle = "Reading"
     var contexts: [PluginPanelWidgetContext] = []
     var showsInteractionProbe = false

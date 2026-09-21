@@ -62,7 +62,7 @@
     "scheme": "DisplaySleepPlugin"
   },
   "capabilities": {
-    "panelItems": ["row"],
+    "panelItems": ["row", "widget"],
     "settings": "none"
   },
   "permissions": [],

@@ -102,10 +102,21 @@ private struct CloudflareR2PluginProvider: PluginProvider {
 @MainActor
 final class CloudflareR2Plugin: ObservableObject, MacToolsPlugin, PluginSettingsPresenting, PluginActionProviding {
     var panelItems: [PluginPanelItem] {
+        let state = rowState
+        let descriptor = rowDescriptor
         return [
             .row(id: "control", initialPlacement: .featurePanel,
-                 descriptor: rowDescriptor, state: rowState,
+                 descriptor: descriptor, state: state,
                  action: { [weak self] in self?.handleAction($0) }),
+            .iconWidget(
+                id: "quick-control",
+                title: localization.string("widget.title", defaultValue: "R2 上传"),
+                systemImage: metadata.iconName,
+                control: .button,
+                state: state,
+                menuActionBehavior: descriptor.menuActionBehavior,
+                action: { [weak self] in self?.handleAction($0) }
+            ),
         ]
     }
 

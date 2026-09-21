@@ -64,7 +64,7 @@
     "scheme": "InputRemappingPlugin"
   },
   "capabilities": {
-    "panelItems": ["row"],
+    "panelItems": ["row", "widget"],
     "settings": "workspace"
   },
   "permissions": [

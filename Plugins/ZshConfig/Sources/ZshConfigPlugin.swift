@@ -29,12 +29,23 @@ private enum ControlID {
 // MARK: - Plugin
 
 @MainActor
-final class ZshConfigPlugin: MacToolsPlugin {
+final class ZshConfigPlugin: MacToolsPlugin, PluginSettingsPresenting {
     var panelItems: [PluginPanelItem] {
+        let state = rowState
+        let descriptor = rowDescriptor
         return [
             .row(id: "control", initialPlacement: .featurePanel,
-                 descriptor: rowDescriptor, state: rowState,
+                 descriptor: descriptor, state: state,
                  action: { [weak self] in self?.handleAction($0) }),
+            .iconWidget(
+                id: "quick-control",
+                title: localization.string("metadata.title", defaultValue: metadata.title),
+                systemImage: metadata.iconName,
+                control: .button,
+                state: state,
+                menuActionBehavior: descriptor.menuActionBehavior,
+                action: { [weak self] in self?.handleAction($0) }
+            ),
         ]
     }
 
@@ -54,6 +65,7 @@ final class ZshConfigPlugin: MacToolsPlugin {
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
+    var requestSettingsPresentation: (() -> Void)?
 
     // MARK: Private
 
@@ -110,7 +122,8 @@ final class ZshConfigPlugin: MacToolsPlugin {
     }
 
     func handleAction(_ action: PluginPanelAction) {
-        // The host intercepts the Edit button and navigates to this plugin's settings page.
+        guard case .invokeAction(controlID: "execute") = action else { return }
+        requestSettingsPresentation?()
     }
 
     var permissionRequirements: [PluginPermissionRequirement] {

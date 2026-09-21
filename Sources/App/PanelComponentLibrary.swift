@@ -62,32 +62,6 @@ private struct PanelComponentLibraryPreviewItem: Identifiable {
     }
 }
 
-/// Use known panel dimensions to place previews in one pass, without mounting views for measurement.
-enum PanelComponentLibraryLayout {
-    static let spacing: CGFloat = 14
-    static let horizontalPadding: CGFloat = 20
-
-    static func columnWidth(availableWidth: CGFloat) -> CGFloat {
-        max(0, (availableWidth - spacing) / 2)
-    }
-
-    static func previewSize(_ source: CGSize, columnWidth: CGFloat) -> CGSize {
-        let scale = columnWidth / ComponentPanelLayout.gridWidth
-        return CGSize(width: source.width * scale, height: source.height * scale)
-    }
-
-    static func columns(for sizes: [CGSize], columnWidth: CGFloat) -> [[Int]] {
-        var columns = [[Int](), [Int]()]
-        var heights: [CGFloat] = [0, 0]
-        for (index, size) in sizes.enumerated() {
-            let column = heights[0] <= heights[1] ? 0 : 1
-            columns[column].append(index)
-            heights[column] += previewSize(size, columnWidth: columnWidth).height + spacing
-        }
-        return columns
-    }
-}
-
 /// Only the selected plugin mounts previews; browsing never enables a panel or invokes a control.
 struct PanelComponentLibrary: View {
     @ObservedObject var pluginHost: PluginHost
@@ -96,7 +70,6 @@ struct PanelComponentLibrary: View {
     @State private var query = ""
     @State private var selection: String?
     @State private var errorMessage: String?
-    @State private var measuredPreviewSizes: [String: CGSize] = [:]
     @State private var presentationFocus = MenuBarPanelPopoverFocus()
     @FocusState private var searchFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -161,25 +134,13 @@ struct PanelComponentLibrary: View {
                         .padding(.trailing, 36)
                         .padding(20)
 
-                        GeometryReader { geometry in
-                            let previews = selected.previewItems.map { PanelComponentLibraryPreviewItem(item: $0, host: pluginHost) }
-                            let width = PanelComponentLibraryLayout.columnWidth(
-                                availableWidth: geometry.size.width - PanelComponentLibraryLayout.horizontalPadding * 2)
-                            let columns = PanelComponentLibraryLayout.columns(for: previews.map(previewSourceSize), columnWidth: width)
-                            ScrollView {
-                                HStack(alignment: .top, spacing: PanelComponentLibraryLayout.spacing) {
-                                    ForEach(columns.indices, id: \.self) { column in
-                                        LazyVStack(alignment: .leading, spacing: PanelComponentLibraryLayout.spacing) {
-                                            ForEach(columns[column].map { previews[$0] }) { item in
-                                                preview(item, columnWidth: width)
-                                            }
-                                        }
-                                        .frame(width: width, alignment: .leading)
-                                    }
-                                }
-                                .padding(.horizontal, PanelComponentLibraryLayout.horizontalPadding)
-                                .padding(.top, 8).padding(.bottom, 20)
+                        PanelComponentLibraryPreviews(pluginHost: pluginHost, items: selected.previewItems) { key in
+                            guard onAdd(key) else {
+                                errorMessage = FeatureL10n.string("组件暂不可用，请稍后重试。")
+                                return
                             }
+                            errorMessage = nil
+                            close()
                         }
                         if let errorMessage {
                             Text(errorMessage).font(.caption).foregroundStyle(.red)
@@ -229,19 +190,44 @@ struct PanelComponentLibrary: View {
         presentationFocus.end()
         dismiss()
     }
+}
 
-    private func preview(_ item: PanelComponentLibraryPreviewItem, columnWidth: CGFloat) -> some View {
-        let sourceSize = previewSourceSize(item)
-        let size = PanelComponentLibraryLayout.previewSize(sourceSize, columnWidth: columnWidth)
-        return Button {
-            guard onAdd(item.key) else {
-                errorMessage = FeatureL10n.string("组件暂不可用，请稍后重试。")
-                return
+private struct PanelComponentLibraryPreviews: View {
+    @ObservedObject var pluginHost: PluginHost
+    let items: [PanelCatalogItem]
+    let onAdd: (PluginPanelItemKey) -> Void
+    @State private var measuredPreviewSizes: [String: CGSize] = [:]
+    @State private var cache = PanelComponentLibraryPreviewCache()
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    var body: some View {
+        GeometryReader { geometry in
+            let previews = items.map { PanelComponentLibraryPreviewItem(item: $0, host: pluginHost) }
+            let layout = PanelComponentLibraryLayout(sourceSizes: previews.map(previewSourceSize),
+                availableWidth: geometry.size.width - PanelComponentLibraryLayout.horizontalPadding * 2)
+            let frames = zip(previews, layout.frames).map { PanelItemFrame(id: $0.id, frame: $1) }
+            let byID = Dictionary(uniqueKeysWithValues: previews.map { ($0.id, $0) })
+            ScrollView {
+                PanelViewportStack(frames: frames, width: layout.width, height: layout.height) { id in
+                    if let item = byID[id] {
+                        preview(item, scale: layout.scale)
+                            .environment(\.layoutDirection, layoutDirection)
+                    }
+                }
+                .environment(\.layoutDirection, .leftToRight)
+                .padding(.horizontal, PanelComponentLibraryLayout.horizontalPadding)
+                .padding(.top, 8).padding(.bottom, 20)
             }
-            errorMessage = nil
-            close()
+        }
+    }
+
+    private func preview(_ item: PanelComponentLibraryPreviewItem, scale: CGFloat) -> some View {
+        let sourceSize = previewSourceSize(item)
+        return Button {
+            onAdd(item.key)
         } label: {
-            PanelComponentLibraryPreview(size: sourceSize, onSizeChange: { measuredPreviewSizes[item.id] = $0 }) { reportHeight in
+            PanelComponentLibraryPreview(id: item.id, size: sourceSize, cache: cache,
+                                         onSizeChange: { measuredPreviewSizes[item.id] = $0 }) { reportHeight in
                 if let component = item.component {
                     return pluginHost.componentPreviewView(for: component.id, reportContentHeight: reportHeight)
                 } else if let feature = item.feature {
@@ -249,12 +235,12 @@ struct PanelComponentLibrary: View {
                 }
                 return nil
             }
-            .frame(width: size.width, height: size.height)
+            .frame(width: sourceSize.width * scale, height: sourceSize.height * scale)
             .allowsHitTesting(false).accessibilityHidden(true)
             .contentShape(Rectangle())
         }
         .buttonStyle(PanelComponentLibraryPreviewButtonStyle(
-            cornerRadius: MenuBarPanelLayout.cornerRadius * columnWidth / ComponentPanelLayout.gridWidth))
+            cornerRadius: MenuBarPanelLayout.cornerRadius * scale))
         .help(item.title)
         .accessibilityLabel(item.title + ", " + FeatureL10n.string("添加组件"))
         .accessibilityIdentifier("panel.library.add.\(item.id)")
@@ -354,36 +340,56 @@ private struct PanelComponentLibraryPreviewButtonStyle: ButtonStyle {
     }
 }
 
+/// Keep only the selected plugin's rendered snapshots when offscreen views unmount.
+@MainActor
+private final class PanelComponentLibraryPreviewCache {
+    enum Snapshot {
+        case image(NSImage)
+        case unavailable
+    }
+
+    var snapshots: [String: Snapshot] = [:]
+}
+
 private struct PanelComponentLibraryPreview: View {
+    let id: String
     let size: CGSize
+    let cache: PanelComponentLibraryPreviewCache
     let onSizeChange: (CGSize) -> Void
     let makeContent: (@escaping (CGFloat) -> Void) -> AnyView?
-    @State private var image: NSImage?
-    @State private var unavailable = false
+    @State private var snapshot: PanelComponentLibraryPreviewCache.Snapshot?
     @Environment(\.menuBarPanelTheme) private var theme
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         Group {
-            if let image { Image(nsImage: image).resizable().scaledToFit() }
-            else if unavailable { Image(systemName: "square.dashed").foregroundStyle(.secondary) }
-            else { ProgressView().controlSize(.small) }
+            switch snapshot {
+            case .image(let image): Image(nsImage: image).resizable().scaledToFit()
+            case .unavailable: Image(systemName: "square.dashed").foregroundStyle(.secondary)
+            case nil: ProgressView().controlSize(.small)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
-            guard image == nil, !unavailable else { return }
+            guard snapshot == nil else { return }
+            if let cached = cache.snapshots[id] {
+                snapshot = cached
+                return
+            }
+            defer { cache.snapshots[id] = snapshot }
             var measuredHeight: CGFloat?
             guard let content = makeContent({ height in
                 let metrics = PluginPanelWidgetLayoutMetrics.default
                 guard height.isFinite, height > 0,
                       let span = Int(exactly: ceil(height / metrics.cellHeight)) else { return }
                 measuredHeight = metrics.itemHeight(forSpanHeight: span)
-            }) else { unavailable = true; return }
+            }) else { snapshot = .unavailable; return }
             // A static bitmap excludes plugin controls from keyboard focus and ongoing preview updates.
             func rootView(_ size: CGSize) -> AnyView {
                 AnyView(content
                     .environment(\.menuBarPanelTheme, theme)
                     .environment(\.pluginComponentTheme, theme.componentTheme)
+                    .tint(theme.accent)
                     .environment(\.colorScheme, colorScheme)
                     .environment(\.locale, PluginRuntimeLocalization.locale)
                     .frame(width: size.width, height: size.height))
@@ -409,10 +415,10 @@ private struct PanelComponentLibraryPreview: View {
                 hosting.cacheDisplay(in: hosting.bounds, to: bitmap)
                 let result = NSImage(size: renderSize)
                 result.addRepresentation(bitmap)
-                image = result
+                snapshot = .image(result)
                 if renderSize != size { onSizeChange(renderSize) }
             } else {
-                unavailable = true
+                snapshot = .unavailable
             }
         }
     }

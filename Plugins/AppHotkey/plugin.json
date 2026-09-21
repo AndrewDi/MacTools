@@ -65,7 +65,7 @@
     "scheme": "AppHotkeyPlugin"
   },
   "capabilities": {
-    "panelItems": ["row"],
+    "panelItems": ["row", "widget"],
     "settings": "form"
   },
   "permissions": [],

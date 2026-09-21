@@ -232,9 +232,9 @@ final class PluginPanelCoordinator {
             let context = PluginPanelWidgetContext(pluginID: entry.pluginID, itemID: entry.itemID,
                 placementID: entry.placement.id, dismiss: { [weak session] in session?.dismiss() },
                 presentDetail: { [weak session] in session?.presentDetail($0) },
-                reportContentHeight: { [weak self, weak session, width = widget.descriptor.span.width] height in
+                reportContentHeight: { [weak self, weak session, span = widget.descriptor.span] height in
                     guard let self, let session, self.widgetSessions[id] === session else { return }
-                    self.updateWidgetHeight(height, width: width, id: id, session: session)
+                    self.updateWidgetHeight(height, declaredSpan: span, id: id, session: session)
                 })
             invoke(entry.pluginID) { session.content = widget.makeView(context) }
             session.revision = revision
@@ -242,12 +242,16 @@ final class PluginPanelCoordinator {
         return session.content
     }
 
-    private func updateWidgetHeight(_ height: CGFloat, width: Int, id: String, session: WidgetSession) {
+    private func updateWidgetHeight(_ height: CGFloat, declaredSpan: PluginPanelWidgetSpan,
+                                    id: String, session: WidgetSession) {
         guard height.isFinite, height > 0,
               let item = item(for: id), item.isAvailable,
-              case let .widget(widget) = item.definition.content, widget.descriptor.span.width == width,
+              case let .widget(widget) = item.definition.content,
+              widget.descriptor.span.width == declaredSpan.width,
+              widget.descriptor.span.grid == declaredSpan.grid,
               let heightSpan = Int(exactly: ceil(height / PluginPanelWidgetLayoutMetrics.default.cellHeight)),
-              let span = PluginPanelWidgetSpan(width: width, height: heightSpan) else { return }
+              let span = PluginPanelWidgetSpan(width: declaredSpan.width, height: heightSpan,
+                                              grid: declaredSpan.grid) else { return }
         let previous = session.measuredSpan ?? widget.descriptor.span
         session.measuredSpan = span
         guard span != previous, layoutChangeTask == nil else { return }
@@ -310,7 +314,9 @@ final class PluginPanelCoordinator {
         let state = widget.state
         let description = item.displayDescription(subtitle: state.subtitle, errorMessage: state.errorMessage)
         let measured = id.flatMap { widgetSessions[$0]?.measuredSpan }
-        let span = measured.flatMap { $0.width == widget.descriptor.span.width ? $0 : nil }
+        let span = measured.flatMap {
+            $0.width == widget.descriptor.span.width && $0.grid == widget.descriptor.span.grid ? $0 : nil
+        }
             ?? widget.descriptor.span
         return PluginPanelWidgetSnapshot(id: id ?? item.id, title: item.title, iconName: item.iconName,
             iconTint: item.iconTint, description: description, helpText: description,

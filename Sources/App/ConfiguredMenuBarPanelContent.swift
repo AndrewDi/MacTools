@@ -44,7 +44,8 @@ enum ConfiguredMenuBarPanelLayout {
             let originY = result.height
             result.components += placements.map {
                 ComponentGridPlacement(id: $0.id, row: $0.row, column: $0.column, span: $0.span,
-                                       yOffset: originY + $0.yOffset)
+                                       yOffset: originY + $0.yOffset, gridColumns: $0.gridColumns,
+                                       gridSpacing: $0.gridSpacing)
             }
             result.height += ComponentPanelLayout.gridContentHeight(for: placements)
             pendingComponents.removeAll(keepingCapacity: true)

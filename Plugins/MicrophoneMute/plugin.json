@@ -67,7 +67,7 @@
     "scheme": "MicrophoneMutePlugin"
   },
   "capabilities": {
-    "panelItems": ["row"],
+    "panelItems": ["row", "widget"],
     "settings": "none"
   },
   "permissions": [],

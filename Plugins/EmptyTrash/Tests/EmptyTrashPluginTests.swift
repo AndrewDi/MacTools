@@ -4,6 +4,28 @@ import MacToolsPluginKit
 
 @MainActor
 final class EmptyTrashPluginTests: XCTestCase {
+    func testRowAndWidgetShareVisibleRefreshLifetime() async throws {
+        let counter = TrashCountProbe(itemCount: 3)
+        let plugin = EmptyTrashPlugin(countItems: { await counter.countItems() }, countRefreshDelay: .zero)
+        let items = plugin.panelItems
+        let rowVisibility = try XCTUnwrap(items.first { $0.id == "control" }?.visibilityHandler)
+        let widgetVisibility = try XCTUnwrap(items.first { $0.id == "quick-control" }?.visibilityHandler)
+        widgetVisibility(true)
+        await waitForRequestCount(1, counter: counter)
+        rowVisibility(true)
+        widgetVisibility(false)
+        plugin.refresh()
+        await waitForRequestCount(2, counter: counter)
+        rowVisibility(false)
+        plugin.refresh()
+        try await Task.sleep(for: .milliseconds(20))
+        let hiddenCount = await counter.requestCountValue()
+        XCTAssertEqual(hiddenCount, 2, "Hiding one view must not stop another; hiding both stops refresh work")
+        widgetVisibility(true)
+        await waitForRequestCount(3, counter: counter)
+        widgetVisibility(false)
+    }
+
     func testRefreshDoesNotCountItemsWhilePrimaryPanelIsHidden() async {
         let counter = TrashCountProbe(itemCount: 3)
         let plugin = EmptyTrashPlugin(

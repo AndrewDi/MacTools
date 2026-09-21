@@ -62,7 +62,7 @@
     "scheme": "FixDamagedAppPlugin"
   },
   "capabilities": {
-    "panelItems": ["row"],
+    "panelItems": ["row", "widget"],
     "settings": "form"
   },
   "permissions": [],

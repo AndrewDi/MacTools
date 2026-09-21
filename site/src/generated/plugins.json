@@ -846,7 +846,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -1496,7 +1497,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -2245,7 +2247,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -2598,7 +2601,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -3029,7 +3033,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -4306,7 +4311,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -5030,7 +5036,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -5298,7 +5305,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "workspace"
       },
@@ -6917,7 +6925,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -7186,7 +7195,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -7535,7 +7545,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -7782,7 +7793,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -8384,7 +8396,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -8654,7 +8667,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -9281,7 +9295,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -9554,7 +9569,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -9900,7 +9916,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "workspace"
       },
@@ -10361,7 +10378,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "workspace"
       },
@@ -11862,7 +11880,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -12131,7 +12150,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -13477,7 +13497,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -14124,7 +14145,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -14366,7 +14388,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -14710,7 +14733,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -15016,7 +15040,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -16934,7 +16959,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -17280,7 +17306,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "none"
       },
@@ -18057,7 +18084,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -18612,7 +18640,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -18854,7 +18883,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "form"
       },
@@ -22469,7 +22499,8 @@
     {
       "capabilities": {
         "panelItems": [
-          "row"
+          "row",
+          "widget"
         ],
         "settings": "workspace"
       },

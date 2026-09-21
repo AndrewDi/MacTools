@@ -15,7 +15,8 @@ final class FixDamagedAppPluginTests: XCTestCase {
         XCTAssertTrue(plugin.rowState.isEnabled)
         XCTAssertFalse(plugin.rowState.isOn)
         XCTAssertNil(plugin.rowState.errorMessage)
-        XCTAssertFalse(plugin.panelItems.contains { $0.kind == .widget })
+        XCTAssertEqual(plugin.panelItems.map(\.id), ["control", "quick-control"])
+        XCTAssertNil(plugin.panelItems.last?.initialPlacement)
     }
 
     func testManifestPanelCapabilitiesMatchRuntimeContract() throws {

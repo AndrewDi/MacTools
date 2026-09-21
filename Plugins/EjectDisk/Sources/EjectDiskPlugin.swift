@@ -21,13 +21,28 @@ private struct EjectDiskPluginProvider: PluginProvider {
 @MainActor
 final class EjectDiskPlugin: MacToolsPlugin, PluginActionProviding {
     var panelItems: [PluginPanelItem] {
+        let state = rowState
+        let descriptor = rowDescriptor
         return [
             .row(id: "control", initialPlacement: .featurePanel,
-                 descriptor: rowDescriptor, state: rowState,
+                 descriptor: descriptor, state: state,
                  action: { [weak self] in self?.handleAction($0) })
                 .onVisibilityChange { [weak self] visible in
                     if visible { self?.panelItemDidBecomeVisible("control") }
                     else { self?.panelItemDidBecomeHidden("control") }
+                },
+            .iconWidget(
+                id: "quick-control",
+                title: localization.string("metadata.title", defaultValue: metadata.title),
+                systemImage: metadata.iconName,
+                control: .button,
+                state: state,
+                menuActionBehavior: descriptor.menuActionBehavior,
+                action: { [weak self] in self?.handleAction($0) }
+            )
+                .onVisibilityChange { [weak self] visible in
+                    if visible { self?.panelItemDidBecomeVisible("quick-control") }
+                    else { self?.panelItemDidBecomeHidden("quick-control") }
                 },
         ]
     }
@@ -53,6 +68,7 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginActionProviding {
     private var ejectableVolumes: [EjectableVolume] = []
     private var lastErrorMessage: String?
     private var discoveryTask: Task<Void, Never>?
+    private var visiblePanelItems: Set<String> = []
 
     init(
         localization: PluginLocalization = PluginLocalization(bundle: .main),
@@ -124,21 +140,23 @@ final class EjectDiskPlugin: MacToolsPlugin, PluginActionProviding {
     func refresh() {}
 
     func deactivate(reason _: PluginDeactivationReason) {
+        visiblePanelItems.removeAll()
         discoveryTask?.cancel()
         discoveryTask = nil
         isDetecting = false
     }
 
     func panelItemDidBecomeVisible(_ surface: String) {
-        guard surface == "control" else {
+        guard surface == "control" || surface == "quick-control" else {
             return
         }
-
-        discoverEjectableVolumes()
+        let wasHidden = visiblePanelItems.isEmpty
+        visiblePanelItems.insert(surface)
+        if wasHidden { discoverEjectableVolumes() }
     }
 
     func panelItemDidBecomeHidden(_ surface: String) {
-        guard surface == "control" else {
+        guard visiblePanelItems.remove(surface) != nil, visiblePanelItems.isEmpty else {
             return
         }
 

@@ -1488,6 +1488,23 @@ final class PluginHostComponentSupportTests: XCTestCase {
                                                                     features: host.panelItems))
     }
 
+    func testInterleavedCompactWidgetsKeepFiveColumnGeometryAcrossRows() throws {
+        let span = try XCTUnwrap(PluginPanelWidgetSpan(width: 1, height: 8, grid: .compact))
+        let host = makeHost(plugins: (0..<6).map { MockCombinedPlugin(id: "icon-\($0)", order: $0, span: span) })
+        let widgets = (0..<6).map { host.testEntry(pluginID: "icon-\($0)", kind: .widget) }
+        let row = host.testEntry(pluginID: "icon-0", kind: .row)
+        let entries = Array(widgets.prefix(5)) + [row, widgets[5]]
+        let result = ConfiguredMenuBarPanelLayout.placement(entries: entries, components: host.componentItems,
+                                                          features: host.panelItems)
+        let frames = result.components.map(PanelLayoutDestination.frame)
+        XCTAssertEqual(Array(frames.prefix(5)).map(\.minY), Array(repeating: 0, count: 5))
+        XCTAssertEqual(frames[4].maxX, ComponentPanelLayout.gridWidth, accuracy: 0.001)
+        XCTAssertEqual(result.featureOffsets[row.id], 64 + ConfiguredMenuBarPanelLayout.itemSpacing)
+        XCTAssertGreaterThan(frames[5].minY, try XCTUnwrap(result.featureOffsets[row.id]))
+        XCTAssertEqual(frames[5].minX, 0)
+        XCTAssertEqual(result.height, frames[5].maxY)
+    }
+
     func testRepeatedFeatureRowsKeepTheFullScrollableDocument() async throws {
         let plugin = MockCombinedPlugin(id: "copies", order: 1, span: try XCTUnwrap(PluginPanelWidgetSpan(width: 2, height: 12)))
         let host = makeHost(plugins: [plugin])

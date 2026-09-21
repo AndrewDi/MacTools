@@ -50,10 +50,21 @@ private struct DockClickMinimizePluginProvider: PluginProvider {
 @MainActor
 final class DockClickMinimizePlugin: MacToolsPlugin, AccessibilityPermissionRefreshing {
     var panelItems: [PluginPanelItem] {
+        let state = rowState
+        let descriptor = rowDescriptor
         return [
             .row(id: "control", initialPlacement: .featurePanel,
-                 descriptor: rowDescriptor, state: rowState,
+                 descriptor: descriptor, state: state,
                  action: { [weak self] in self?.handleAction($0) }),
+            .iconWidget(
+                id: "quick-control",
+                title: localization.string("widget.title", defaultValue: "点击隐藏"),
+                systemImage: metadata.iconName,
+                control: .toggle,
+                state: state,
+                menuActionBehavior: descriptor.menuActionBehavior,
+                action: { [weak self] in self?.handleAction($0) }
+            ),
         ]
     }
 

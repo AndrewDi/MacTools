@@ -20,6 +20,9 @@ PLUGIN_INTERFACES = REPO_ROOT / "Sources/MacToolsPluginKit/PluginInterfaces.swif
 PLUGIN_SETTINGS_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/PluginSettingsModels.swift"
 APP_VERSION_CONFIG = REPO_ROOT / "Configs/AppVersion.xcconfig"
 NEW_API_MINIMUM_HOSTS = {
+    "PluginPanelWidgetGrid": "1.3.1",
+    "PluginPanelIconControl": "1.3.1",
+    "iconWidget": "1.3.1",
     "PluginPanelItem": "1.3.1",
     "PluginPanelItemKind": "1.3.1",
     "PluginPanelInitialPlacement": "1.3.1",
@@ -414,6 +417,12 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
                 self.assertEqual(NEW_API_MINIMUM_HOSTS.get(symbol), "1.3.1")
                 self.assertTrue(minimum_host_violations("probe", "1.3.0", symbol))
                 self.assertEqual(minimum_host_violations("probe", "1.3.1", symbol), [])
+
+    def test_icon_widget_inventory_requires_host_1_3_1(self) -> None:
+        for symbol in ("PluginPanelIconControl", "iconWidget"):
+            self.assertEqual(NEW_API_MINIMUM_HOSTS[symbol], "1.3.1")
+            self.assertTrue(minimum_host_violations("probe", "1.3.0", symbol))
+            self.assertEqual(minimum_host_violations("probe", "1.3.1", symbol), [])
 
     def test_centered_window_snap_inventory_requires_host_1_3_1(self) -> None:
         for filename in ("WindowSnapGeometry.swift", "WindowSnapOverlayController.swift", "PluginWindowSnapCoordinator.swift"):

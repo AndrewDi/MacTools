@@ -6,8 +6,22 @@ struct ComponentGridPlacement: Identifiable, Equatable {
     let id: String
     let row: Int
     let column: Int
+    let gridColumns: Int
+    let gridSpacing: CGFloat
     let span: PluginPanelWidgetSpan
     let yOffset: CGFloat
+
+    init(id: String, row: Int, column: Int, span: PluginPanelWidgetSpan, yOffset: CGFloat,
+         gridColumns: Int = ComponentPanelLayout.columns,
+         gridSpacing: CGFloat = ComponentPanelLayout.horizontalSpacing) {
+        self.id = id
+        self.row = row
+        self.column = column
+        self.gridColumns = gridColumns
+        self.gridSpacing = gridSpacing
+        self.span = span
+        self.yOffset = yOffset
+    }
 }
 
 enum ComponentPanelLayout {
@@ -23,6 +37,7 @@ enum ComponentPanelLayout {
     static let bottomPadding = MenuBarPanelLayout.contentBottomPadding
     static let verticalPadding = MenuBarPanelLayout.outerPadding
     static let verticalSpacing = horizontalPadding
+    static let compactRowSpacing = metrics.compactRowSpacing
     static let emptyContentHeight: CGFloat = 164
     static let maximumPanelHeight = MenuBarPanelLayout.maximumPanelHeight
     static let minimumPanelHeight = MenuBarPanelLayout.minimumPanelHeight
@@ -44,7 +59,7 @@ enum ComponentPanelLayout {
     }
 
     static func itemWidth(for span: PluginPanelWidgetSpan) -> CGFloat {
-        metrics.itemWidth(forSpanWidth: span.width)
+        metrics.itemWidth(for: span)
     }
 
     static func itemHeight(for span: PluginPanelWidgetSpan) -> CGFloat {
@@ -52,7 +67,7 @@ enum ComponentPanelLayout {
     }
 
     static func xOffset(for placement: ComponentGridPlacement) -> CGFloat {
-        metrics.offsetX(forColumn: placement.column)
+        CGFloat(placement.column) * (gridWidth + placement.gridSpacing) / CGFloat(placement.gridColumns)
     }
 
     static func yOffset(for placement: ComponentGridPlacement) -> CGFloat {
@@ -75,7 +90,7 @@ enum ComponentPanelLayout {
         if items.isEmpty {
             rawContentHeight = emptyContentHeight
         } else {
-            let placements = ComponentGridPlacementEngine.placements(for: items, columns: columns)
+            let placements = ComponentGridPlacementEngine.placements(for: items)
             rawContentHeight = gridContentHeight(for: placements)
         }
 
@@ -95,22 +110,27 @@ enum ComponentPanelLayout {
 }
 
 enum ComponentGridPlacementEngine {
-    static func placements(
-        for items: [PluginPanelWidgetSnapshot],
-        columns: Int = ComponentPanelLayout.columns
-    ) -> [ComponentGridPlacement] {
-        placements(for: items.map { (id: $0.id, span: $0.span) }, columns: columns)
+    static func placements(for items: [PluginPanelWidgetSnapshot]) -> [ComponentGridPlacement] {
+        placements(for: items.map { (id: $0.id, span: $0.span) })
     }
 
-    static func placements(for items: [(id: String, span: PluginPanelWidgetSpan)],
-                           columns: Int = ComponentPanelLayout.columns) -> [ComponentGridPlacement] {
-        var occupiedCells: Set<GridCell> = []
+    static func placements(for items: [(id: String, span: PluginPanelWidgetSpan)]) -> [ComponentGridPlacement] {
+        // A common subdivision packs quarters and fifths together without changing
+        // card widths or adding a separate row for each control style.
+        let hasCompactItems = items.contains { $0.span.grid == .compact }
+        let columns = hasCompactItems
+            ? PluginPanelWidgetGrid.standard.rawValue * PluginPanelWidgetGrid.compact.rawValue
+            : ComponentPanelLayout.columns
+        let gridSpacing = hasCompactItems
+            ? PluginPanelWidgetLayoutMetrics.compactSpacing : ComponentPanelLayout.horizontalSpacing
+        var occupiedRows: [Int: UInt32] = [:]
         var placements: [ComponentGridPlacement] = []
-        var columnBottoms = Array(repeating: CGFloat(0), count: columns)
+        var columnBottoms = Array<ColumnBottom?>(repeating: nil, count: columns)
         var firstCandidateRows: [PluginPanelWidgetSpan: Int] = [:]
 
         for item in items {
             let span = item.span
+            let width = span.width * columns / span.grid.rawValue
             // Occupancy only grows. Rows rejected for this span cannot become free.
             // Keep first-fit packing without scanning those rows for every copy.
             var row = firstCandidateRows[span, default: 0]
@@ -119,11 +139,12 @@ enum ComponentGridPlacementEngine {
                 var didPlace = false
 
                 for column in 0..<columns where canPlace(
-                    span: span,
+                    width: width,
+                    height: span.height,
                     row: row,
                     column: column,
                     columns: columns,
-                    occupiedCells: occupiedCells
+                    occupiedRows: occupiedRows
                 ) {
                     placements.append(
                         ComponentGridPlacement(
@@ -133,19 +154,24 @@ enum ComponentGridPlacementEngine {
                             span: span,
                             yOffset: yOffset(
                                 column: column,
-                                span: span,
+                                width: width,
+                                grid: span.grid,
                                 columnBottoms: columnBottoms
-                            )
+                            ),
+                            gridColumns: columns,
+                            gridSpacing: gridSpacing
                         )
                     )
                     markOccupied(
-                        span: span,
+                        width: width,
+                        height: span.height,
                         row: row,
                         column: column,
-                        occupiedCells: &occupiedCells
+                        occupiedRows: &occupiedRows
                     )
                     updateColumnBottoms(
                         span: span,
+                        width: width,
                         column: column,
                         yOffset: placements[placements.count - 1].yOffset,
                         columnBottoms: &columnBottoms
@@ -168,69 +194,72 @@ enum ComponentGridPlacementEngine {
 
     private static func yOffset(
         column: Int,
-        span: PluginPanelWidgetSpan,
-        columnBottoms: [CGFloat]
+        width: Int,
+        grid: PluginPanelWidgetGrid,
+        columnBottoms: [ColumnBottom?]
     ) -> CGFloat {
-        let coveredColumns = column..<(column + span.width)
-        let previousBottom = coveredColumns
-            .map { columnBottoms[$0] }
-            .max() ?? 0
-
-        return previousBottom == 0
-            ? 0
-            : previousBottom + ComponentPanelLayout.verticalSpacing
+        let coveredColumns = column..<(column + width)
+        return coveredColumns.reduce(CGFloat.zero) { offset, column in
+            guard let previous = columnBottoms[column] else { return offset }
+            let spacing = grid == .compact && previous.grid == .compact
+                ? ComponentPanelLayout.compactRowSpacing : ComponentPanelLayout.verticalSpacing
+            return max(offset, previous.height + spacing)
+        }
     }
 
     private static func updateColumnBottoms(
         span: PluginPanelWidgetSpan,
+        width: Int,
         column: Int,
         yOffset: CGFloat,
-        columnBottoms: inout [CGFloat]
+        columnBottoms: inout [ColumnBottom?]
     ) {
         let bottom = yOffset + ComponentPanelLayout.itemHeight(for: span)
-        for occupiedColumn in column..<(column + span.width) {
-            columnBottoms[occupiedColumn] = bottom
+        for occupiedColumn in column..<(column + width) {
+            columnBottoms[occupiedColumn] = ColumnBottom(height: bottom, grid: span.grid)
         }
     }
 
     private static func canPlace(
-        span: PluginPanelWidgetSpan,
+        width: Int,
+        height: Int,
         row: Int,
         column: Int,
         columns: Int,
-        occupiedCells: Set<GridCell>
+        occupiedRows: [Int: UInt32]
     ) -> Bool {
-        guard column + span.width <= columns else {
+        guard column + width <= columns else {
             return false
         }
 
-        for occupiedRow in row..<(row + span.height) {
-            for occupiedColumn in column..<(column + span.width) {
-                if occupiedCells.contains(GridCell(row: occupiedRow, column: occupiedColumn)) {
-                    return false
-                }
-            }
+        let mask = columnMask(width: width, column: column)
+        for occupiedRow in row..<(row + height) {
+            if occupiedRows[occupiedRow, default: 0] & mask != 0 { return false }
         }
 
         return true
     }
 
     private static func markOccupied(
-        span: PluginPanelWidgetSpan,
+        width: Int,
+        height: Int,
         row: Int,
         column: Int,
-        occupiedCells: inout Set<GridCell>
+        occupiedRows: inout [Int: UInt32]
     ) {
-        for occupiedRow in row..<(row + span.height) {
-            for occupiedColumn in column..<(column + span.width) {
-                occupiedCells.insert(GridCell(row: occupiedRow, column: occupiedColumn))
-            }
+        let mask = columnMask(width: width, column: column)
+        for occupiedRow in row..<(row + height) {
+            occupiedRows[occupiedRow, default: 0] |= mask
         }
     }
 
-    private struct GridCell: Hashable {
-        let row: Int
-        let column: Int
+    private static func columnMask(width: Int, column: Int) -> UInt32 {
+        ((1 << width) - 1) << column
+    }
+
+    private struct ColumnBottom {
+        let height: CGFloat
+        let grid: PluginPanelWidgetGrid
     }
 }
 

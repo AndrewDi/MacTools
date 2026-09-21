@@ -7,6 +7,24 @@ import MacToolsPluginKit
 
 @MainActor
 final class PanelLayoutEditingSessionTests: XCTestCase {
+    func testCompactEditorControlsKeepUsableTargetsInsideTheIconTile() {
+        let bounds = CGRect(origin: .zero, size: PluginPanelWidgetLayoutMetrics.default.compactCellSize)
+        let layout = PanelLayoutItemControlsLayout(size: bounds.size)
+        XCTAssertTrue(layout.isCompact)
+        XCTAssertEqual(layout.buttonSide, 20)
+        let toolbar = PanelLayoutItemControlsLayout.frame(in: bounds)
+        XCTAssertTrue(bounds.contains(toolbar))
+        for rtl in [false, true] {
+            let frames = (0..<3).map { layout.buttonFrame(at: $0, rightToLeft: rtl) }
+            for (index, frame) in frames.enumerated() {
+                XCTAssertTrue(CGRect(origin: .zero, size: layout.size).contains(frame))
+                for other in frames.dropFirst(index + 1) { XCTAssertFalse(frame.intersects(other)) }
+            }
+        }
+        XCTAssertEqual(layout.buttonFrame(at: 0).minX,
+                       layout.size.width - layout.buttonFrame(at: 0, rightToLeft: true).maxX)
+    }
+
     func testPointerPreviewDoesNotInvalidateTheEditorSession() throws {
         let session = PanelLayoutEditingSession()
         let ids = (0..<20).map(String.init)

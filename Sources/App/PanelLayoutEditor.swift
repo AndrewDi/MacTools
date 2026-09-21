@@ -347,6 +347,7 @@ private struct PanelLayoutReorderItem<Content: View>: View {
     @Environment(\.panelLayoutScrollToItem) private var scrollToItem
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private enum Control: Hashable { case remove, moveTo, more }
+    @Environment(\.layoutDirection) private var layoutDirection
     @FocusState private var focusedControl: Control?
 
     private var showsControls: Bool { hoverState.isActive }
@@ -368,15 +369,12 @@ private struct PanelLayoutReorderItem<Content: View>: View {
                 .accessibilityHidden(true)
             GeometryReader { proxy in
                 let metrics = PanelLayoutItemControlsLayout(size: proxy.size)
-                let layout = metrics.isVertical
-                    ? AnyLayout(VStackLayout(spacing: metrics.spacing))
-                    : AnyLayout(HStackLayout(spacing: metrics.spacing))
-                layout {
+                PanelLayoutControls(metrics: metrics, rightToLeft: layoutDirection == .rightToLeft) {
                     Button {
                         // Read geometry only when invoked, including keyboard activation.
                         let controls = PanelLayoutItemControlsLayout.frame(in: proxy.frame(in: .named(popoverCoordinateSpace)))
-                        remove(CGRect(x: controls.minX, y: controls.minY,
-                                      width: metrics.buttonSide, height: metrics.buttonSide))
+                        let button = metrics.buttonFrame(at: 0, rightToLeft: layoutDirection == .rightToLeft)
+                        remove(button.offsetBy(dx: controls.minX, dy: controls.minY))
                     } label: {
                         controlIcon("trash", side: metrics.buttonSide)
                     }
@@ -471,24 +469,63 @@ private struct PanelLayoutReorderItem<Content: View>: View {
 /// Share the toolbar geometry with native pointer hit testing, including narrow cards.
 struct PanelLayoutItemControlsLayout {
     let isVertical: Bool
+    let isCompact: Bool
     let buttonSide: CGFloat
-    let spacing: CGFloat = 8
+    let spacing: CGFloat
 
     init(size: CGSize) {
+        let minimumSide = min(size.width, size.height)
+        isCompact = size.width < 80 && minimumSide >= 44 && size.height <= size.width * 1.25
+        spacing = isCompact ? 4 : 8
         isVertical = size.width < 120 && size.height > size.width
         let main = isVertical ? size.height : size.width
         let cross = isVertical ? size.width : size.height
-        buttonSide = max(0, min(32, floor((main - 8 - spacing * 2) / 3), cross - 4))
+        let compactInset: CGFloat = minimumSide < 48 ? 0 : 8
+        buttonSide = isCompact
+            ? floor((minimumSide - compactInset - spacing) / 2)
+            : max(0, min(32, floor((main - 8 - spacing * 2) / 3), cross - 4))
+    }
+
+    var size: CGSize {
+        if isCompact { return CGSize(width: buttonSide * 2 + spacing, height: buttonSide * 2 + spacing) }
+        let length = buttonSide * 3 + spacing * 2
+        return isVertical ? CGSize(width: buttonSide, height: length) : CGSize(width: length, height: buttonSide)
+    }
+
+    func buttonFrame(at index: Int, rightToLeft: Bool = false) -> CGRect {
+        let step = buttonSide + spacing
+        let origin: CGPoint
+        if isCompact {
+            origin = index < 2 ? CGPoint(x: CGFloat(index) * step, y: 0) : CGPoint(x: step / 2, y: step)
+        } else {
+            origin = isVertical ? CGPoint(x: 0, y: CGFloat(index) * step) : CGPoint(x: CGFloat(index) * step, y: 0)
+        }
+        return CGRect(x: rightToLeft ? size.width - origin.x - buttonSide : origin.x,
+                      y: origin.y, width: buttonSide, height: buttonSide)
     }
 
     static func frame(in bounds: CGRect) -> CGRect {
-        let layout = Self(size: bounds.size)
-        let length = layout.buttonSide * 3 + layout.spacing * 2
-        let size = layout.isVertical
-            ? CGSize(width: layout.buttonSide, height: length)
-            : CGSize(width: length, height: layout.buttonSide)
+        let size = Self(size: bounds.size).size
         return CGRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
                       width: size.width, height: size.height)
+    }
+}
+
+/// Keep all three controls usable on square icon widgets, with the same native hit map.
+private struct PanelLayoutControls: Layout {
+    let metrics: PanelLayoutItemControlsLayout
+    let rightToLeft: Bool
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        metrics.size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for (index, subview) in subviews.enumerated() {
+            let frame = metrics.buttonFrame(at: index, rightToLeft: rightToLeft)
+            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                          anchor: .topLeading, proposal: ProposedViewSize(frame.size))
+        }
     }
 }
 
