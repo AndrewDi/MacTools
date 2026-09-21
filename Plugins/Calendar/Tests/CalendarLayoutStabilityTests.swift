@@ -172,7 +172,7 @@ final class CalendarLayoutStabilityTests: XCTestCase {
             calendar: calendar, notificationCenter: NotificationCenter(), today: today, now: { today })
         let heights = Heights()
         let view = NSHostingView(rootView: CalendarComponentView(
-            context: PluginComponentContext(pluginID: "calendar", dismiss: {}, isPanelVisible: true),
+            context: PluginPanelWidgetContext(pluginID: "calendar", itemID: "widget", placementID: UUID(), dismiss: {}),
             viewModel: model, settingsStore: settings, onContentHeightChange: { heights.values.append($0) }
         ))
         view.frame = NSRect(x: 0, y: 0, width: 304, height: 608)

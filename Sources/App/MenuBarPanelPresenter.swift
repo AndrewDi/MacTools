@@ -373,7 +373,6 @@ final class MenuBarPanelPresenter: NSObject {
         observePanelItemChanges()
         applyCurrentAppearance()
         prewarm()
-        scheduleComponentViewPrewarm()
     }
 
     isolated deinit {
@@ -522,16 +521,6 @@ final class MenuBarPanelPresenter: NSObject {
         applyPopoverSize()
         containerController.loadViewIfNeeded()
         containerController.view.setFrameSize(popover.contentSize)
-    }
-
-    private func scheduleComponentViewPrewarm() {
-        DispatchQueue.main.async { [weak self] in
-            guard let self else {
-                return
-            }
-
-            self.pluginHost.prewarmComponentViews(dismiss: self.onDismiss)
-        }
     }
 
     private func show(_ popover: NSPopover, relativeTo button: NSStatusBarButton) {
@@ -884,8 +873,11 @@ final class MenuBarPanelPresenter: NSObject {
             )
             height = PanelLayoutDestination.editorContentHeight(
                 itemHeight: placement.height,
-                maximumHeight: max(MenuBarPanelLayout.minimumContentHeight,
-                    MenuBarPanelLayout.maximumContentHeight(for: screen) - MenuBarPanelLayout.editingActionBarHeight)
+                maximumHeight: max(
+                    MenuBarPanelLayout.minimumPanelHeight - MenuBarPanelLayout.editingPanelChromeHeight,
+                    MenuBarPanelLayout.maximumPanelHeight(for: screen)
+                        - MenuBarPanelLayout.editingPanelChromeHeight - MenuBarPanelLayout.editingActionBarHeight
+                )
             )
         } else {
             height = ConfiguredMenuBarPanelLayout.contentHeight(
@@ -1127,7 +1119,7 @@ struct MenuBarUnifiedPanelContent: View {
                 .frame(height: MenuBarPanelLayout.editingActionBarHeight)
                 .popover(isPresented: $showsComponentLibrary, arrowEdge: .trailing) {
                     PanelComponentLibrary(pluginHost: pluginHost, panelID: model.selectedTab.id) { entry in
-                        guard pluginHost.addPanelEntry(entry, to: model.selectedTab.id) else { return false }
+                        guard pluginHost.addPanelItem(entry, to: model.selectedTab.id) else { return false }
                         layoutEditingSession.reset()
                         additionRevealRequest = UUID()
                         return true
@@ -1136,7 +1128,8 @@ struct MenuBarUnifiedPanelContent: View {
             }
         }
         .padding(.top, MenuBarPanelLayout.panelTopPadding)
-        .padding(.bottom, MenuBarPanelLayout.panelBottomPadding)
+        .padding(.bottom, model.isEditingLayout
+            ? MenuBarPanelLayout.editingPanelBottomPadding : MenuBarPanelLayout.panelBottomPadding)
         .frame(
             width: MenuBarPanelLayout.baseWidth,
             height: MenuBarPanelLayout.panelHeight(

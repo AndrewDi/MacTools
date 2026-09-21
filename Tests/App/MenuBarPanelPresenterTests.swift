@@ -284,7 +284,7 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         let model = presenter.debugPanelModelForTests
         let popover = presenter.debugPopoverForTests
         let customID = try XCTUnwrap(fixture.host.addMenuBarPanel())
-        fixture.host.assignPanelEntry(pluginID: "one", surface: .dashboard, to: customID)
+        fixture.host.moveTestItem(pluginID: "one", kind: .widget, to: customID)
         presenter.showPanel(id: customID, toggle: false, relativeTo: fixture.button)
         model.beginLayoutEditing(visibleItemCount: 1)
         try await Task.sleep(for: .milliseconds(250))
@@ -300,7 +300,7 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         }
         XCTAssertNil(model.deletePanel(id: customID))
         XCTAssertEqual(model.selectedTab, .components, "Selection must recover in the deletion transaction")
-        XCTAssertEqual(fixture.host.panelID(pluginID: "one", surface: .dashboard), "components")
+        XCTAssertEqual(fixture.host.testPanelID(pluginID: "one", kind: .widget), "components")
         let finalSize = popover.contentSize
         XCTAssertGreaterThan(finalSize.height, oldHeight)
         try await Task.sleep(for: .milliseconds(250))
@@ -365,7 +365,7 @@ final class MenuBarPanelPresenterTests: XCTestCase {
         let suite = "MenuBarPanelPresenterTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         let host = PluginHost(plugins: plugins, shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager())
         let presenter = MenuBarPanelPresenter(pluginHost: host, appUpdater: AppUpdater(startingUpdater: false),
@@ -413,9 +413,19 @@ final class MenuBarPanelPresenterTests: XCTestCase {
 }
 
 @MainActor
-private final class PresenterLayoutPlugin: MacToolsPlugin, PluginComponentPanel {
+private final class PresenterLayoutPlugin: MacToolsPlugin {
+    var panelItems: [PluginPanelItem] {
+        return [
+            .widget(id: "widget", initialPlacement: .dashboard,
+                    descriptor: descriptor, state: widgetState,
+                    content: { [weak self] context in
+                        self?.makeView(context: context) ?? AnyView(EmptyView())
+                    }),
+        ]
+    }
+
     let metadata: PluginMetadata
-    let descriptor = PluginComponentDescriptor(span: PluginComponentSpan(width: 4, height: 24)!)
+    let descriptor = PluginPanelWidgetDescriptor(span: PluginPanelWidgetSpan(width: 4, height: 24)!)
     var onStateChange: (() -> Void)?
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
@@ -425,9 +435,9 @@ private final class PresenterLayoutPlugin: MacToolsPlugin, PluginComponentPanel 
                                   order: 0, defaultDescription: id)
     }
 
-    var componentPanelState: PluginComponentState {
-        .init(subtitle: "", isActive: true, isEnabled: true, isVisible: true, errorMessage: nil)
+    var widgetState: PluginPanelWidgetState {
+        .init(subtitle: "", isActive: true, isEnabled: true, isAvailable: true, errorMessage: nil)
     }
 
-    func makeView(context: PluginComponentContext) -> AnyView { AnyView(Text(metadata.title)) }
+    func makeView(context: PluginPanelWidgetContext) -> AnyView { AnyView(Text(metadata.title)) }
 }

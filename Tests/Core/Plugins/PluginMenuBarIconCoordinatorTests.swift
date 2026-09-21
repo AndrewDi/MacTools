@@ -228,7 +228,7 @@ final class PluginMenuBarIconCoordinatorTests: XCTestCase {
         let plugin = IconPlugin(id: "first")
         let host = PluginHost(
             plugins: [plugin], shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager()
         )

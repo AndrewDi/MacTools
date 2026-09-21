@@ -160,24 +160,6 @@ enum PluginListFilter {
         ] + item.productSearchKeywords)
     }
 
-    static func matches(
-        featureItem item: PluginFeatureManagementItem,
-        query: String,
-        filter: PluginCategoryFilter
-    ) -> Bool {
-        guard filter.contains(category: item.category) else {
-            return false
-        }
-
-        let category = PluginCategory(rawString: item.category)
-        return matches(query: query, in: [
-            item.title,
-            item.description,
-            item.id,
-            category.displayName
-        ])
-    }
-
     static func countsByFilter(managementItems items: [PluginManagementItem], query: String) -> [PluginCategoryFilter: Int] {
         var counts: [PluginCategoryFilter: Int] = [:]
         let allFiltered = items.filter { matches(managementItem: $0, query: query, filter: .all) }
@@ -191,17 +173,5 @@ enum PluginListFilter {
         return counts
     }
 
-    static func countsByFilter(featureItems items: [PluginFeatureManagementItem], query: String) -> [PluginCategoryFilter: Int] {
-        var counts: [PluginCategoryFilter: Int] = [:]
-        let allFiltered = items.filter { matches(featureItem: $0, query: query, filter: .all) }
-        counts[.all] = allFiltered.count
-
-        for category in PluginCategory.allCases {
-            let filter = PluginCategoryFilter.category(category)
-            counts[filter] = allFiltered.filter { filter.contains(category: $0.category) }.count
-        }
-
-        return counts
-    }
 
 }

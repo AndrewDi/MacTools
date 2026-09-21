@@ -52,7 +52,7 @@ final class PluginCatalogManagerTests: XCTestCase {
             dynamicPluginManager: dynamicManager,
             pluginCatalogManager: catalogManager,
             shortcutStore: ShortcutStore(userDefaults: defaults),
-            pluginDisplayPreferencesStore: PluginDisplayPreferencesStore(userDefaults: defaults),
+            pluginOrderingStore: PluginOrderingStore(userDefaults: defaults),
             preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
             globalShortcutManager: GlobalShortcutManager(),
             loadDynamicPluginsOnInit: false

@@ -9,7 +9,7 @@ enum CalendarComponentLayout {
     static let headerHeight: CGFloat = 20
     static let weekdayHeight: CGFloat = 10
     static let dayCellSize: CGFloat = 36
-    static let cornerRadius: CGFloat = PluginComponentPanelLayoutMetrics.cardCornerRadius
+    static let cornerRadius: CGFloat = PluginPanelWidgetLayoutMetrics.cardCornerRadius
 
     // Allow roughly ten regular event rows, including their date heading.
     static let maximumAgendaListHeight: CGFloat = 480
@@ -43,7 +43,7 @@ struct CalendarComponentView: View {
     @Environment(\.pluginComponentTheme) private var theme
 
     init(
-        context: PluginComponentContext,
+        context: PluginPanelWidgetContext,
         viewModel: CalendarComponentViewModel,
         settingsStore: CalendarSettingsStore,
         localization: PluginLocalization = PluginLocalization(bundle: .main),

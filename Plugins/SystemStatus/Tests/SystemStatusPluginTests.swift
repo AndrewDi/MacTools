@@ -471,25 +471,28 @@ final class SystemStatusPluginTests: XCTestCase {
         XCTAssertNotNil(plugin as? any PluginPortablePreferencesRestorationReporting)
         XCTAssertNotNil(plugin as? any PluginPersistentPreferencesChangeSignaling)
         XCTAssertNotNil(plugin as? any PluginDashboardPresenting)
-        XCTAssertNotNil(plugin as? any PluginComponentDetailPresenting)
+        guard case let .widget(widget) = plugin.panelItems.first?.content else {
+            return XCTFail("Expected a widget item")
+        }
+        XCTAssertNotNil(widget.makeDetail)
     }
 
     func testPluginProvidesMetricDetailsButNotProcessDetails() throws {
         let plugin = SystemStatusPlugin(storage: SystemStatusMemoryPluginStorage())
 
         let cpuDetail = try XCTUnwrap(
-            plugin.makeComponentDetailContent(detailID: SystemStatusMetricKind.cpu.rawValue, dismiss: {})
+            plugin.makePanelDetailContent(detailID: SystemStatusMetricKind.cpu.rawValue, dismiss: {})
         )
 
         XCTAssertEqual(cpuDetail.id, SystemStatusMetricKind.cpu.rawValue)
         XCTAssertEqual(cpuDetail.title, "CPU")
         XCTAssertNil(
-            plugin.makeComponentDetailContent(
+            plugin.makePanelDetailContent(
                 detailID: SystemStatusMetricKind.topProcesses.rawValue,
                 dismiss: {}
             )
         )
-        XCTAssertNil(plugin.makeComponentDetailContent(detailID: "unknown", dismiss: {}))
+        XCTAssertNil(plugin.makePanelDetailContent(detailID: "unknown", dismiss: {}))
     }
 
     func testPortablePreferencesRejectUnsupportedFormatWithoutChangingConfiguration() throws {
@@ -606,10 +609,10 @@ final class SystemStatusPluginTests: XCTestCase {
             storage: SystemStatusMemoryPluginStorage()
         )
 
-        let expectedHeight = PluginComponentPanelLayoutMetrics.default.heightSpan(
+        let expectedHeight = PluginPanelWidgetLayoutMetrics.default.heightSpan(
             fittingContentHeight: SystemStatusComponentLayout.contentHeight(for: [.cpu])
         )
-        XCTAssertEqual(plugin.descriptor.span, PluginComponentSpan(width: 4, height: expectedHeight)!)
+        XCTAssertEqual(plugin.descriptor.span, PluginPanelWidgetSpan(width: 4, height: expectedHeight)!)
     }
 
     func testMenuBarFormatterUsesSelectedOrder() {
@@ -1286,17 +1289,13 @@ final class SystemStatusPluginTests: XCTestCase {
         let plugin = SystemStatusPlugin(viewModel: viewModel, storage: SystemStatusMemoryPluginStorage())
 
         let first = plugin.makeView(
-            context: PluginComponentContext(
-                pluginID: "system-status",
-                dismiss: {},
-                isPanelVisible: true
+            context: PluginPanelWidgetContext(
+                pluginID: "system-status", itemID: "widget", placementID: UUID(), dismiss: {}
             )
         )
         let second = plugin.makeView(
-            context: PluginComponentContext(
-                pluginID: "system-status",
-                dismiss: {},
-                isPanelVisible: true
+            context: PluginPanelWidgetContext(
+                pluginID: "system-status", itemID: "widget", placementID: UUID(), dismiss: {}
             )
         )
 

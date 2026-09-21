@@ -214,7 +214,7 @@ final class MouseEnhancerPluginTests: XCTestCase {
 
         XCTAssertTrue(didRequestPermission)
         XCTAssertTrue(session.activatedConfigurations.isEmpty)
-        XCTAssertNotNil(plugin.primaryPanelState.errorMessage)
+        XCTAssertNotNil(plugin.rowState.errorMessage)
     }
 
     func testTurningOffAllDirectionsStopsSession() {
