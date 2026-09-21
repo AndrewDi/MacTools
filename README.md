@@ -28,6 +28,8 @@ Or download the app from [GitHub Releases](https://github.com/ggbond268/MacTools
 
 Open MacTools, choose plugins in **Settings → Marketplace**, then arrange your menu bar panels. Permissions are requested as needed.
 
+Plugin shortcut settings use the same separate section headings and native cards as other settings, without empty-section gaps or redundant navigation buttons.
+
 <details>
 <summary>Updates and Nightly builds</summary>
 

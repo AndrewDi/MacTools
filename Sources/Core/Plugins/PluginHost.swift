@@ -2094,10 +2094,6 @@ final class PluginHost: ObservableObject {
         appPresentationHandler?(.settings(.permissions))
     }
 
-    func presentActionsAndShortcutsSettings() {
-        appPresentationHandler?(.settings(.feature(.actionsAndShortcuts)))
-    }
-
     @discardableResult
     func selectFeatureSettingsPane(_ pane: FeatureSettingsPane) -> Bool {
         switch pane {
