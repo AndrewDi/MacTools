@@ -26,7 +26,7 @@ interaction that deliberately acquires host focus can restore the origin on
 cancellation, but not after an explicit target handoff or external focus change.
 Do not hide the entire application to dismiss a single panel.
 
-These additive APIs require host 1.3.1 and retain PluginKit v6 compatibility.
+These APIs require host 1.3.1. The current host uses PluginKit v7; plugins must declare the matching ABI and minimum host version.
 
 ## Surface audit
 
@@ -47,15 +47,15 @@ from either palette to a settings destination opens and activates Settings.
 
 ## Validation
 
-Run focused panel, command-input, shortcut-recording, Window Switcher, clipboard,
-and presentation-safety tests before repository script tests and binary compatibility.
-Native tests should verify keyboard input, marked text, temporary focus transfer,
-outside dismissal, stale-event rejection, and untouched foreground application.
+Run the affected panel, command-input, shortcut, or plugin tests. Reuse existing
+coverage for keyboard input, marked text, focus transfer, outside dismissal, and
+stale-event rejection; add cases only where the change leaves a meaningful gap.
+Shared PluginKit changes follow the [contribution checks](../../CONTRIBUTING.md#validation).
 
-Physical acceptance must cover Settings closed/background/another Space, full screen,
-Stage Manager, multiple displays, Chinese IME candidate clicks, preview pinch/pan,
-context menus, shortcut recording, confirmation cancellation, and paste into the
-original target. Synthetic input and window-property assertions do not establish
+For shared focus or dismissal changes, select affected physical checks: Settings
+closed, in the background, or on another Space; full screen and Stage Manager;
+multiple displays; Chinese IME candidate clicks; preview pinch/pan; context menus;
+shortcut recording; confirmation cancellation; and paste into the original target. Synthetic input and window-property assertions do not establish
 physical gesture or Space-transition behavior.
 
 ### Local verification, 2026-09-20
