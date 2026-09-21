@@ -236,11 +236,12 @@ private struct PanelComponentLibraryPreviews: View {
                 return nil
             }
             .frame(width: sourceSize.width * scale, height: sourceSize.height * scale)
+            .padding(PanelComponentLibraryLayout.previewPadding)
             .allowsHitTesting(false).accessibilityHidden(true)
             .contentShape(Rectangle())
         }
         .buttonStyle(PanelComponentLibraryPreviewButtonStyle(
-            cornerRadius: MenuBarPanelLayout.cornerRadius * scale))
+            cornerRadius: MenuBarPanelLayout.cornerRadius * scale + PanelComponentLibraryLayout.previewPadding))
         .help(item.title)
         .accessibilityLabel(item.title + ", " + FeatureL10n.string("添加组件"))
         .accessibilityIdentifier("panel.library.add.\(item.id)")
@@ -333,9 +334,9 @@ private struct PanelComponentLibraryPreviewButtonStyle: ButtonStyle {
 
         private var borderColor: Color {
             if isHovered || configuration.isPressed {
-                return .accentColor.opacity(contrast == .increased ? 0.8 : 0.45)
+                return .accentColor.opacity(contrast == .increased ? 0.8 : 0.3)
             }
-            return contrast == .increased ? .primary.opacity(0.35) : Color(nsColor: .separatorColor)
+            return contrast == .increased ? .primary.opacity(0.35) : Color(nsColor: .separatorColor).opacity(0.45)
         }
     }
 }

@@ -11,6 +11,7 @@ struct PanelLayoutEditor: View {
     let revealBottomRequest: UUID?
     @StateObject private var session: PanelLayoutEditingSession
     @StateObject private var scroller = PanelLayoutDragScroller()
+    @StateObject private var dropGeometryCache = PanelLayoutDropGeometryCache()
     @State private var hover = PanelLayoutHoverState()
     @State private var entryToRemove: MenuBarPanelLayoutEntry?
     @State private var removalSourceRect = CGRect.zero
@@ -33,7 +34,11 @@ struct PanelLayoutEditor: View {
     private var ids: [String] { entries.map(\.id) }
 
     var body: some View {
-        let layout = PanelLayoutEditorSnapshot(pluginHost: pluginHost, panelID: panelID)
+        let source = session.sourcePanelID.flatMap { sourcePanel in
+            pluginHost.componentItems(in: sourcePanel).first { $0.id == session.sourceID }
+        }
+        let layout = PanelLayoutEditorSnapshot(pluginHost: pluginHost, panelID: panelID,
+                                              cache: dropGeometryCache, source: source)
         GeometryReader { geometry in
             Group {
                 ScrollView(.vertical, showsIndicators: false) {
@@ -129,8 +134,7 @@ struct PanelLayoutEditor: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            PanelLayoutInsertionMarker(preview: session.dragPreview, frames: positions,
-                                       rightToLeft: layoutDirection == .rightToLeft)
+            PanelLayoutInsertionMarker(preview: session.dragPreview)
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.14), value: positions)
         .environment(\.layoutDirection, .leftToRight)
@@ -195,9 +199,8 @@ struct PanelLayoutEditor: View {
     }
 
     private func preview(at point: CGPoint, layout: PanelLayoutEditorSnapshot) {
-        let offset = PanelLayoutEntryFrame.destination(at: point, frames: layout.frames,
-                                                      rightToLeft: layoutDirection == .rightToLeft)
-        session.preview(offset: offset, ids: layout.ids)
+        let target = layout.dropGeometry.target(at: point, rightToLeft: layoutDirection == .rightToLeft)
+        session.preview(target: target, ids: layout.ids)
     }
 
     private func commit(_ move: PanelLayoutEditingSession.Move) {
@@ -221,6 +224,7 @@ private struct PanelLayoutEditorSnapshot {
     let features: [String: PluginPanelRowSnapshot]
     let frames: [PanelLayoutEntryFrame]
     let height: CGFloat
+    let dropGeometry: PanelLayoutDropGeometry
 
     func itemFrames(rightToLeft: Bool) -> [PanelItemFrame] {
         frames.map { position in
@@ -230,86 +234,41 @@ private struct PanelLayoutEditorSnapshot {
         }
     }
 
-    init(pluginHost: PluginHost, panelID: String) {
+    init(pluginHost: PluginHost, panelID: String, cache: PanelLayoutDropGeometryCache? = nil,
+         source: PluginPanelWidgetSnapshot? = nil) {
         let entries = pluginHost.panelEntries(in: panelID)
+        let components = pluginHost.componentItems(in: panelID)
         let features = pluginHost.panelItems(in: panelID)
         let placement = ConfiguredMenuBarPanelLayout.placement(
-            entries: entries, components: pluginHost.componentItems(in: panelID), features: features
+            entries: entries, components: components, features: features
         )
         ids = entries.map(\.id)
         items = Dictionary(uniqueKeysWithValues: pluginHost.panelLayoutEntries(in: panelID).map { ($0.id, $0) })
         self.features = Dictionary(uniqueKeysWithValues: features.map { ($0.id, $0) })
         frames = PanelLayoutEntryFrame.frames(entries: entries, placement: placement)
+        dropGeometry = cache?.geometry(entries: entries, components: components, features: features,
+                                       frames: frames, source: source) ?? PanelLayoutDropGeometry(frames: frames)
         height = placement.height
     }
 }
 
 private struct PanelLayoutInsertionMarker: View {
     @ObservedObject var preview: PanelLayoutDragPreview
-    let frames: [PanelLayoutEntryFrame]
-    let rightToLeft: Bool
     @Environment(\.menuBarPanelTheme) private var theme
 
     var body: some View {
-        if let destination = preview.destination,
-           let marker = PanelLayoutEntryFrame.insertionFrame(offset: destination, frames: frames, rightToLeft: rightToLeft) {
-            RoundedRectangle(cornerRadius: 1).fill(theme.accent)
+        if let target = preview.target, let marker = target.markerFrame {
+            RoundedRectangle(cornerRadius: target.isVacancy ? 8 : 1)
+                .fill(theme.accent.opacity(target.isVacancy ? 0.12 : 1))
+                .overlay {
+                    if target.isVacancy {
+                        RoundedRectangle(cornerRadius: 8).strokeBorder(theme.accent, lineWidth: 2)
+                    }
+                }
                 .frame(width: marker.width, height: marker.height)
                 .offset(x: marker.minX, y: marker.minY)
                 .allowsHitTesting(false).accessibilityHidden(true)
         }
-    }
-}
-
-/// The committed geometry remains the drag hit map even while the insertion marker moves.
-struct PanelLayoutEntryFrame: Equatable, Identifiable {
-    let entry: MenuBarPanelEntry
-    let frame: CGRect
-    var id: String { entry.id }
-
-    static func frames(entries: [MenuBarPanelEntry], placement: ConfiguredMenuBarPanelLayout.Placement) -> [Self] {
-        let components = Dictionary(uniqueKeysWithValues: placement.components.map { ($0.id, $0) })
-        return entries.compactMap { entry in
-            switch entry.kind {
-            case .widget:
-                guard let item = components[entry.id] else { return nil }
-                return Self(entry: entry, frame: PanelLayoutDestination.frame(item))
-            case .row:
-                guard let y = placement.featureOffsets[entry.id],
-                      let height = placement.featureHeights[entry.id] else { return nil }
-                return Self(entry: entry, frame: CGRect(x: 0, y: y, width: ComponentPanelLayout.gridWidth,
-                                                       height: height))
-            }
-        }
-    }
-
-    static func destination(at point: CGPoint, frames: [Self], rightToLeft: Bool) -> Int {
-        guard !frames.isEmpty else { return 0 }
-        if point.y < 0 { return 0 }
-        if point.y >= frames.map(\.frame.maxY).max()! { return frames.count }
-        let point = CGPoint(x: rightToLeft ? ComponentPanelLayout.gridWidth - point.x : point.x, y: point.y)
-        func distance(_ rect: CGRect) -> CGFloat {
-            let dx = max(rect.minX - point.x, 0, point.x - rect.maxX)
-            let dy = max(rect.minY - point.y, 0, point.y - rect.maxY)
-            return dx * dx + dy * dy
-        }
-        let nearest = frames.enumerated().min { distance($0.element.frame) < distance($1.element.frame) }!
-        let after = nearest.element.entry.kind == .row
-            ? point.y >= nearest.element.frame.midY : point.x >= nearest.element.frame.midX
-        return nearest.offset + (after ? 1 : 0)
-    }
-
-    static func insertionFrame(offset: Int, frames: [Self], rightToLeft: Bool) -> CGRect? {
-        guard !frames.isEmpty else { return CGRect(x: 0, y: 0, width: ComponentPanelLayout.gridWidth, height: 3) }
-        let index = min(max(offset, 0), frames.count)
-        let item = frames[min(index, frames.count - 1)]
-        if item.entry.kind == .row {
-            return CGRect(x: 0, y: index == frames.count ? item.frame.maxY : item.frame.minY,
-                          width: item.frame.width, height: 3)
-        }
-        let x = index == frames.count ? item.frame.maxX - 3 : item.frame.minX
-        return CGRect(x: rightToLeft ? ComponentPanelLayout.gridWidth - x - 3 : x,
-                      y: item.frame.minY, width: 3, height: item.frame.height)
     }
 }
 
@@ -370,53 +329,58 @@ private struct PanelLayoutReorderItem<Content: View>: View {
             GeometryReader { proxy in
                 let metrics = PanelLayoutItemControlsLayout(size: proxy.size)
                 PanelLayoutControls(metrics: metrics, rightToLeft: layoutDirection == .rightToLeft) {
-                    Button {
-                        // Read geometry only when invoked, including keyboard activation.
-                        let controls = PanelLayoutItemControlsLayout.frame(in: proxy.frame(in: .named(popoverCoordinateSpace)))
-                        let button = metrics.buttonFrame(at: 0, rightToLeft: layoutDirection == .rightToLeft)
-                        remove(button.offsetBy(dx: controls.minX, dy: controls.minY))
-                    } label: {
-                        controlIcon("trash", side: metrics.buttonSide)
-                    }
-                    .buttonStyle(.plain)
-                    .focused($focusedControl, equals: .remove)
-                    .help(FeatureL10n.string("移除组件"))
-                    .accessibilityLabel(FeatureL10n.string("移除组件"))
-                    .accessibilityIdentifier("panel.layout.remove.\(id)")
-
-                    Menu {
-                        Text(FeatureL10n.string("移动到"))
-                        Divider()
-                        ForEach(panels.filter { $0.id != panelID }) { panel in
-                            Button { moveToPanel(panel.id) } label: {
-                                Label(panel.title, systemImage: PluginSystemImage.resolvedName(panel.systemImage))
-                                    .labelStyle(.iconOnly)
+                    if metrics.isCompact {
+                        Menu {
+                            orderingActions
+                            Menu(FeatureL10n.string("移动到")) { panelActions }
+                            Divider()
+                            Button(role: .destructive) {
+                                requestRemoval(proxy: proxy, metrics: metrics)
+                            } label: {
+                                Label(FeatureL10n.string("移除组件"), systemImage: "trash")
                             }
+                            .accessibilityIdentifier("panel.layout.remove.\(id)")
+                        } label: {
+                            controlIcon("ellipsis", side: metrics.buttonSide, preferredIconSide: 14)
                         }
-                    } label: {
-                        controlIcon("arrow.right.square", side: metrics.buttonSide)
-                    }
-                    .focused($focusedControl, equals: .moveTo)
-                    .help(FeatureL10n.string("移动到"))
-                    .accessibilityLabel(FeatureL10n.string("移动到"))
-                    .accessibilityIdentifier("panel.layout.moveTo.\(id)")
+                        .focused($focusedControl, equals: .more)
+                        .help(PanelLayoutCopy.position(title, index: index, count: count))
+                        .accessibilityLabel(PanelLayoutCopy.position(title, index: index, count: count))
+                        .accessibilityIdentifier("panel.layout.more.\(id)")
+                    } else {
+                        Button { requestRemoval(proxy: proxy, metrics: metrics) } label: {
+                            controlIcon("trash", side: metrics.buttonSide)
+                        }
+                        .focused($focusedControl, equals: .remove)
+                        .help(FeatureL10n.string("移除组件"))
+                        .accessibilityLabel(FeatureL10n.string("移除组件"))
+                        .accessibilityIdentifier("panel.layout.remove.\(id)")
 
-                    Menu {
-                        Button(PanelLayoutCopy.earlier) { perform(index - 1) }.disabled(index == 0)
-                        Button(PanelLayoutCopy.later) { perform(index + 2) }.disabled(index == count - 1)
-                        Button(PanelLayoutCopy.beginning) { perform(0) }.disabled(index == 0)
-                        Button(PanelLayoutCopy.end) { perform(count) }.disabled(index == count - 1)
-                    } label: {
-                        controlIcon("ellipsis.circle", side: metrics.buttonSide)
+                        Menu {
+                            Text(FeatureL10n.string("移动到"))
+                            Divider()
+                            panelActions
+                        } label: {
+                            controlIcon("arrow.right.square", side: metrics.buttonSide)
+                        }
+                        .focused($focusedControl, equals: .moveTo)
+                        .help(FeatureL10n.string("移动到"))
+                        .accessibilityLabel(FeatureL10n.string("移动到"))
+                        .accessibilityIdentifier("panel.layout.moveTo.\(id)")
+
+                        Menu { orderingActions } label: {
+                            controlIcon("ellipsis.circle", side: metrics.buttonSide)
+                        }
+                        .focused($focusedControl, equals: .more)
+                        .accessibilityLabel(PanelLayoutCopy.position(title, index: index, count: count))
+                        .accessibilityIdentifier("panel.layout.more.\(id)")
                     }
-                    .focused($focusedControl, equals: .more)
-                    .accessibilityLabel(PanelLayoutCopy.position(title, index: index, count: count))
-                    .accessibilityHint(PanelLayoutCopy.hint)
-                    .accessibilityAction(named: PanelLayoutCopy.earlier) { if index > 0 { perform(index - 1) } }
-                    .accessibilityAction(named: PanelLayoutCopy.later) { if index < count - 1 { perform(index + 2) } }
-                    .accessibilityAction(named: PanelLayoutCopy.beginning) { perform(0) }
-                    .accessibilityAction(named: PanelLayoutCopy.end) { perform(count) }
                 }
+                .accessibilityHint(PanelLayoutCopy.hint)
+                .accessibilityAction(named: PanelLayoutCopy.earlier) { if index > 0 { perform(index - 1) } }
+                .accessibilityAction(named: PanelLayoutCopy.later) { if index < count - 1 { perform(index + 2) } }
+                .accessibilityAction(named: PanelLayoutCopy.beginning) { perform(0) }
+                .accessibilityAction(named: PanelLayoutCopy.end) { perform(count) }
                 .menuStyle(.button)
                 .buttonStyle(.plain)
                 .menuIndicator(.hidden)
@@ -433,7 +397,7 @@ private struct PanelLayoutReorderItem<Content: View>: View {
         .animation(showsControls && !reduceMotion ? .easeOut(duration: 0.12) : nil, value: showsControls)
         .overlay {
             PanelLayoutDragSource(id: id, title: title, icon: icon, showsControls: showsControls,
-                                  isDraggable: true, hover: hover, nativeSource: nativeSource, begin: beginDrag, end: endDrag)
+                                  isDraggable: true, rightToLeft: layoutDirection == .rightToLeft, hover: hover, nativeSource: nativeSource, begin: beginDrag, end: endDrag)
                 .accessibilityHidden(true)
         }
         .overlay {
@@ -447,6 +411,30 @@ private struct PanelLayoutReorderItem<Content: View>: View {
             if control != nil { scrollToItem(id) }
         }
         .id(id)
+    }
+
+    @ViewBuilder private var orderingActions: some View {
+        Button(PanelLayoutCopy.earlier) { perform(index - 1) }.disabled(index == 0)
+        Button(PanelLayoutCopy.later) { perform(index + 2) }.disabled(index == count - 1)
+        Button(PanelLayoutCopy.beginning) { perform(0) }.disabled(index == 0)
+        Button(PanelLayoutCopy.end) { perform(count) }.disabled(index == count - 1)
+    }
+
+    @ViewBuilder private var panelActions: some View {
+        ForEach(panels.filter { $0.id != panelID }) { panel in
+            Button { moveToPanel(panel.id) } label: {
+                Label(panel.title, systemImage: PluginSystemImage.resolvedName(panel.systemImage))
+                    .labelStyle(.iconOnly)
+            }
+        }
+    }
+
+    private func requestRemoval(proxy: GeometryProxy, metrics: PanelLayoutItemControlsLayout) {
+        let controls = metrics.frame(in: proxy.frame(in: .named(popoverCoordinateSpace)))
+        let button = metrics.buttonFrame(at: 0, rightToLeft: layoutDirection == .rightToLeft)
+        let anchor = button.offsetBy(dx: controls.minX, dy: controls.minY)
+        // Let a compact menu finish dismissing before presenting confirmation.
+        DispatchQueue.main.async { remove(anchor) }
     }
 
     private func controlIcon(_ symbol: String, side: CGFloat, preferredIconSide: CGFloat = 16) -> some View {
@@ -463,69 +451,6 @@ private struct PanelLayoutReorderItem<Content: View>: View {
     private func perform(_ offset: Int) {
         move(offset)
         scrollToItem(id)
-    }
-}
-
-/// Share the toolbar geometry with native pointer hit testing, including narrow cards.
-struct PanelLayoutItemControlsLayout {
-    let isVertical: Bool
-    let isCompact: Bool
-    let buttonSide: CGFloat
-    let spacing: CGFloat
-
-    init(size: CGSize) {
-        let minimumSide = min(size.width, size.height)
-        isCompact = size.width < 80 && minimumSide >= 44 && size.height <= size.width * 1.25
-        spacing = isCompact ? 4 : 8
-        isVertical = size.width < 120 && size.height > size.width
-        let main = isVertical ? size.height : size.width
-        let cross = isVertical ? size.width : size.height
-        let compactInset: CGFloat = minimumSide < 48 ? 0 : 8
-        buttonSide = isCompact
-            ? floor((minimumSide - compactInset - spacing) / 2)
-            : max(0, min(32, floor((main - 8 - spacing * 2) / 3), cross - 4))
-    }
-
-    var size: CGSize {
-        if isCompact { return CGSize(width: buttonSide * 2 + spacing, height: buttonSide * 2 + spacing) }
-        let length = buttonSide * 3 + spacing * 2
-        return isVertical ? CGSize(width: buttonSide, height: length) : CGSize(width: length, height: buttonSide)
-    }
-
-    func buttonFrame(at index: Int, rightToLeft: Bool = false) -> CGRect {
-        let step = buttonSide + spacing
-        let origin: CGPoint
-        if isCompact {
-            origin = index < 2 ? CGPoint(x: CGFloat(index) * step, y: 0) : CGPoint(x: step / 2, y: step)
-        } else {
-            origin = isVertical ? CGPoint(x: 0, y: CGFloat(index) * step) : CGPoint(x: CGFloat(index) * step, y: 0)
-        }
-        return CGRect(x: rightToLeft ? size.width - origin.x - buttonSide : origin.x,
-                      y: origin.y, width: buttonSide, height: buttonSide)
-    }
-
-    static func frame(in bounds: CGRect) -> CGRect {
-        let size = Self(size: bounds.size).size
-        return CGRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
-                      width: size.width, height: size.height)
-    }
-}
-
-/// Keep all three controls usable on square icon widgets, with the same native hit map.
-private struct PanelLayoutControls: Layout {
-    let metrics: PanelLayoutItemControlsLayout
-    let rightToLeft: Bool
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        metrics.size
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for (index, subview) in subviews.enumerated() {
-            let frame = metrics.buttonFrame(at: index, rightToLeft: rightToLeft)
-            subview.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
-                          anchor: .topLeading, proposal: ProposedViewSize(frame.size))
-        }
     }
 }
 

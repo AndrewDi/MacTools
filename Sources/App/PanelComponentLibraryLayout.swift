@@ -4,6 +4,7 @@ import CoreGraphics
 struct PanelComponentLibraryLayout {
     static let spacing: CGFloat = 14
     static let horizontalPadding: CGFloat = 20
+    static let previewPadding: CGFloat = 6
     private static let tolerance: CGFloat = 0.001
 
     let width: CGFloat
@@ -13,14 +14,15 @@ struct PanelComponentLibraryLayout {
 
     init(sourceSizes: [CGSize], availableWidth: CGFloat) {
         width = availableWidth.isFinite ? max(0, availableWidth) : 0
-        scale = max(0, (width - Self.spacing) / (2 * ComponentPanelLayout.gridWidth))
+        scale = max(0, (width - Self.spacing - Self.previewPadding * 4) / (2 * ComponentPanelLayout.gridWidth))
         guard scale > 0 else { return }
 
         // Include a trailing gutter in the skyline, but not in the visible bounds.
         // Each segment records the lowest free height over a horizontal interval.
         var skyline = [Segment(minX: 0, maxX: width + Self.spacing, bottom: 0)]
         for source in sourceSizes {
-            let size = CGSize(width: source.width * scale, height: source.height * scale)
+            let size = CGSize(width: source.width * scale + Self.previewPadding * 2,
+                              height: source.height * scale + Self.previewPadding * 2)
             var origin = CGPoint(x: 0, y: CGFloat.greatestFiniteMagnitude)
             for (index, segment) in skyline.enumerated() {
                 let end = segment.minX + size.width + Self.spacing

@@ -27,11 +27,11 @@ def extract(path, start, end=None):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--surface", action="append", choices=("tabs", "cross-panels", "dashboard", "features"),
+    parser.add_argument("--surface", action="append", choices=("tabs", "cross-panels", "dashboard", "features", "compact"),
                         help="Run only the selected surface; repeat to select multiple surfaces.")
     parser.add_argument("--compile-only", action="store_true", help="Validate compilation without opening fixture windows.")
     args = parser.parse_args()
-    surfaces = args.surface or ("tabs", "cross-panels", "dashboard", "features")
+    surfaces = args.surface or ("tabs", "cross-panels", "dashboard", "features", "compact")
     products = ROOT / "build/DerivedData/Build/Products/Debug"
     if not (products / "MacToolsPluginKit.framework/MacToolsPluginKit").is_file():
         parser.error("Build the Debug PluginKit framework first with make build.")
@@ -48,7 +48,7 @@ def main():
         parts.append(extract("Sources/App/ConfiguredMenuBarPanelContent.swift",
                              "enum ConfiguredMenuBarPanelLayout {", "    static func contentHeight(" ) + "}\n")
         parts.append(extract("Sources/App/MenuBarPanelPresenter.swift", "@MainActor\nfinal class MenuBarPanelEditingFeedback {"))
-        for name in ("PanelViewportStack", "MenuBarPanelEditingTabs", "PanelLayoutEditingSession", "PanelLayoutDragScroller", "PanelLayoutHoverTracking", "PanelLayoutEditor", "PanelLayoutDragSource"):
+        for name in ("PanelViewportStack", "MenuBarPanelEditingTabs", "PanelLayoutEditingSession", "PanelLayoutDropGeometry", "PanelLayoutWidgetDropTargets", "PanelLayoutItemControls", "PanelLayoutDragScroller", "PanelLayoutHoverTracking", "PanelLayoutEditor", "PanelLayoutDragSource"):
             parts.append((ROOT / f"Sources/App/{name}.swift").read_text())
         source = output / "Fixture.swift"
         source.write_text("\n".join(parts))
@@ -66,7 +66,7 @@ def main():
             subprocess.run([str(executable), "tabs"], check=True, cwd=ROOT, timeout=20)
         if "cross-panels" in surfaces:
             subprocess.run([str(executable), "cross-panels"], check=True, cwd=ROOT, timeout=20)
-        for surface in ("dashboard", "features"):
+        for surface in ("dashboard", "features", "compact"):
             if surface not in surfaces:
                 continue
             for direction in ("ltr", "rtl"):

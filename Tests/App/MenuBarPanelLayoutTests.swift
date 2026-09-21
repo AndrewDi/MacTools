@@ -246,8 +246,8 @@ final class MenuBarPanelLayoutTests: XCTestCase {
         XCTAssertGreaterThan(frames[0].frame.height, frames[1].frame.height)
         XCTAssertEqual(frames[1].frame.minY, frames[0].frame.maxY + MenuBarPanelLayout.featureRowSpacing)
         XCTAssertEqual(placement.height, frames[1].frame.maxY)
-        XCTAssertEqual(PanelLayoutEntryFrame.destination(at: CGPoint(x: 20, y: frames[0].frame.maxY - 1),
-                                                          frames: frames, rightToLeft: false), 1)
+        XCTAssertEqual(PanelLayoutDropGeometry(frames: frames)
+            .target(at: CGPoint(x: 20, y: frames[0].frame.maxY - 1), rightToLeft: false).offset, 1)
     }
 
     private func makeItem(

@@ -104,11 +104,12 @@ struct MenuBarPanelLayoutEntry: Identifiable {
 }
 @MainActor final class PluginHost: ObservableObject {
     private let store = MenuBarPanelStore(userDefaults: FixtureDefaults())
-    private let spans: [String: PluginPanelWidgetSpan] = [
-        "a": .init(width: 2, height: 12)!, "b": .init(width: 1, height: 24)!,
-        "c": .init(width: 4, height: 12)!,
-    ]
-    init(pluginIDs: [String] = ["a", "b", "c"]) {
+    private let spans: [String: PluginPanelWidgetSpan]
+    init(pluginIDs: [String] = ["a", "b", "c"], compact: Bool = false) {
+        spans = compact ? Dictionary(uniqueKeysWithValues: pluginIDs.map {
+            ($0, PluginPanelWidgetSpan(width: 1, height: 8, grid: .compact)!)
+        }) : ["a": .init(width: 2, height: 12)!, "b": .init(width: 1, height: 24)!,
+              "c": .init(width: 4, height: 12)!]
         for id in pluginIDs {
             store.addItem(.init(pluginID: id, itemID: "widget"), to: "components")
             store.addItem(.init(pluginID: id, itemID: "control"), to: "features")
@@ -310,11 +311,14 @@ private struct PanelLayoutInteractionFixture {
             runTabInteractions(application)
             return
         }
-        let surface: FixtureSurface = CommandLine.arguments[1] == "dashboard" ? .dashboard : .featurePanel
+        let surface: FixtureSurface = CommandLine.arguments[1] == "features" ? .featurePanel : .dashboard
         let rtl = CommandLine.arguments[2] == "rtl"
-        let host = PluginHost()
+        let host = PluginHost(compact: CommandLine.arguments[1] == "compact")
         let state = FixtureState()
         let session = PanelLayoutEditingSession()
+        var previewOffsets: [Int?] = []
+        let previewSubscription = session.dragPreview.$target.sink { previewOffsets.append($0?.offset) }
+        defer { previewSubscription.cancel() }
         let window = NSWindow(
             contentRect: CGRect(x: 200, y: 200, width: 360, height: 70),
             styleMask: [.titled], backing: .buffered, defer: false)
@@ -345,7 +349,7 @@ private struct PanelLayoutInteractionFixture {
             let actual = host.panelEntries(in: surface.panelID).map(\.pluginID)
             guard actual == ids, session.token == nil, session.feedback == feedback else {
                 fail(
-                    "Expected \(ids)/\(feedback), got \(actual)/\(session.feedback); active=\(session.token != nil)"
+                    "Expected \(ids)/\(feedback), got \(actual)/\(session.feedback); active=\(session.token != nil), previews=\(previewOffsets)"
                 )
             }
         }

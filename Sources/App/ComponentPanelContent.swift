@@ -115,151 +115,53 @@ enum ComponentGridPlacementEngine {
     }
 
     static func placements(for items: [(id: String, span: PluginPanelWidgetSpan)]) -> [ComponentGridPlacement] {
-        // A common subdivision packs quarters and fifths together without changing
-        // card widths or adding a separate row for each control style.
-        let hasCompactItems = items.contains { $0.span.grid == .compact }
-        let columns = hasCompactItems
-            ? PluginPanelWidgetGrid.standard.rawValue * PluginPanelWidgetGrid.compact.rawValue
-            : ComponentPanelLayout.columns
-        let gridSpacing = hasCompactItems
-            ? PluginPanelWidgetLayoutMetrics.compactSpacing : ComponentPanelLayout.horizontalSpacing
-        var occupiedRows: [Int: UInt32] = [:]
-        var placements: [ComponentGridPlacement] = []
-        var columnBottoms = Array<ColumnBottom?>(repeating: nil, count: columns)
-        var firstCandidateRows: [PluginPanelWidgetSpan: Int] = [:]
+        var state = State(hasCompactItems: items.contains { $0.span.grid == .compact })
+        return items.map { state.append(id: $0.id, span: $0.span) }
+    }
 
-        for item in items {
-            let span = item.span
+    /// Ordered row packing: equal heights may share a row while width fits.
+    /// Completed rows never accept later items, so placement takes one linear pass.
+    struct State {
+        private let columns: Int
+        private var nextColumn = 0
+        private var row = 0
+        private var rowHeight = 0
+        private var rowOffset: CGFloat = 0
+        private var rowIsCompact = false
+
+        init(hasCompactItems: Bool) {
+            // Quarters and fifths share a subdivision without changing card widths.
+            columns = hasCompactItems
+                ? PluginPanelWidgetGrid.standard.rawValue * PluginPanelWidgetGrid.compact.rawValue
+                : ComponentPanelLayout.columns
+        }
+
+        func next(id: String, span: PluginPanelWidgetSpan) -> ComponentGridPlacement {
             let width = span.width * columns / span.grid.rawValue
-            // Occupancy only grows. Rows rejected for this span cannot become free.
-            // Keep first-fit packing without scanning those rows for every copy.
-            var row = firstCandidateRows[span, default: 0]
-
-            while true {
-                var didPlace = false
-
-                for column in 0..<columns where canPlace(
-                    width: width,
-                    height: span.height,
-                    row: row,
-                    column: column,
-                    columns: columns,
-                    occupiedRows: occupiedRows
-                ) {
-                    placements.append(
-                        ComponentGridPlacement(
-                            id: item.id,
-                            row: row,
-                            column: column,
-                            span: span,
-                            yOffset: yOffset(
-                                column: column,
-                                width: width,
-                                grid: span.grid,
-                                columnBottoms: columnBottoms
-                            ),
-                            gridColumns: columns,
-                            gridSpacing: gridSpacing
-                        )
-                    )
-                    markOccupied(
-                        width: width,
-                        height: span.height,
-                        row: row,
-                        column: column,
-                        occupiedRows: &occupiedRows
-                    )
-                    updateColumnBottoms(
-                        span: span,
-                        width: width,
-                        column: column,
-                        yOffset: placements[placements.count - 1].yOffset,
-                        columnBottoms: &columnBottoms
-                    )
-                    didPlace = true
-                    break
-                }
-
-                if didPlace {
-                    firstCandidateRows[span] = row
-                    break
-                }
-
-                row += 1
-            }
-        }
-
-        return placements
-    }
-
-    private static func yOffset(
-        column: Int,
-        width: Int,
-        grid: PluginPanelWidgetGrid,
-        columnBottoms: [ColumnBottom?]
-    ) -> CGFloat {
-        let coveredColumns = column..<(column + width)
-        return coveredColumns.reduce(CGFloat.zero) { offset, column in
-            guard let previous = columnBottoms[column] else { return offset }
-            let spacing = grid == .compact && previous.grid == .compact
+            let wraps = rowHeight > 0 && (span.height != rowHeight || nextColumn + width > columns)
+            let gap = rowIsCompact && span.grid == .compact
                 ? ComponentPanelLayout.compactRowSpacing : ComponentPanelLayout.verticalSpacing
-            return max(offset, previous.height + spacing)
-        }
-    }
-
-    private static func updateColumnBottoms(
-        span: PluginPanelWidgetSpan,
-        width: Int,
-        column: Int,
-        yOffset: CGFloat,
-        columnBottoms: inout [ColumnBottom?]
-    ) {
-        let bottom = yOffset + ComponentPanelLayout.itemHeight(for: span)
-        for occupiedColumn in column..<(column + width) {
-            columnBottoms[occupiedColumn] = ColumnBottom(height: bottom, grid: span.grid)
-        }
-    }
-
-    private static func canPlace(
-        width: Int,
-        height: Int,
-        row: Int,
-        column: Int,
-        columns: Int,
-        occupiedRows: [Int: UInt32]
-    ) -> Bool {
-        guard column + width <= columns else {
-            return false
+            let y = wraps ? rowOffset + ComponentPanelLayout.metrics.itemHeight(forSpanHeight: rowHeight) + gap
+                : rowOffset
+            // Position and width must use the same gutter to keep the trailing edge inside the panel.
+            let spacing = span.grid == .compact
+                ? PluginPanelWidgetLayoutMetrics.compactSpacing : ComponentPanelLayout.horizontalSpacing
+            return ComponentGridPlacement(id: id, row: wraps ? row + rowHeight : row,
+                column: wraps ? 0 : nextColumn, span: span, yOffset: y,
+                gridColumns: columns, gridSpacing: spacing)
         }
 
-        let mask = columnMask(width: width, column: column)
-        for occupiedRow in row..<(row + height) {
-            if occupiedRows[occupiedRow, default: 0] & mask != 0 { return false }
+        @discardableResult
+        mutating func append(id: String, span: PluginPanelWidgetSpan) -> ComponentGridPlacement {
+            let placement = next(id: id, span: span)
+            let startsRow = rowHeight == 0 || placement.row != row
+            rowIsCompact = span.grid == .compact && (startsRow || rowIsCompact)
+            row = placement.row
+            rowHeight = span.height
+            rowOffset = placement.yOffset
+            nextColumn = placement.column + span.width * columns / span.grid.rawValue
+            return placement
         }
-
-        return true
-    }
-
-    private static func markOccupied(
-        width: Int,
-        height: Int,
-        row: Int,
-        column: Int,
-        occupiedRows: inout [Int: UInt32]
-    ) {
-        let mask = columnMask(width: width, column: column)
-        for occupiedRow in row..<(row + height) {
-            occupiedRows[occupiedRow, default: 0] |= mask
-        }
-    }
-
-    private static func columnMask(width: Int, column: Int) -> UInt32 {
-        ((1 << width) - 1) << column
-    }
-
-    private struct ColumnBottom {
-        let height: CGFloat
-        let grid: PluginPanelWidgetGrid
     }
 }
 

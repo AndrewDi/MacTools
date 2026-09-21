@@ -4,16 +4,17 @@ import XCTest
 final class PanelComponentLibraryLayoutTests: XCTestCase {
     private let panelWidth = ComponentPanelLayout.gridWidth
     private let spacing = PanelComponentLibraryLayout.spacing
+    private let padding = PanelComponentLibraryLayout.previewPadding
 
     func testAllPreviewsShareTheTwoPanelScale() {
         let sources = [CGSize(width: 70, height: 88), CGSize(width: panelWidth, height: 48)]
         for scale: CGFloat in [0.5, 0.692, 1, 1.5] {
             let layout = PanelComponentLibraryLayout(sourceSizes: sources,
-                availableWidth: panelWidth * 2 * scale + spacing)
+                availableWidth: panelWidth * 2 * scale + spacing + padding * 4)
             XCTAssertEqual(layout.scale, scale, accuracy: 0.0001)
             for (source, frame) in zip(sources, layout.frames) {
-                XCTAssertEqual(frame.width, source.width * scale, accuracy: 0.0001)
-                XCTAssertEqual(frame.height, source.height * scale, accuracy: 0.0001)
+                XCTAssertEqual(frame.width, source.width * scale + padding * 2, accuracy: 0.0001)
+                XCTAssertEqual(frame.height, source.height * scale + padding * 2, accuracy: 0.0001)
             }
             XCTAssertEqual(layout.frames[1].minX, layout.frames[0].maxX + spacing, accuracy: 0.0001)
             XCTAssertEqual(layout.frames[1].minY, 0, "A row fits immediately beside a narrow icon")
@@ -23,36 +24,36 @@ final class PanelComponentLibraryLayoutTests: XCTestCase {
     func testNarrowPreviewsFillLeftToRightBeforeWrapping() {
         let size = CGSize(width: 70, height: 88)
         let layout = PanelComponentLibraryLayout(sourceSizes: Array(repeating: size, count: 10),
-            availableWidth: panelWidth * 2 + spacing)
-        for index in 0..<7 {
-            XCTAssertEqual(layout.frames[index], CGRect(x: CGFloat(index) * 84, y: 0, width: 70, height: 88))
+            availableWidth: panelWidth * 2 + spacing + padding * 4)
+        for index in 0..<6 {
+            XCTAssertEqual(layout.frames[index], CGRect(x: CGFloat(index) * 96, y: 0, width: 82, height: 100))
         }
-        for index in 7..<10 {
-            XCTAssertEqual(layout.frames[index], CGRect(x: CGFloat(index - 7) * 84, y: 102, width: 70, height: 88))
+        for index in 6..<10 {
+            XCTAssertEqual(layout.frames[index], CGRect(x: CGFloat(index - 6) * 96, y: 114, width: 82, height: 100))
         }
-        XCTAssertEqual(layout.height, 190, "The scroll extent excludes trailing spacing")
+        XCTAssertEqual(layout.height, 214, "The scroll extent excludes trailing spacing")
     }
 
     func testFullWidthPreviewsStillFillTheShorterColumn() {
         let sources = [200, 50, 100, 50, 80].map { CGSize(width: panelWidth, height: CGFloat($0)) }
-        let layout = PanelComponentLibraryLayout(sourceSizes: sources, availableWidth: panelWidth * 2 + spacing)
+        let layout = PanelComponentLibraryLayout(sourceSizes: sources, availableWidth: panelWidth * 2 + spacing + padding * 4)
         XCTAssertEqual(layout.frames.map(\.origin), [
-            CGPoint(x: 0, y: 0), CGPoint(x: 318, y: 0), CGPoint(x: 318, y: 64),
-            CGPoint(x: 318, y: 178), CGPoint(x: 0, y: 214)
+            CGPoint(x: 0, y: 0), CGPoint(x: 330, y: 0), CGPoint(x: 330, y: 76),
+            CGPoint(x: 330, y: 202), CGPoint(x: 0, y: 226)
         ])
-        XCTAssertEqual(layout.height, 294)
+        XCTAssertEqual(layout.height, 318)
     }
 
     func testMixedWidthsUseTopmostThenLeftmostAvailableSpace() {
         let sources = [CGSize(width: 70, height: 160), CGSize(width: 148, height: 48),
                        CGSize(width: 226, height: 96), CGSize(width: 70, height: 48),
                        CGSize(width: 148, height: 64), CGSize(width: 304, height: 80)]
-        let layout = PanelComponentLibraryLayout(sourceSizes: sources, availableWidth: panelWidth * 2 + spacing)
+        let layout = PanelComponentLibraryLayout(sourceSizes: sources, availableWidth: panelWidth * 2 + spacing + padding * 4)
         XCTAssertEqual(layout.frames.map(\.origin), [
-            CGPoint(x: 0, y: 0), CGPoint(x: 84, y: 0), CGPoint(x: 246, y: 0),
-            CGPoint(x: 486, y: 0), CGPoint(x: 84, y: 62), CGPoint(x: 246, y: 110)
+            CGPoint(x: 0, y: 0), CGPoint(x: 96, y: 0), CGPoint(x: 270, y: 0),
+            CGPoint(x: 522, y: 0), CGPoint(x: 96, y: 74), CGPoint(x: 270, y: 122)
         ])
-        XCTAssertEqual(layout.height, 190)
+        XCTAssertEqual(layout.height, 214)
     }
 
     func testMeasuredHeightReflowsWithoutChangingScaleOrWidths() {

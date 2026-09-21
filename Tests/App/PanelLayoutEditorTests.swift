@@ -302,6 +302,97 @@ final class PanelLayoutEditorTests: XCTestCase {
         XCTAssertEqual(plugin.controlInvocations, 0)
     }
 
+    func testPartialCompactRowHorizontalDropCommitsAndUndoRestoresBothDirections() throws {
+        for rtl in [false, true] {
+            let plugins = ["a", "b", "c"].enumerated().map { index, id in
+                let plugin = LayoutEditorTestPlugin(id, order: index)
+                plugin.grid = .compact
+                plugin.spanWidth = 1
+                plugin.spanHeight = 8
+                return plugin
+            }
+            let host = makeHost(plugins)
+            let entries = host.panelEntries(in: "components")
+            let ids = entries.map(\.id)
+            let before = host.menuBarPanelStore.configuration
+            let placement = ConfiguredMenuBarPanelLayout.placement(entries: entries,
+                components: host.componentItems(in: "components"), features: [])
+            let frames = PanelLayoutEntryFrame.frames(entries: entries, placement: placement)
+            XCTAssertEqual(Set(frames.map(\.frame.minY)), [0])
+            let session = PanelLayoutEditingSession()
+            XCTAssertNotNil(session.begin(entry: entries[0], panelID: "components", ids: ids))
+            let target = PanelLayoutDropGeometry(frames: frames)
+                .target(at: CGPoint(x: rtl ? 10 : 294, y: 32), rightToLeft: rtl)
+            session.preview(target: target, ids: ids)
+            XCTAssertEqual(host.menuBarPanelStore.configuration, before, "Hover must not persist a reordered layout")
+            let move = try XCTUnwrap(session.finish(ids: ids))
+            XCTAssertTrue(session.commit(move, in: host, panelID: "components"))
+            XCTAssertEqual(host.panelEntries(in: "components").map(\.pluginID), ["b", "c", "a"])
+            XCTAssertTrue(session.canUndo(in: host, panelID: "components"))
+            session.undo(in: host, panelID: "components")
+            XCTAssertEqual(host.menuBarPanelStore.configuration, before)
+        }
+    }
+
+    func testMovingMiddleWidgetAwayLeavesFillableSpaceThatPersistsAndUndoes() throws {
+        for crossPanel in [false, true] {
+            for rtl in [false, true] {
+                let plugins = ["a", "b", "c", "full", "d"].enumerated().map { index, id in
+                    let plugin = LayoutEditorTestPlugin(id, order: index)
+                    plugin.grid = id == "full" ? .standard : .compact
+                    plugin.spanWidth = id == "full" ? 4 : 1
+                    plugin.spanHeight = id == "full" ? 12 : 8
+                    return plugin
+                }
+                let host = makeHost(plugins)
+                let otherPanel = try XCTUnwrap(host.addMenuBarPanel())
+                let session = PanelLayoutEditingSession()
+                let middle = host.testEntry(pluginID: "b", kind: .widget)
+                if crossPanel {
+                    XCTAssertTrue(session.commit(.init(id: middle.id, offset: 0, sourcePanelID: "components"),
+                                                 in: host, panelID: otherPanel))
+                } else {
+                    XCTAssertTrue(session.commit(.init(id: middle.id, offset: 5), in: host, panelID: "components"))
+                }
+                let beforeFill = host.menuBarPanelStore.configuration
+                let entries = host.panelEntries(in: "components")
+                let components = host.componentItems(in: "components")
+                let placement = ConfiguredMenuBarPanelLayout.placement(entries: entries, components: components, features: [])
+                let frames = PanelLayoutEntryFrame.frames(entries: entries, placement: placement)
+                let point = CGPoint(x: 152, y: 32)
+                XCTAssertFalse(frames.contains { $0.frame.contains(point) })
+                let sourcePanel = crossPanel ? otherPanel : "components"
+                let sourceID = crossPanel ? middle.id : host.testEntry(pluginID: "d", kind: .widget).id
+                let source = try XCTUnwrap(host.componentItems(in: sourcePanel).first { $0.id == sourceID })
+                let sourceEntry = try XCTUnwrap(host.panelEntries(in: sourcePanel).first { $0.id == sourceID })
+                XCTAssertNotNil(session.begin(entry: sourceEntry, panelID: sourcePanel,
+                                               ids: host.panelEntries(in: sourcePanel).map(\.id)))
+                if crossPanel { session.enterPanel("components", ids: entries.map(\.id)) }
+                let geometry = PanelLayoutDropGeometryCache().geometry(entries: entries, components: components,
+                    features: [], frames: frames, source: source)
+                let target = geometry.target(at: CGPoint(x: rtl ? 304 - point.x : point.x, y: point.y), rightToLeft: rtl)
+                XCTAssertTrue(target.isVacancy)
+                session.preview(target: target, ids: entries.map(\.id))
+                XCTAssertTrue(session.dragPreview.target?.isVacancy == true)
+                XCTAssertEqual(host.menuBarPanelStore.configuration, beforeFill)
+                let move = try XCTUnwrap(session.finish(ids: entries.map(\.id)))
+                XCTAssertTrue(session.commit(move, in: host, panelID: "components"))
+                let result = ConfiguredMenuBarPanelLayout.placement(entries: host.panelEntries(in: "components"),
+                    components: host.componentItems(in: "components"), features: [])
+                let filled = PanelLayoutDestination.frame(try XCTUnwrap(result.components.first { $0.id == sourceID }))
+                XCTAssertTrue(filled.contains(point))
+                XCTAssertEqual(filled.minX, 125.6, accuracy: 0.001)
+                XCTAssertEqual(filled.minY, 0)
+                let defaults = try XCTUnwrap(UserDefaults(suiteName: try XCTUnwrap(suites.last)))
+                XCTAssertEqual(MenuBarPanelStore(userDefaults: defaults).configuration, host.menuBarPanelStore.configuration,
+                               "The filled order must survive reopening the store")
+                XCTAssertTrue(session.canUndo(in: host, panelID: "components"))
+                session.undo(in: host, panelID: "components")
+                XCTAssertEqual(host.menuBarPanelStore.configuration, beforeFill)
+            }
+        }
+    }
+
     func testCrossPanelDragCommitsAtInsertionAndUndoRestoresBothLayouts() throws {
         for surface in PluginPanelItemKind.allCases {
             let other: PluginPanelItemKind = surface == .widget ? .row : .widget
@@ -523,12 +614,33 @@ final class PanelLayoutEditorTests: XCTestCase {
                 .first { $0.identifier?.rawValue == "panel.layout.drag.\(entryID)" })
             setHover(source, inside: true)
             try await settle()
+            let menuInvoked = compact ? expectation(description: "Compact menu invokes removal") : nil
+            let observer = compact ? NotificationCenter.default.addObserver(
+                forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
+            ) { notification in
+                MainActor.assumeIsolated {
+                    guard let menu = notification.object as? NSMenu,
+                          let index = menu.items.firstIndex(where: { $0.title == FeatureL10n.string("移除组件") }) else { return }
+                    XCTAssertTrue(menu.items.contains { $0.title == PanelLayoutCopy.earlier })
+                    XCTAssertTrue(menu.items.contains { $0.submenu != nil })
+                    let timer = Timer(timeInterval: 0.05, repeats: false) { _ in
+                        MainActor.assumeIsolated {
+                            menu.cancelTrackingWithoutAnimation()
+                            menu.performActionForItem(at: index)
+                            menuInvoked?.fulfill()
+                        }
+                    }
+                    RunLoop.main.add(timer, forMode: .common)
+                }
+            } : nil
+            defer { if let observer { NotificationCenter.default.removeObserver(observer) } }
             let removeButton = PanelLayoutItemControlsLayout(size: source.bounds.size).buttonFrame(at: 0)
             let location = source.convert(CGPoint(x: source.menuFrame.minX + removeButton.midX,
                                                   y: source.menuFrame.minY + removeButton.midY), to: nil)
             XCTAssertFalse(root.hitTest(location) === source)
             sendMouse(.leftMouseDown, at: location, to: window)
             sendMouse(.leftMouseUp, at: location, to: window)
+            if let menuInvoked { await fulfillment(of: [menuInvoked], timeout: 1) }
             try await settle()
             XCTAssertEqual(host.panelEntries(in: surface.testPanelID).map(\.pluginID), ["a", "b"])
             let confirmation = try XCTUnwrap(NSApp.windows.first {
@@ -607,11 +719,12 @@ final class PanelLayoutEditorTests: XCTestCase {
                 let plugins = ["a", "b", "c"].enumerated().map {
                     LayoutEditorTestPlugin($0.element, order: $0.offset)
                 }
-                // Moving the tall card past the full-width card packs this grid more tightly.
+                // Moving past the full-width card lets the equal-height cards share a row.
                 plugins[0].spanWidth = 1
                 plugins[0].spanHeight = 24
                 plugins[1].spanWidth = 4
                 plugins[2].spanWidth = 3
+                plugins[2].spanHeight = 24
                 let host = makeHost(plugins)
                 let session = PanelLayoutEditingSession()
                 let window = mount(PanelLayoutEditor(pluginHost: host, panelID: surface.testPanelID, onDismiss: {}, session: session)
@@ -683,11 +796,15 @@ final class PanelLayoutEditorTests: XCTestCase {
         scroller.anchor = document
         let session = PanelLayoutEditingSession()
         let ids = (0..<20).map(String.init)
+        let geometry = PanelLayoutDropGeometry(frames: ids.enumerated().map { index, id in
+            .init(entry: .init(placement: .init(item: .init(pluginID: id, itemID: "control")), kind: .row),
+                  frame: CGRect(x: 0, y: index * 52, width: 304, height: 44))
+        })
         let token = try XCTUnwrap(session.begin(id: "0", ids: ids))
         var reportedPoint: CGPoint?
         scroller.start { point in
             reportedPoint = point
-            session.preview(offset: PanelLayoutDestination.listOffset(at: point, count: ids.count), ids: ids)
+            session.preview(target: geometry.target(at: point, rightToLeft: false), ids: ids)
         }
         defer { scroller.stop() }
         let clip = scroll.contentView
@@ -732,8 +849,15 @@ final class PanelLayoutEditorTests: XCTestCase {
         let center = CGPoint(x: source.bounds.midX, y: source.bounds.midY)
         try checkCursor(at: center, expected: .openHand)
         source.showsControls = true
-        XCTAssertEqual(cursorAreas().count, 2)
+        XCTAssertEqual(cursorAreas().count, 4)
+        let previousAreas = cursorAreas()
+        for _ in 0..<20 { source.updateTrackingAreas() }
+        XCTAssertTrue(zip(previousAreas, cursorAreas()).allSatisfy { $0 === $1 },
+                      "Unchanged layouts must reuse native tracking areas")
         try checkCursor(at: center, expected: .arrow)
+        let gap = CGPoint(x: (source.controlFrames[0].maxX + source.controlFrames[1].minX) / 2, y: center.y)
+        try checkCursor(at: gap, expected: .openHand)
+        XCTAssertTrue(source.hitTest(source.convert(gap, to: source.superview)) === source)
         for point in [CGPoint(x: 8, y: 8), CGPoint(x: 232, y: 8),
                       CGPoint(x: 8, y: 152), CGPoint(x: 232, y: 152)] {
             try checkCursor(at: point, expected: .openHand)
@@ -754,11 +878,38 @@ final class PanelLayoutEditorTests: XCTestCase {
         scroll.contentView.scroll(to: .zero)
         source.setFrameSize(CGSize(width: 70, height: 160))
         try await settle()
-        XCTAssertEqual(cursorAreas().count, 2, "Layout changes replace tracking areas instead of accumulating them")
+        XCTAssertEqual(cursorAreas().count, 4, "Layout changes replace tracking areas instead of accumulating them")
         try checkCursor(at: CGPoint(x: 35, y: 80), expected: .arrow)
         try checkCursor(at: CGPoint(x: 8, y: 80), expected: .openHand)
         source.isDraggable = false
         try checkCursor(at: CGPoint(x: 8, y: 80), expected: .arrow)
+    }
+
+    func testCompactNativeHitMapLeavesTheIconSidesAndTitleDraggable() async throws {
+        let plugin = LayoutEditorTestPlugin("compact", order: 0)
+        plugin.grid = .compact
+        plugin.spanWidth = 1
+        plugin.spanHeight = 8
+        for direction in [LayoutDirection.leftToRight, .rightToLeft] {
+            let host = makeHost([plugin])
+            let window = mount(PanelLayoutEditor(pluginHost: host, panelID: "components", onDismiss: {})
+                .environment(\.layoutDirection, direction))
+            defer { window.close() }
+            try await settle()
+            let root = try XCTUnwrap(window.contentView)
+            let source = try XCTUnwrap(descendants(root).compactMap { $0 as? PanelLayoutDragSourceView }.first)
+            setHover(source, inside: true)
+            try await settle()
+            XCTAssertTrue(source.showsControls)
+            XCTAssertEqual(source.controlFrames.count, 1)
+            let bounds = source.bounds
+            for point in [CGPoint(x: 6, y: bounds.midY), CGPoint(x: bounds.maxX - 6, y: bounds.midY),
+                          CGPoint(x: bounds.midX, y: 6), CGPoint(x: bounds.midX, y: bounds.maxY - 6)] {
+                XCTAssertTrue(root.hitTest(source.convert(point, to: nil)) === source)
+            }
+            XCTAssertFalse(root.hitTest(source.convert(CGPoint(x: bounds.midX, y: bounds.midY), to: nil)) === source)
+            XCTAssertEqual(source.bounds, bounds, "Hover must not resize the widget or its drag map")
+        }
     }
 
     private func setHover(_ source: PanelLayoutDragSourceView, inside: Bool) {

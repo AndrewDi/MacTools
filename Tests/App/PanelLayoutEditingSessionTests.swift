@@ -7,24 +7,6 @@ import MacToolsPluginKit
 
 @MainActor
 final class PanelLayoutEditingSessionTests: XCTestCase {
-    func testCompactEditorControlsKeepUsableTargetsInsideTheIconTile() {
-        let bounds = CGRect(origin: .zero, size: PluginPanelWidgetLayoutMetrics.default.compactCellSize)
-        let layout = PanelLayoutItemControlsLayout(size: bounds.size)
-        XCTAssertTrue(layout.isCompact)
-        XCTAssertEqual(layout.buttonSide, 20)
-        let toolbar = PanelLayoutItemControlsLayout.frame(in: bounds)
-        XCTAssertTrue(bounds.contains(toolbar))
-        for rtl in [false, true] {
-            let frames = (0..<3).map { layout.buttonFrame(at: $0, rightToLeft: rtl) }
-            for (index, frame) in frames.enumerated() {
-                XCTAssertTrue(CGRect(origin: .zero, size: layout.size).contains(frame))
-                for other in frames.dropFirst(index + 1) { XCTAssertFalse(frame.intersects(other)) }
-            }
-        }
-        XCTAssertEqual(layout.buttonFrame(at: 0).minX,
-                       layout.size.width - layout.buttonFrame(at: 0, rightToLeft: true).maxX)
-    }
-
     func testPointerPreviewDoesNotInvalidateTheEditorSession() throws {
         let session = PanelLayoutEditingSession()
         let ids = (0..<20).map(String.init)
@@ -116,29 +98,21 @@ final class PanelLayoutEditingSessionTests: XCTestCase {
         XCTAssertEqual(PanelLayoutDestination.moving("a", toOffset: 10, in: ids), ["b", "c", "a"])
     }
 
-    func testListDestinationIncludesFirstLastAndRowHalves() {
-        XCTAssertEqual(PanelLayoutDestination.listOffset(at: CGPoint(x: 5, y: -10), count: 3), 0)
-        XCTAssertEqual(PanelLayoutDestination.listOffset(at: CGPoint(x: 5, y: 10), count: 3), 0)
-        XCTAssertEqual(PanelLayoutDestination.listOffset(at: CGPoint(x: 5, y: 35), count: 3), 1)
-        XCTAssertEqual(PanelLayoutDestination.listOffset(at: CGPoint(x: 5, y: 70), count: 3), 1)
-        XCTAssertEqual(PanelLayoutDestination.listOffset(at: CGPoint(x: 5, y: 90), count: 3), 2)
-        XCTAssertEqual(PanelLayoutDestination.listOffset(at: CGPoint(x: 5, y: 500), count: 3), 3)
-    }
-
     func testMixedSpanGridDestinationAndPreviewUseSequenceOrder() {
         let items = [item("a", .twoByTwo), item("b", .oneByOne), item("c", .fourByTwo), item("d", .oneByTwo)]
         let placements = ComponentGridPlacementEngine.placements(for: items)
+        let geometry = geometry(for: placements)
         for (index, placement) in placements.enumerated() {
             let rect = PanelLayoutDestination.frame(placement)
             let before = CGPoint(x: rect.minX + 2, y: rect.midY)
             let after = CGPoint(x: rect.maxX - 2, y: rect.midY)
-            XCTAssertEqual(PanelLayoutDestination.gridOffset(at: before, placements: placements, rightToLeft: false), index)
-            XCTAssertEqual(PanelLayoutDestination.gridOffset(at: after, placements: placements, rightToLeft: false), index + 1)
+            XCTAssertEqual(geometry.target(at: before, rightToLeft: false).offset, index)
+            XCTAssertEqual(geometry.target(at: after, rightToLeft: false).offset, index + 1)
             let mirrored = CGPoint(x: ComponentPanelLayout.gridWidth - before.x, y: before.y)
-            XCTAssertEqual(PanelLayoutDestination.gridOffset(at: mirrored, placements: placements, rightToLeft: true), index)
+            XCTAssertEqual(geometry.target(at: mirrored, rightToLeft: true).offset, index)
         }
-        XCTAssertEqual(PanelLayoutDestination.gridOffset(at: CGPoint(x: 10, y: -1), placements: placements, rightToLeft: false), 0)
-        XCTAssertEqual(PanelLayoutDestination.gridOffset(at: CGPoint(x: 10, y: 5000), placements: placements, rightToLeft: false), 4)
+        XCTAssertEqual(geometry.target(at: CGPoint(x: 10, y: -1), rightToLeft: false).offset, 0)
+        XCTAssertEqual(geometry.target(at: CGPoint(x: 10, y: 5000), rightToLeft: false).offset, 4)
         let session = PanelLayoutEditingSession()
         let ids = items.map(\.id)
         _ = session.begin(id: "d", ids: ids)
@@ -282,15 +256,20 @@ final class PanelLayoutEditingSessionTests: XCTestCase {
             item("b", PluginPanelWidgetSpan(width: 1, height: 24)!),
             item("c", PluginPanelWidgetSpan(width: 4, height: 12)!)
         ])
-        for offset in 0...placements.count {
-            let marker = try XCTUnwrap(PanelLayoutDestination.gridInsertionFrame(
-                offset: offset, placements: placements, rightToLeft: false))
-            let mirrored = try XCTUnwrap(PanelLayoutDestination.gridInsertionFrame(
-                offset: offset, placements: placements, rightToLeft: true))
-            XCTAssertEqual(marker.minX, ComponentPanelLayout.gridWidth - mirrored.maxX)
-            XCTAssertEqual(marker.minY, mirrored.minY)
-            let point = CGPoint(x: marker.midX, y: marker.midY)
-            XCTAssertEqual(PanelLayoutDestination.gridOffset(at: point, placements: placements, rightToLeft: false), offset)
+        let geometry = geometry(for: placements)
+        for placement in placements {
+            let frame = PanelLayoutDestination.frame(placement)
+            let point = CGPoint(x: frame.minX + 1, y: frame.midY)
+            let target = geometry.target(at: point, rightToLeft: false)
+            let mirroredPoint = CGPoint(x: ComponentPanelLayout.gridWidth - point.x, y: point.y)
+            let mirrored = geometry.target(at: mirroredPoint, rightToLeft: true)
+            let marker = try XCTUnwrap(target.markerFrame)
+            let mirroredMarker = try XCTUnwrap(mirrored.markerFrame)
+            XCTAssertEqual(marker.minX, ComponentPanelLayout.gridWidth - mirroredMarker.maxX, accuracy: 0.001)
+            XCTAssertEqual(marker.minY, mirroredMarker.minY)
+            XCTAssertEqual(target.offset, mirrored.offset)
+            XCTAssertEqual(geometry.target(at: CGPoint(x: marker.midX, y: marker.midY), rightToLeft: false).offset,
+                           target.offset)
         }
     }
 
@@ -302,6 +281,13 @@ final class PanelLayoutEditingSessionTests: XCTestCase {
         let empty = PanelLayoutDestination.editorContentHeight(itemHeight: 0, maximumHeight: 600)
         XCTAssertEqual(MenuBarPanelLayout.panelHeight(forContentHeight: empty, showsEditingActionBar: true),
                        MenuBarPanelLayout.minimumPanelHeight, "The footer must not add empty space to the minimum panel size")
+    }
+
+    private func geometry(for placements: [ComponentGridPlacement]) -> PanelLayoutDropGeometry {
+        PanelLayoutDropGeometry(frames: placements.map {
+            .init(entry: .init(placement: .init(item: .init(pluginID: $0.id, itemID: "widget")), kind: .widget),
+                  frame: PanelLayoutDestination.frame($0))
+        })
     }
 
     private func providerFromPasteboard(token: String) -> NSItemProvider {
