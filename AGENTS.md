@@ -36,7 +36,7 @@
 - Generate the project with `make generate`. Do not run bare `xcodegen generate`, because it can miss the latest generated plugin configuration.
 - Validate compilation with `make build`.
 - Run locally with `make run`; it syncs the latest Debug plugin packages and generates the local development catalog.
-- Sync only already-built Debug plugin packages and the local development catalog with `make sync-debug-plugins`.
+- Build and sync Debug plugin packages and the local development catalog without launching the app with `make sync-debug-plugins`.
 - Build the local plugin packages and generate the Debug catalog with `make build-plugin`.
 - Build one plugin with `make build-plugin PLUGIN=<plugin directory name or plugin ID>`.
 - Run repository script tests with `make script-tests`; these checks are separate from XCTest and include pending changelog validation and PluginKit minimum-host compatibility validation.
@@ -88,11 +88,12 @@
 - Update release: keep Sparkle appcast, version, signing, and notarization changes small and careful; avoid committing local release artifacts.
 
 ## Testing Requirements
-- Behavior changes should prefer adjacent XCTest additions or updates. Test files should use `<TypeName>Tests.swift`.
+- Cover core outcomes, regressions, and consequential boundaries affected by the change. Reuse existing coverage; add or update adjacent XCTest only where it leaves a meaningful gap. There is no per-change test-count or coverage-percentage target. Test files should use `<TypeName>Tests.swift`.
+- Do not add tests that merely repeat implementation logic, private call sequences, or fixed wording, colors, and spacing. Documentation and cosmetic-only changes normally need review and visual verification, not new automated tests.
 - Local and agent validation should default to the smallest relevant test method or class, such as `-only-testing:MacToolsTests/<TestClassName>` or `-only-testing:MacToolsTests/<TestClassName>/<testMethod>`. Do not run the full suite for narrow changes unless the scope justifies it.
 - Plugin tests should prefer `Plugins/<PluginName>/Tests/`; shared Core/App tests should live under the corresponding `Tests/Core/` or `Tests/App/` path.
 - Filesystem tests must use temporary directories or fake stores, and must never delete real user directories.
-- Plugin interaction tests should cover `PluginPanelAction`, derived `PluginPanelRowState`, permission state, and error state.
+- Plugin interaction tests should protect the affected action outcomes, derived state, and important permission/error boundaries. Do not exhaustively test every field or duplicate unchanged host behavior in each plugin.
 - Changes that make a public PluginKit type newly consumable by plugins must run `make script-tests` so minimum-host inventory checks are not skipped.
 - If tests cannot be run, explicitly state the reason and suggest the local verification command in the final response.
 

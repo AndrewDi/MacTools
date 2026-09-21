@@ -5,6 +5,9 @@ PluginKit 7 replaces the primary-panel and component-panel protocols with
 including multiple items of the same kind. The host owns the supported renderers,
 grid, scrolling, editing, and panel windows.
 
+For shared visual, performance, and review requirements, follow the
+[plugin development standards](development-guidelines.md).
+
 ## Declaring items
 
 ```swift
@@ -75,13 +78,11 @@ must be updated before the host loads their code.
 
 For a simple primary toggle, fixed action button, or settings-page entry point, use the shared `iconWidget` factory alongside
 the existing row. It produces a library-only widget with no initial placement and
-uses a 52.8-by-64-point hit target with a centered, single-line title below the icon.
-Long titles truncate at the tail; the full title, description, and error remain available on hover.
-Five controls fit across the existing 304-point panel, with 42-point surfaces,
-20-point symbols, and 10-point gaps between hit targets in both directions.
-Centered surfaces leave 20.8-point horizontal gaps. Use
-`compactCellSize` and `compactRowSpacing` from the layout metrics when reproducing
-the icon grid. Standard cards keep their four-column widths; both densities can share the same row.
+centers a single-line title below the icon. Long titles truncate; the full title,
+description, and error remain available on hover. Five compact controls fit across
+the standard panel, while normal widgets use a four-column grid. Both densities
+can share a row. Use `PluginPanelWidgetLayoutMetrics` for sizes and spacing
+instead of duplicating the renderer's constants.
 `PluginPanelWidgetSpan.grid` defaults to `.standard`; the shared icon factory
 selects `.compact`. Use layout metrics' `itemWidth(for:)` when resolving a span
 so its grid density is preserved.
@@ -133,6 +134,18 @@ track the set of visible item IDs in the plugin. Start shared work when the firs
 item appears and stop it only when the last item disappears; widget previews must
 not initiate that work.
 
+## Panel layout and editing
+
+Live panels follow saved item order. Equal-height widgets share a row while their
+widths fit; a different height or insufficient width starts a new row. Later items
+do not backfill completed rows. Standard and compact spans retain their own widths.
+
+During editing, small widgets use one centered menu for removal, cross-panel moves,
+and ordering, leaving the surrounding area draggable. Larger cards keep separate
+controls with draggable gaps. Insertion indicators follow the pointed widget edge
+and preview the available footprint; moving a widget does not reserve its old cell.
+Changes save one ordered list, and Undo restores the previous arrangement.
+
 ## Identity and state
 
 An item definition is identified by `(pluginID, itemID)`. Each user-added placement
@@ -157,6 +170,8 @@ last expanded copy is cleared; plugins must not independently reset expansion
 while reading their state. Business actions remain shared through the item's
 action handler.
 
+### Library and localization
+
 The host localizes inherited default descriptions when the app language changes.
 Plugins remain responsible for localizing explicit item descriptions, dynamic
 subtitles, and errors. Library previews render the view itself without additional
@@ -168,6 +183,8 @@ Masonry placement chooses the topmost available position, then the leftmost;
 narrow previews do not reserve half-column slots. Only nearby previews mount,
 and scrolling back reuses snapshots cached for the selected plugin. Adding and removing
 placements belong to panel editing, not command-palette commands.
+
+### Height and view lifetime
 
 For content-driven height, call `context.reportContentHeight(height)` from the
 widget's intrinsic-content measurement, before applying the allocated host frame.
@@ -208,7 +225,9 @@ together. References to unavailable plugins remain in the layout. Old shared
 preferences without renderer information retain a small migration seed until
 capabilities are available; they do not invent a second view for every plugin.
 Backup import uses the same conversion. Unknown or corrupt layout payloads are
-preserved until an explicit reset or import.
+preserved until an explicit reset or import. Once the replacement is saved, the
+host retires the unreadable legacy layout and resumes normal ordering persistence;
+relaunching must not restore the retired payload.
 
 Plugin management order is independent of panel placement. Removing a panel
 preserves its placements in the first visible remaining panel, including entries
