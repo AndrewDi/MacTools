@@ -1,4 +1,5 @@
 import AppKit
+import MacToolsPluginKit
 import XCTest
 @testable import WindowSwitcherPlugin
 
@@ -10,7 +11,7 @@ final class WindowSwitcherChooserFocusTests: XCTestCase {
             isMinimized: false, shortcutToken: nil)
     }
 
-    func testOriginCapturedBeforePanelOrderingAndActivation() throws {
+    func testOriginCapturedBeforeNonactivatingPanelOrdering() throws {
         var stages: [String] = []
         let focus = WindowSwitcherChooserFocus(hostPID: 7, frontmostPID: {
             stages.append("capture")
@@ -20,10 +21,6 @@ final class WindowSwitcherChooserFocusTests: XCTestCase {
             return 42
         }, activateHost: {
             stages.append("activate")
-            XCTAssertTrue(NSApp.windows.contains {
-                $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible &&
-                    !$0.styleMask.contains(.nonactivatingPanel)
-            }, "A background accessory app needs its normal panel visible before activation")
         }, activateApplication: { _ in })
         let controller = WindowSwitcherOverlayController(
             preview: WindowSwitcherPreview(hasPermission: { false }), focus: focus)
@@ -31,10 +28,10 @@ final class WindowSwitcherChooserFocusTests: XCTestCase {
         controller.show(WindowSwitcherSession(entries: [item], selectedID: item.id,
             isPersistent: false, originalWindowID: item.id), currentPID: 42, showsPreview: true)
         defer { controller.hide(restoringFocus: false) }
-        XCTAssertEqual(stages, ["capture", "activate"])
+        XCTAssertEqual(stages, ["capture"])
     }
 
-    func testImmediateDismissRestoresFocusWithoutLateActivation() async throws {
+    func testImmediateDismissLeavesForegroundApplicationUntouched() async throws {
         var frontmost: pid_t? = 42
         var activations = 0
         var restored: [pid_t] = []
@@ -46,14 +43,14 @@ final class WindowSwitcherChooserFocusTests: XCTestCase {
         let item = makeItem()
         controller.show(WindowSwitcherSession(entries: [item], selectedID: item.id,
             isPersistent: false, originalWindowID: item.id), currentPID: 42, showsPreview: true)
-        XCTAssertEqual(activations, 1, "Activation happens during opening, not in a deferred task")
+        XCTAssertEqual(activations, 0)
         controller.hide()
         try await Task.sleep(for: .milliseconds(20))
-        XCTAssertEqual(activations, 1)
-        XCTAssertEqual(restored, [42])
+        XCTAssertEqual(activations, 0)
+        XCTAssertTrue(restored.isEmpty)
     }
 
-    func testAllInvocationModesAcquireFocusWithoutChangingSession() throws {
+    func testAllInvocationModesStayNonactivatingWithoutChangingSession() throws {
         for persistent in [false, true] {
             for showsPreview in [false, true] {
                 var frontmost: pid_t? = 42
@@ -72,16 +69,16 @@ final class WindowSwitcherChooserFocusTests: XCTestCase {
                 let panel = try XCTUnwrap(NSApp.windows.first {
                     $0.identifier?.rawValue == "WindowSwitcherChooser" && $0.isVisible
                 })
-                XCTAssertFalse(panel.styleMask.contains(.nonactivatingPanel))
+                XCTAssertTrue(panel.styleMask.contains(.nonactivatingPanel))
                 XCTAssertFalse(panel.canBecomeMain, "The chooser must not become the host's main window")
                 XCTAssertTrue(panel.collectionBehavior.contains(.canJoinAllSpaces))
                 XCTAssertTrue(panel.collectionBehavior.contains(.fullScreenAuxiliary))
-                XCTAssertEqual(activations, 1)
+                XCTAssertEqual(activations, 0)
                 XCTAssertEqual(controller.session?.isPersistent, persistent)
                 XCTAssertEqual(controller.session?.selectedID, item.id)
                 XCTAssertEqual(controller.session?.originalWindowID, item.id)
                 controller.hide()
-                XCTAssertEqual(restored, [42])
+                XCTAssertTrue(restored.isEmpty)
             }
         }
     }
@@ -110,13 +107,13 @@ final class WindowSwitcherChooserFocusTests: XCTestCase {
             modifierFlags: [.command], timestamp: 1, windowNumber: panel.windowNumber, context: nil,
             eventNumber: 1, clickCount: 1, pressure: 1))
         panel.sendEvent(click)
-        XCTAssertEqual(activations, 2)
+        XCTAssertEqual(activations, 1)
         XCTAssertTrue(panel.firstResponder === stage)
         XCTAssertEqual(controller.session?.isPersistent, false)
         XCTAssertEqual(controller.session?.selectedID, item.id)
     }
 
-    func testLosingKeyFocusDoesNotReactivateOriginEvenWithinHostApp() {
+    func testLosingKeyFocusDoesNotReactivateOriginEvenWithinHostApp() async {
         var frontmost: pid_t? = 42
         var restored: [pid_t] = []
         let focus = WindowSwitcherChooserFocus(hostPID: 7, frontmostPID: { frontmost },
@@ -127,7 +124,14 @@ final class WindowSwitcherChooserFocusTests: XCTestCase {
         controller.onCancel = { [weak controller] in controller?.hide() }
         controller.show(WindowSwitcherSession(entries: [item], selectedID: item.id,
             isPersistent: false, originalWindowID: item.id), currentPID: 42, showsPreview: false)
-        controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification))
+        let other = NSPanel(contentRect: NSRect(x: 100, y: 100, width: 200, height: 100),
+                            styleMask: [.titled, .nonactivatingPanel], backing: .buffered, defer: false)
+        other.isReleasedWhenClosed = false
+        defer { other.close() }
+        PluginPanelPresentation.present(other)
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
         XCTAssertFalse(controller.isVisible)
         XCTAssertTrue(restored.isEmpty)
     }

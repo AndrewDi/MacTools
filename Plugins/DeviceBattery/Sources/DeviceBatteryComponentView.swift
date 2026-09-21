@@ -3,13 +3,19 @@ import SwiftUI
 import MacToolsPluginKit
 
 struct DeviceBatteryComponentView: View {
-    @ObservedObject var viewModel: DeviceBatteryViewModel
+    let viewModel: DeviceBatteryViewModel
     @ObservedObject var store: DeviceBatteryStore
     let localization: PluginLocalization
     let openSettings: () -> Void
     @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
+        PluginObservedContent(viewModel) { _ in
+            batteryContent
+        }
+    }
+
+    private var batteryContent: some View {
         Group {
             if visibleItems.isEmpty {
                 emptyState

@@ -29,6 +29,7 @@ final class WindowSwitcherMigrationTests: XCTestCase {
         let fresh = WindowSwitcherStore(storage: WindowSwitcherMemoryStorage())
         XCTAssertEqual(fresh.configuration.mode, .searchSelect)
         XCTAssertTrue(fresh.configuration.usesCompanionDefaults)
+        XCTAssertTrue(fresh.configuration.showsPreview)
         let storage = WindowSwitcherMemoryStorage()
         storage.set(Data(#"{"mode":"keyWindow","usesCompanionDefaults":false,"showsPreview":true}"#.utf8), forKey: "configuration")
         let upgraded = WindowSwitcherStore(storage: storage)
@@ -169,7 +170,7 @@ final class WindowSwitcherMigrationTests: XCTestCase {
         var cancelled = false
         controller.onCancel = { cancelled = true }
         controller.menuWillOpen(menu)
-        controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification, object: panel))
+        NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: panel)
         XCTAssertFalse(cancelled, "Menu tracking must not dismiss the chooser before its action")
         let edit = try XCTUnwrap(menu.items.last)
         XCTAssertTrue(NSApp.sendAction(try XCTUnwrap(edit.action), to: edit.target, from: edit))

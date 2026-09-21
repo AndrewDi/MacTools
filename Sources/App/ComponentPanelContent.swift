@@ -268,6 +268,8 @@ struct ComponentPanelContent: View {
         let _ = presentation.revision
         ZStack(alignment: .topLeading) {
             dashboardContent
+                .environment(\.pluginPresentationIsVisible,
+                             isPanelVisible && !secondaryPanelController.isPresentingInline)
                 .opacity(secondaryPanelController.isPresentingInline ? 0 : 1)
                 .allowsHitTesting(!secondaryPanelController.isPresentingInline)
 

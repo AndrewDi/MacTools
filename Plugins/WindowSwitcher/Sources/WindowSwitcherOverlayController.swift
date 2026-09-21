@@ -62,7 +62,8 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
     }
     private let chooserFocus: WindowSwitcherChooserFocus
     private var isAcquiringChooserFocus = false
-    private let panel = Panel(contentRect: .zero, styleMask: [.borderless], backing: .buffered, defer: false)
+    private let dismissalMonitor = PluginPanelDismissalMonitor()
+    private let panel = Panel(contentRect: .zero, styleMask: PluginPanelPresentation.styleMask, backing: .buffered, defer: false)
     private let table = Table()
     private let cards = WindowSwitcherCardCollection()
     private let cardScroll = WindowSwitcherCardScrollView()
@@ -221,9 +222,19 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
         render()
         layoutPanel()
         render()
-        // Capture the origin before activation. A normally activating panel
-        // receives native gestures without a separate preview click.
-        acquireChooserFocus()
+        chooserFocus.prepare()
+        dismissalMonitor.start(
+            for: panel,
+            isSuspended: { [weak self] in
+                guard let self else { return true }
+                return closing || isAcquiringChooserFocus || isPresentingMenu
+            },
+            onDismiss: { [weak self] in
+                self?.chooserFocus.release(restoring: false)
+                self?.onCancel?()
+            }
+        )
+        PluginPanelPresentation.present(panel)
         panel.makeFirstResponder(usesList ? table : cards)
         acceptsSearchFocus = true
         noteCyclingInput()
@@ -235,6 +246,7 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
     }
 
     func hide(restoringFocus: Bool = true) {
+        dismissalMonitor.stop()
         acceptsSearchFocus = false
         menuGeneration += 1
         isPresentingMenu = false
@@ -361,8 +373,8 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
         panel.shortcutHandler = { [weak self] event in self?.handleChooserShortcut(event) ?? false }
         panel.level = .popUpMenu
         panel.isOpaque = false; panel.backgroundColor = .clear; panel.hasShadow = true
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        panel.hidesOnDeactivate = false; panel.isReleasedWhenClosed = false; panel.delegate = self
+        PluginPanelPresentation.configure(panel)
+        panel.delegate = self
         let effect = WindowSwitcherPaletteSurface()
         panel.contentView = effect
         snapCoordinator.attach(to: panel)
@@ -836,7 +848,10 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
         title.font = .systemFont(ofSize: 13, weight: .medium); title.lineBreakMode = .byTruncatingMiddle
         title.attributedStringValue = highlighted(displayName, query: session?.query ?? "")
         let parts = [displayName.caseInsensitiveCompare(entry.appName) == .orderedSame ? nil : entry.appName, entry.displayNameContext,
-                     entry.isMinimized ? localization.string("window.minimized", defaultValue: "已最小化") : nil, entry.isHidden ? localization.string("window.hidden", defaultValue: "已隐藏") : nil,
+                     entry.isMinimized ? localization.string("window.minimized", defaultValue: "已最小化") : nil,
+                     entry.isOnOtherDesktop ? localization.string("window.otherDesktop", defaultValue: "其他桌面") : nil,
+                     entry.isOnFullscreenSpace ? localization.string("window.fullscreen", defaultValue: "全屏") : nil,
+                     entry.isHidden ? localization.string("window.hidden", defaultValue: "已隐藏") : nil,
                      entry.metadataUnavailable ? localization.string("window.unavailable", defaultValue: "暂时无法更新") : nil, entry.isWindowEntry ? nil : localization.string("window.none", defaultValue: "无可用窗口")]
         let subtitle = NSTextField(labelWithString: parts.compactMap { $0 }.joined(separator: " · "))
         subtitle.font = .systemFont(ofSize: 11); subtitle.textColor = .secondaryLabelColor; subtitle.lineBreakMode = .byTruncatingTail
@@ -1382,22 +1397,14 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
         render()
     }
 
-    private func acquireChooserFocus() {
-        guard session != nil else { return }
-        isAcquiringChooserFocus = true
-        defer { isAcquiringChooserFocus = false }
-        // Capture the origin before ordering, then activate the app and make
-        // the chooser key. Ordering alone leaves a background panel inactive.
-        chooserFocus.prepare()
-        PluginPresentationSafety.prepareForWindowOrdering(panel)
-        panel.orderFront(nil)
-        chooserFocus.acquire()
-        panel.makeKeyAndOrderFront(nil)
-    }
-
     private func focusPreviewNow() {
         guard panel.isVisible, !previewPane.isHidden else { return }
-        acquireChooserFocus()
+        // Ordinary presentation stays nonactivating. A deliberate preview click
+        // retains the foreground compatibility path needed by native gestures.
+        isAcquiringChooserFocus = true
+        defer { isAcquiringChooserFocus = false }
+        chooserFocus.acquire()
+        panel.makeKey()
     }
 
     @objc private func previewChanged() {
@@ -1406,13 +1413,5 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
         previewedEntry = nil; previewedPermission = nil
         if !showsPreview { preview.cancel() }
         layoutPanel(preservePosition: true, resizeToContent: true); render()
-    }
-    func windowDidResignKey(_ notification: Notification) {
-        if !closing, !isAcquiringChooserFocus, !isPresentingMenu, session != nil {
-            // Another window now owns focus. Dismiss without restoring the
-            // origin, even when the user chose another MacTools window.
-            chooserFocus.release(restoring: false)
-            onCancel?()
-        }
     }
 }
