@@ -5609,8 +5609,7 @@
     },
     {
       "capabilities": {
-        "componentPanel": false,
-        "primaryPanel": false,
+        "panelItems": [],
         "settings": "workspace"
       },
       "category": "storage",
