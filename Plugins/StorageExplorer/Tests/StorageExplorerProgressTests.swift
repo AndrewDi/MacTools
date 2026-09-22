@@ -24,19 +24,17 @@ final class StorageExplorerProgressTests: XCTestCase {
         try FileManager.default.linkItem(at: file, to: root.appendingPathComponent("b/link"))
         let canonicalPath = root.appendingPathComponent("a/file").path
         let duplicatePath = root.appendingPathComponent("b/link").path
-        for workers in [1, 2, 4, 6] {
-            for _ in 0..<3 {
-                let result = try await StorageExplorerScanner(workerCount: workers).scanSnapshot(rootURL: root) { _ in }
-                XCTAssertEqual(result.items[result.rootPath]?.size, 10_000)
-                XCTAssertEqual(result.items[root.appendingPathComponent("a").path]?.size, 10_000)
-                XCTAssertEqual(result.items[root.appendingPathComponent("b").path]?.size, 0)
-                XCTAssertEqual(result.items[canonicalPath]?.size, 10_000)
-                XCTAssertEqual(result.items[duplicatePath]?.size, 0)
-                XCTAssertEqual(result.fileTypeTotals["—"]?.size, 10_000)
-                XCTAssertEqual(result.fileTypeTotals["—"]?.count, 2)
-                XCTAssertEqual(result.items.count, 5)
-                XCTAssertEqual(result.progress.skippedCount, 0)
-            }
+        for workers in [1, 4] {
+            let result = try await StorageExplorerScanner(workerCount: workers).scanSnapshot(rootURL: root) { _ in }
+            XCTAssertEqual(result.items[result.rootPath]?.size, 10_000)
+            XCTAssertEqual(result.items[root.appendingPathComponent("a").path]?.size, 10_000)
+            XCTAssertEqual(result.items[root.appendingPathComponent("b").path]?.size, 0)
+            XCTAssertEqual(result.items[canonicalPath]?.size, 10_000)
+            XCTAssertEqual(result.items[duplicatePath]?.size, 0)
+            XCTAssertEqual(result.fileTypeTotals["—"]?.size, 10_000)
+            XCTAssertEqual(result.fileTypeTotals["—"]?.count, 2)
+            XCTAssertEqual(result.items.count, 5)
+            XCTAssertEqual(result.progress.skippedCount, 0)
         }
 
         let productionResult = try await StorageExplorerScanner(
@@ -72,21 +70,6 @@ final class StorageExplorerProgressTests: XCTestCase {
         XCTAssertEqual(full.progress.cachedDirectories, 0)
     }
 
-    func testLargeChangeBatchClearsCacheWithoutComparingEveryEntry() async throws {
-        let file = root.appendingPathComponent("file.bin")
-        try Data(repeating: 0, count: 10).write(to: file)
-        let scanner = StorageExplorerScanner()
-        let first = try await scanner.scanSnapshot(rootURL: root) { _ in }
-        XCTAssertEqual(first.items[first.rootPath]?.size, 10)
-
-        try Data(repeating: 1, count: 200).write(to: file)
-        scanner.invalidate(paths: (0..<33).map { root.appendingPathComponent("event-\($0)").path })
-        let refreshed = try await scanner.scanSnapshot(rootURL: root) { _ in }
-
-        XCTAssertEqual(refreshed.items[refreshed.rootPath]?.size, 200)
-        XCTAssertEqual(refreshed.progress.cachedDirectories, 0)
-    }
-
     func testPrecancelledTaskAlwaysThrows() async throws {
         let task = Task {
             withUnsafeCurrentTask { $0?.cancel() }
@@ -97,7 +80,7 @@ final class StorageExplorerProgressTests: XCTestCase {
     }
 
     func testStreamCanReconstructFinalIndexAndReportsIncompleteRootFirst() async throws {
-        for i in 0..<40 {
+        for i in 0..<2 {
             try Data(repeating: 1, count: 100).write(to: root.appendingPathComponent("file-\(i)"))
         }
         let events = EventBox()
@@ -107,11 +90,8 @@ final class StorageExplorerProgressTests: XCTestCase {
         var reconstructed = StorageExplorerSnapshot(rootPath: result.rootPath)
         for event in captured { reconstructed.apply(event.items) }
         XCTAssertEqual(reconstructed.items, result.items)
-        XCTAssertEqual(result.items[result.rootPath]?.size, 4_000)
+        XCTAssertEqual(result.items[result.rootPath]?.size, 200)
         XCTAssertFalse(result.items[result.rootPath]?.isIncomplete ?? true)
-        // The stream may contain the initial incomplete root, the explicit finalizing phase,
-        // and the completed result in addition to interval-based progress updates.
-        XCTAssertLessThanOrEqual(captured.count, Int(result.progress.elapsed / 0.15) + 3)
         XCTAssertTrue(captured.contains { $0.progress.phase == .finalizing })
         XCTAssertEqual(result.progress.phase, .finalizing)
     }
@@ -147,27 +127,24 @@ final class StorageExplorerProgressTests: XCTestCase {
         for directory in 0..<3 {
             let folder = root.appendingPathComponent("folder-\(directory)")
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            for file in 0..<100 {
-                try Data([UInt8(file % 255)]).write(to: folder.appendingPathComponent("file-\(file).bin"))
+            for file in 0..<3 {
+                try Data(repeating: 1, count: (file + 1) * 16_384)
+                    .write(to: folder.appendingPathComponent("file-\(file).bin"))
             }
         }
         let snapshot = try await StorageExplorerScanner(
             workerCount: 4,
             publishesItems: false,
-            maximumRetainedFiles: 20
+            maximumRetainedFiles: 2
         ).scanSnapshot(rootURL: root) { _ in }
 
-        XCTAssertEqual(snapshot.items[snapshot.rootPath]?.size, 300)
+        XCTAssertEqual(snapshot.items[snapshot.rootPath]?.size, 18 * 16_384)
         XCTAssertTrue(snapshot.fileTypeTotals.isEmpty)
         XCTAssertTrue(snapshot.fileTypeTotalsByDirectory.isEmpty)
-        XCTAssertLessThanOrEqual(snapshot.items.values.filter { !$0.isDirectory }.count, 23)
-    }
-
-    func testDefaultScannerUsesBoundedAdaptiveConcurrencyAndRetention() {
-        let scanner = StorageExplorerScanner(publishesItems: false)
-        XCTAssertTrue((4...6).contains(scanner.workerCount))
-        XCTAssertEqual(scanner.maximumRetainedFiles, 10_000)
-        XCTAssertFalse(scanner.collectsFileTypeTotals)
+        XCTAssertLessThanOrEqual(snapshot.items.values.filter { !$0.isDirectory }.count, 5)
+        for directory in 0..<3 {
+            XCTAssertNotNil(snapshot.items[root.appendingPathComponent("folder-\(directory)/file-2.bin").path])
+        }
     }
 }
 

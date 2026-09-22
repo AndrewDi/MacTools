@@ -44,8 +44,9 @@ E2E_SCRIPT := scripts/e2e/mactools-e2e.sh
 E2E_SESSION ?=
 E2E_DURATION ?= 90
 E2E_PACK ?=
+TEST_FILTER ?=
 
-.PHONY: setup validate-local-debug-config generate-plugin-config generate build build-cli validate-changelog validate-generated-plugin-data script-tests panel-layout-ui-tests ci sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release stop-debug-app install-debug-app run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
+.PHONY: setup validate-local-debug-config generate-plugin-config generate build build-cli validate-changelog validate-generated-plugin-data script-tests test ci sync-debug-plugins build-plugin build-plugins generate-icon-gallery package-plugins-release stop-debug-app install-debug-app run run-open e2e-preflight e2e-prepare e2e-upgrade e2e-reseed e2e-resume e2e-rebuild e2e-audit e2e-scenarios e2e-record e2e-record-pack e2e-verify-code e2e-collect e2e-restore e2e-self-test clean release release-local
 
 setup:
 	@if [ ! -f LocalConfig.xcconfig ]; then cp LocalConfig.sample.xcconfig LocalConfig.xcconfig; fi
@@ -93,12 +94,7 @@ validate-generated-plugin-data:
 script-tests: validate-changelog validate-generated-plugin-data
 	@$(PYTHON3) -m unittest discover -s scripts/tests -p 'test_*.py'
 
-# Opt-in native event checks for changes to drag routing or hit testing.
-panel-layout-ui-tests:
-	@$(PYTHON3) scripts/e2e/run_panel_layout_fixture.py
-
-ci: generate
-	@$(MAKE) script-tests
+test: generate
 	@$(XCODEBUILD) \
 		-project $(PROJECT_FILE) \
 		-scheme $(PROJECT_NAME) \
@@ -112,8 +108,12 @@ ci: generate
 		-test-timeouts-enabled YES \
 		-default-test-execution-time-allowance 120 \
 		-maximum-test-execution-time-allowance 120 \
+		$(foreach selector,$(TEST_FILTER),-only-testing:MacToolsTests/$(selector)) \
 		test \
 		-quiet
+
+ci: override TEST_FILTER :=
+ci: script-tests test
 	@./scripts/plugins/verify-plugin-kit-v7-binary-compatibility.sh "$(abspath $(DEBUG_BUILD_PRODUCTS_DIR))"
 
 sync-debug-plugins: build

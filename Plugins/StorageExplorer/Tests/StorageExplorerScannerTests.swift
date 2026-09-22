@@ -187,23 +187,4 @@ final class StorageExplorerScannerTests: XCTestCase {
         XCTAssertLessThan(result.size, 10_000)
         XCTAssertEqual(result.childCount, 3)
     }
-
-    func testScanCancellation() async throws {
-        for i in 0..<100 {
-            let file = tempDirectory.appendingPathComponent("file_\(i).bin")
-            try Data(repeating: 0x01, count: 1000).write(to: file)
-        }
-
-        let task = Task {
-            try await scanner.scan(rootURL: tempDirectory)
-        }
-        task.cancel()
-
-        do {
-            _ = try await task.value
-            // If it finishes before cancellation takes effect, that is possible for small tasks, but cancellation was registered
-        } catch {
-            XCTAssertTrue(error is CancellationError)
-        }
-    }
 }

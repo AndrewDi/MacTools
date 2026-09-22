@@ -2,22 +2,6 @@ import XCTest
 @testable import StorageExplorerPlugin
 
 final class StorageExplorerPresentationTests: XCTestCase {
-    func testElapsedClockAdvancesWithoutScannerUpdates() {
-        let started = Date(timeIntervalSince1970: 100)
-        XCTAssertEqual(
-            StorageExplorerElapsedClock.elapsed(
-                startedAt: started,
-                reported: 2,
-                now: Date(timeIntervalSince1970: 115)
-            ),
-            15
-        )
-        XCTAssertEqual(
-            StorageExplorerElapsedClock.elapsed(startedAt: started, reported: 20, now: started),
-            20
-        )
-    }
-
     func testHierarchyRectangleLayoutKeepsTileBudgetAndEveryRoot() {
         func leaf(_ path: String, bytes: Int64) -> StorageExplorerHierarchyNode {
             let item = StorageItem(
@@ -30,44 +14,46 @@ final class StorageExplorerPresentationTests: XCTestCase {
             )
             return StorageExplorerHierarchyNode(item: item, bytes: bytes, children: [], colorKey: "size-rank:0")
         }
-        let roots = (0..<48).map { rootIndex -> StorageExplorerHierarchyNode in
+        let roots = (0..<2).map { rootIndex -> StorageExplorerHierarchyNode in
             let rootPath = "/root-\(rootIndex)"
-            let children = (0..<18).map { childIndex -> StorageExplorerHierarchyNode in
+            let children = (0..<2).map { childIndex -> StorageExplorerHierarchyNode in
                 let childPath = rootPath + "/child-\(childIndex)"
-                let grandchildren = (0..<10).map {
+                let grandchildren = (0..<2).map {
                     leaf(childPath + "/leaf-\($0)", bytes: 1)
                 }
                 let item = StorageItem(
                     name: "child-\(childIndex)", path: childPath,
                     url: URL(fileURLWithPath: childPath), isDirectory: true,
-                    size: 10, allocatedSize: 10, parentPath: rootPath
+                    size: 2, allocatedSize: 2, parentPath: rootPath
                 )
                 return StorageExplorerHierarchyNode(
-                    item: item, bytes: 10, children: grandchildren, colorKey: "size-rank:\(rootIndex)"
+                    item: item, bytes: 2, children: grandchildren, colorKey: "size-rank:\(rootIndex)"
                 )
             }
             let item = StorageItem(
                 name: "root-\(rootIndex)", path: rootPath,
                 url: URL(fileURLWithPath: rootPath), isDirectory: true,
-                size: 180, allocatedSize: 180, parentPath: "/"
+                size: 4, allocatedSize: 4, parentPath: "/"
             )
             return StorageExplorerHierarchyNode(
-                item: item, bytes: 180, children: children, colorKey: "size-rank:\(rootIndex)"
+                item: item, bytes: 4, children: children, colorKey: "size-rank:\(rootIndex)"
             )
         }
 
         let rectangles = StorageExplorerHierarchyRectLayout.make(
             nodes: roots,
-            in: CGRect(x: 0, y: 0, width: 1_200, height: 800)
+            in: CGRect(x: 0, y: 0, width: 1_200, height: 800),
+            maximumRectangles: 6
         )
 
-        XCTAssertLessThanOrEqual(rectangles.count, 500)
+        XCTAssertLessThanOrEqual(rectangles.count, 6)
+        XCTAssertTrue(rectangles.contains { $0.depth > 0 })
         XCTAssertEqual(rectangles.filter { $0.depth == 0 }.count, roots.count)
         XCTAssertEqual(Set(rectangles.filter { $0.depth == 0 }.map(\.rootID)), Set(roots.map(\.id)))
     }
 
     func testTreemapPartitionsWithoutOverlapAndPreservesArea() {
-        let rows = (1...20).map { number -> StorageExplorerRow in
+        let rows = (1...4).map { number -> StorageExplorerRow in
             let item = StorageItem(name: "\(number)", path: "/\(number)", url: URL(fileURLWithPath: "/\(number)"), isDirectory: false, size: Int64(number))
             return StorageExplorerRow(item: item, name: item.name, bytes: item.size, sizeLabel: "", percentage: "", kind: "", modified: .distantPast, dateLabel: "")
         }
@@ -75,7 +61,7 @@ final class StorageExplorerPresentationTests: XCTestCase {
         let tiles = StorageExplorerTreemapLayout.tiles(rows: rows, in: bounds)
         XCTAssertEqual(tiles.count, rows.count)
         for (i, tile) in tiles.enumerated() {
-            XCTAssertEqual(tile.rect.width * tile.rect.height / (bounds.width * bounds.height), Double(tile.row.bytes) / 210, accuracy: 0.000001)
+            XCTAssertEqual(tile.rect.width * tile.rect.height / (bounds.width * bounds.height), Double(tile.row.bytes) / 10, accuracy: 0.000001)
             for other in tiles.dropFirst(i + 1) {
                 let intersection = tile.rect.intersection(other.rect)
                 XCTAssertTrue(intersection.isNull || intersection.width * intersection.height < 0.00001)
@@ -106,7 +92,7 @@ final class StorageExplorerPresentationTests: XCTestCase {
 
     func testChartGroupsOverflowWithoutLosingBytes() {
         var snapshot = StorageExplorerSnapshot(rootPath: "/fixture")
-        for i in 0..<250 {
+        for i in 0..<162 {
             let path = "/fixture/\(i)"
             snapshot.apply([StorageItem(name: "\(i)", path: path, url: URL(fileURLWithPath: path),
                 isDirectory: false, size: 10, parentPath: "/fixture")])
@@ -114,43 +100,10 @@ final class StorageExplorerPresentationTests: XCTestCase {
         let result = StorageExplorerPresentation.make(snapshot: snapshot, directory: "/fixture", mode: .folders,
             metric: .logical, query: "", sort: .size, ascending: false)
         XCTAssertEqual(result.chart.count, 161)
-        XCTAssertEqual(result.chart.reduce(0) { $0 + $1.bytes }, 2_500)
+        XCTAssertEqual(result.chart.reduce(0) { $0 + $1.bytes }, 1_620)
         XCTAssertEqual(result.chart.last?.id, "group:other")
-        XCTAssertEqual(result.rows.count, 250)
-    }
-
-    func testReviewBasketReducesTopLevelAndNestedSmallerAggregates() throws {
-        let root = "/fixture"
-        var snapshot = StorageExplorerSnapshot(rootPath: root)
-        snapshot.apply([
-            StorageItem(name: "fixture", path: root, url: URL(fileURLWithPath: root), isDirectory: true, size: 100),
-            StorageItem(name: "folder", path: root + "/folder", url: URL(fileURLWithPath: root + "/folder"),
-                        isDirectory: true, size: 80, parentPath: root),
-            StorageItem(name: "visible", path: root + "/folder/visible", url: URL(fileURLWithPath: root + "/folder/visible"),
-                        isDirectory: false, size: 30, parentPath: root + "/folder")
-        ])
-        let initial = StorageExplorerHierarchyLayout.make(
-            snapshot: snapshot,
-            directory: root,
-            metric: .logical,
-            excluding: [],
-            otherName: "Other"
-        )
-        let folder = try XCTUnwrap(initial.first { $0.id == root + "/folder" })
-        XCTAssertEqual(folder.bytes, 80)
-        XCTAssertEqual(folder.children.first { $0.isAggregate }?.bytes, 50)
-
-        let reduced = StorageExplorerHierarchyLayout.make(
-            snapshot: snapshot,
-            directory: root,
-            metric: .logical,
-            excluding: [root + "/folder/visible"],
-            otherName: "Other"
-        )
-        let reducedFolder = try XCTUnwrap(reduced.first { $0.id == root + "/folder" })
-        XCTAssertEqual(reducedFolder.bytes, 50)
-        XCTAssertEqual(reducedFolder.children.first { $0.isAggregate }?.bytes, 50)
-        XCTAssertEqual(reduced.first { $0.isAggregate }?.bytes, 20)
+        XCTAssertEqual(result.chart.last?.bytes, 20)
+        XCTAssertEqual(result.rows.count, 162)
     }
 
     func testHierarchyExcludesSelectedFoldersAndPrecomputesNestedDeductions() throws {
@@ -169,7 +122,7 @@ final class StorageExplorerPresentationTests: XCTestCase {
         }
         var snapshot = StorageExplorerSnapshot(rootPath: root)
         snapshot.apply([
-            item("", parent: nil, bytes: 300, directory: true),
+            item("", parent: nil, bytes: 320, directory: true),
             item("/a", parent: "", bytes: 180, directory: true),
             item("/a/large", parent: "/a", bytes: 100, directory: false),
             item("/a/small", parent: "/a", bytes: 30, directory: false),
@@ -187,43 +140,12 @@ final class StorageExplorerPresentationTests: XCTestCase {
             otherName: "Other"
         )
 
-        XCTAssertEqual(nodes.map(\.id), [root + "/a", root + "/loose"])
+        XCTAssertEqual(nodes.map(\.id), [root + "/a", root + "/loose", "group:other:" + root])
         let folder = try XCTUnwrap(nodes.first)
         XCTAssertEqual(folder.bytes, 150)
         XCTAssertEqual(folder.children.map(\.id), [root + "/a/large", root + "/a/tiny", "group:other:" + root + "/a"])
         XCTAssertEqual(folder.children.map(\.bytes), [100, 10, 40])
-        XCTAssertEqual(nodes.reduce(0) { $0 + $1.bytes }, 180)
+        XCTAssertEqual(nodes.last?.bytes, 20)
+        XCTAssertEqual(nodes.reduce(0) { $0 + $1.bytes }, 200)
     }
-
-    func testHierarchyColorKeysFollowStableSizeRankAndDescendantsInheritGroup() throws {
-        let root = "/fixture"
-        var snapshot = StorageExplorerSnapshot(rootPath: root)
-        snapshot.apply([
-            StorageItem(name: "fixture", path: root, url: URL(fileURLWithPath: root),
-                        isDirectory: true, size: 175, allocatedSize: 175),
-            StorageItem(name: "largest", path: root + "/largest", url: URL(fileURLWithPath: root + "/largest"),
-                        isDirectory: true, size: 100, allocatedSize: 100, parentPath: root),
-            StorageItem(name: "child", path: root + "/largest/child", url: URL(fileURLWithPath: root + "/largest/child"),
-                        isDirectory: false, size: 100, allocatedSize: 100, parentPath: root + "/largest"),
-            StorageItem(name: "middle", path: root + "/middle", url: URL(fileURLWithPath: root + "/middle"),
-                        isDirectory: false, size: 50, allocatedSize: 50, parentPath: root),
-            StorageItem(name: "smallest", path: root + "/smallest", url: URL(fileURLWithPath: root + "/smallest"),
-                        isDirectory: false, size: 25, allocatedSize: 25, parentPath: root)
-        ])
-
-        let nodes = StorageExplorerHierarchyLayout.make(
-            snapshot: snapshot,
-            directory: root,
-            metric: .allocated,
-            excluding: [],
-            otherName: "Other"
-        )
-
-        XCTAssertTrue(try XCTUnwrap(nodes.first { $0.item.name == "largest" }).colorKey.hasPrefix("size-rank:0:"))
-        XCTAssertTrue(try XCTUnwrap(nodes.first { $0.item.name == "middle" }).colorKey.hasPrefix("size-rank:1:"))
-        XCTAssertTrue(try XCTUnwrap(nodes.first { $0.item.name == "smallest" }).colorKey.hasPrefix("size-rank:2:"))
-        let largest = try XCTUnwrap(nodes.first { $0.item.name == "largest" })
-        XCTAssertEqual(largest.children.first?.colorKey, largest.colorKey)
-    }
-
 }

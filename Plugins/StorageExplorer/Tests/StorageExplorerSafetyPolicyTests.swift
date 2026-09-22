@@ -2,14 +2,10 @@ import Foundation
 import XCTest
 @testable import StorageExplorerPlugin
 
-final class MockTrashRecycler: StorageExplorerTrashRecycling, @unchecked Sendable {
+private final class MockTrashRecycler: StorageExplorerTrashRecycling, @unchecked Sendable {
     var recycledURLs: [URL] = []
-    var shouldFail: Bool = false
 
     func recycle(urls: [URL]) async throws -> StorageExplorerRecycleResult {
-        if shouldFail {
-            throw NSError(domain: "MockTrashRecycler", code: 1, userInfo: [NSLocalizedDescriptionKey: "Recycle failed"])
-        }
         recycledURLs.append(contentsOf: urls)
         return StorageExplorerRecycleResult(moved: Dictionary(
             uniqueKeysWithValues: urls.map { ($0, URL(fileURLWithPath: "/Users/dummy/.Trash/\($0.lastPathComponent)")) }
@@ -62,24 +58,18 @@ final class StorageExplorerSafetyPolicyTests: XCTestCase {
 
     // MARK: - Path Shape Tests
 
-    func testEmptyPathIsBlocked() {
-        let result = policy.validatePathShape("")
-        XCTAssertFalse(result.isAllowed)
-    }
-
-    func testRelativePathIsBlocked() {
-        let result = policy.validatePathShape("relative/path/to/file")
-        XCTAssertFalse(result.isAllowed)
-    }
-
-    func testPathTraversalIsBlocked() {
-        let result = policy.validatePathShape("/tmp/foo/../bar")
-        XCTAssertFalse(result.isAllowed)
-    }
-
-    func testControlCharactersAreBlocked() {
-        let result = policy.validatePathShape("/tmp/foo\u{0000}bar")
-        XCTAssertFalse(result.isAllowed)
+    func testInvalidPathShapesAreBlocked() {
+        let cases = [
+            (name: "empty", path: ""),
+            (name: "relative", path: "relative/path/to/file"),
+            (name: "traversal", path: "/tmp/foo/../bar"),
+            (name: "null character", path: "/tmp/foo\u{0000}bar"),
+            (name: "leading whitespace", path: " /tmp/report"),
+            (name: "newline", path: "/tmp/report\n")
+        ]
+        for testCase in cases {
+            XCTAssertFalse(policy.validatePathShape(testCase.path).isAllowed, testCase.name)
+        }
     }
 
     // MARK: - System Protected Roots Tests
@@ -91,7 +81,6 @@ final class StorageExplorerSafetyPolicyTests: XCTestCase {
     }
 
     func testSystemDirectoriesAreBlocked() {
-        let root = tempDirectory.path
         let systemPaths = [
             "/System",
             "/System/Library",
@@ -104,7 +93,7 @@ final class StorageExplorerSafetyPolicyTests: XCTestCase {
             "/Volumes"
         ]
         for path in systemPaths {
-            let result = policy.validatePathForRemoval(path, withinRoot: root)
+            let result = policy.validatePathForRemoval(path, withinRoot: "/")
             XCTAssertFalse(result.isAllowed, "Path \(path) should be blocked")
         }
     }
@@ -139,7 +128,7 @@ final class StorageExplorerSafetyPolicyTests: XCTestCase {
     func testAncestorsOfProtectedSystemLocationsAreBlockedInsideRootScan() {
         for path in ["/Library", "/Applications", "/applications", "/private", "/var"] {
             let result = policy.validatePathForRemoval(path, withinRoot: "/")
-            XCTAssertEqual(result.reason, "Critical macOS system path is protected", path)
+            XCTAssertFalse(result.isAllowed, path)
         }
     }
 
@@ -170,7 +159,7 @@ final class StorageExplorerSafetyPolicyTests: XCTestCase {
     }
 
     func testUserHomeRootIsBlocked() {
-        let result = policy.validatePathForRemoval("/Users/testuser", withinRoot: "/Users/testuser")
+        let result = policy.validatePathForRemoval("/Users/testuser", withinRoot: "/")
         XCTAssertFalse(result.isAllowed)
     }
 
@@ -233,21 +222,15 @@ final class StorageExplorerSafetyPolicyTests: XCTestCase {
         XCTAssertEqual(mockRecycler.recycledURLs.map(\.path), selected.map(\.path))
     }
 
-    func testInvalidWhitespacePathsCannotBeRetargeted() {
-        for path in [" /Users/testuser/Downloads/report", "/Users/testuser/Downloads/report\n"] {
-            XCTAssertFalse(policy.validatePathShape(path).isAllowed, path)
-        }
-    }
-
     func testRecycleItemFailsWhenBlocked() async {
-        let root = tempDirectory.path
         let blockedPath = "/System/Library/CoreServices"
         do {
-            _ = try await policy.recycleItem(at: blockedPath, withinRoot: root)
+            _ = try await policy.recycleItem(at: blockedPath, withinRoot: "/")
             XCTFail("Should throw error for blocked path")
         } catch {
             XCTAssertTrue(error is StorageExplorerSafetyError)
         }
+        XCTAssertTrue(mockRecycler.recycledURLs.isEmpty)
     }
 
     func testIdentityValidationRejectsAncestorReplacedBySymlink() async throws {

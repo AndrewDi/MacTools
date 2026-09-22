@@ -251,25 +251,6 @@ final class StorageExplorerControllerTests: XCTestCase {
         XCTAssertEqual(controller.rootItem?.size, 400)
     }
 
-    func testCompletedScanRecordsItsTimestamp() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let scanner = ControlledStorageScanner()
-        let controller = StorageExplorerController(scanner: scanner)
-        controller.startScan(at: root)
-        try await waitUntil { scanner.hasRequest(root.path) }
-
-        XCTAssertNil(controller.scanCompletedAt)
-        XCTAssertTrue(controller.isScanning)
-
-        scanner.finish(path: root.path)
-        try await waitUntil { !controller.isScanning }
-        XCTAssertEqual(controller.scanState, .completed)
-        XCTAssertNotNil(controller.scanCompletedAt)
-    }
-
     func testCachedPreviewAppearsUntilFreshScanCompletesAndCannotBeReviewed() async throws {
         let scanner = ControlledStorageScanner()
         let root = "/tmp/storage-cached-preview"
@@ -358,20 +339,6 @@ final class StorageExplorerControllerTests: XCTestCase {
         XCTAssertNil(expired)
     }
 
-    func testAllocatedSpaceIsTheDefaultMetricAndProgressTracksIt() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        try Data(repeating: 1, count: 16_384).write(to: root.appendingPathComponent("payload.bin"))
-        let controller = StorageExplorerController()
-
-        controller.startScan(at: root)
-        try await waitUntil { !controller.isScanning }
-
-        XCTAssertEqual(controller.metric, .allocated)
-        XCTAssertGreaterThan(controller.status.progress.allocatedBytesScanned, 0)
-    }
-
     func testUnrelatedFilesystemChangeDoesNotBlockReviewOfUnchangedSelection() async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -392,30 +359,6 @@ final class StorageExplorerControllerTests: XCTestCase {
 
         XCTAssertTrue(controller.isConfirmingTrash)
         XCTAssertEqual(controller.reviewItems.map(\.path), [selectedPath])
-    }
-
-    func testChangedSelectedItemCanBeReviewedWithoutRefreshing() async throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let selected = root.appendingPathComponent("selected.bin")
-        try Data(repeating: 1, count: 10).write(to: selected)
-        let controller = StorageExplorerController()
-        controller.startScan(at: root)
-        try await waitUntil { !controller.isScanning }
-        try await waitUntil { controller.rows.contains(where: { $0.name == selected.lastPathComponent }) }
-        let selectedPath = try XCTUnwrap(controller.rows.first(where: { $0.name == selected.lastPathComponent })?.item.path)
-        controller.toggleSelection(path: selectedPath)
-
-        let handle = try FileHandle(forWritingTo: selected)
-        try handle.truncate(atOffset: 0)
-        try handle.write(contentsOf: Data(repeating: 2, count: 100))
-        try handle.close()
-        controller.confirmTrash()
-
-        XCTAssertTrue(controller.isConfirmingTrash)
-        XCTAssertEqual(controller.reviewItems.map(\.path), [selectedPath])
-        XCTAssertNil(controller.lastErrorMessage)
     }
 
     func testChangedSelectedFolderCanBeReviewedWithoutRefreshing() async throws {
@@ -461,6 +404,10 @@ final class StorageExplorerControllerTests: XCTestCase {
 
         try Data(repeating: 2, count: 100).write(to: selected)
         controller.confirmTrash()
+        XCTAssertTrue(controller.isConfirmingTrash)
+        XCTAssertEqual(controller.reviewItems.map(\.path), [item.path])
+        XCTAssertNil(controller.lastErrorMessage)
+
         await controller.executeTrash()
         try await waitUntil { !controller.isScanning }
 

@@ -74,19 +74,17 @@ Shared filesystem metadata code lives in `Sources/MacToolsFileSystem`. Disk Clea
 
 ## Validation
 
-Cover core outcomes and real regression risks. Reuse existing tests; add or update a focused test when a changed behavior is not already protected. Prioritize the main use case and consequential boundaries such as data loss, permission checks, cancellation, or compatibility when affected.
+Keep a compact suite covering the main user flow and consequential boundaries such as data loss, permission checks, cancellation, or compatibility. Reuse existing coverage across layers. A past bug alone does not require a permanent test; omit unlikely combinations in settled code unless their recurrence would have a significant impact. See the [core test scope](docs/testing/core-tests.md).
 
-There is no per-PR test-count or coverage-percentage target. Do not add tests that merely repeat the implementation, assert private call sequences, or check fixed wording, colors, and spacing. Documentation and cosmetic-only changes normally need review and visual verification, not new automated tests.
+There is no per-PR test-count or coverage-percentage target. Do not add tests that merely repeat the implementation, assert private call sequences, or check fixed wording, colors, and spacing. Choose checks by their distinct behavior and risk, not their UI/unit/integration label. Use manual review for appearance and keep desktop-dependent evidence checks on demand; retain automated integration checks when they establish a critical outcome that cheaper tests cannot cover.
 
 Run the smallest relevant test class or method. For example:
 
 ```bash
-xcodebuild -project MacTools.xcodeproj -scheme MacTools \
-  -configuration Debug -derivedDataPath build/DerivedData \
-  test -quiet -only-testing:MacToolsTests/ComponentPanelLayoutTests
+make test TEST_FILTER=ActionExecutorTests
 ```
 
-Replace the selector with the tests for your change; omit it for the full suite when the scope warrants it. Use temporary directories, fixtures, and fake services rather than real user data or accounts. Broaden validation only for failures, shared contracts, or other affected behavior. Once the relevant checks pass, repeat them only after new changes, failures, or an uncovered risk.
+Use `TEST_FILTER=ClassName/testMethod` for one method, or `make test` for all retained XCTest cases. The target regenerates the project and uses serial execution with per-test timeouts. `make script-tests` validates tooling separately; `make ci` also checks frozen-client binary compatibility. Use temporary directories, fixtures, and fake services rather than real user data or accounts. Broaden validation only for failures, shared contracts, or other affected behavior.
 
 | Change | Verification scope |
 | --- | --- |
@@ -94,7 +92,7 @@ Replace the selector with the tests for your change; omit it for the full suite 
 | UI or widgets | Attach the UI evidence below. Check affected interactions; add logic tests only when state, actions, or lifecycle change. |
 | PluginKit API/ABI or cross-module behavior | `make ci` before pushing these code changes; it includes script tests, XCTest, and frozen-client compatibility. Register newly introduced APIs in `scripts/tests/test_plugin_minimum_host_compatibility.py`; consumers of already listed APIs need a compatible `minHostVersion`, not another inventory entry. |
 | Scripts, manifests, or catalogs | Focused script tests for isolated logic; `make script-tests` for package/schema/compatibility changes or new public API consumers. Regenerate website data with `python3 scripts/plugins/generate_website_plugin_data.py` after metadata/action changes. |
-| Panel drag routing or hit testing | Run `make build` first, then the affected [native interaction scenario](docs/testing/panel-layout-editing.md). Use `--compile-only` for compilation checks or `make panel-layout-ui-tests` for all scenarios. Native interaction requires an active desktop and is separate from CI. |
+| Panel drag routing or hit testing | Run the relevant layout state tests, then manually check the affected [panel interactions](docs/testing/panel-layout-editing.md). |
 | Changelog fragments | `make validate-changelog` before committing or pushing. |
 | Documentation only | Check changed links, examples, formatting, and rendered layout; no app build is needed. |
 
