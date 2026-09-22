@@ -168,6 +168,8 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         }
         XCTAssertTrue(pastedHistory)
         XCTAssertEqual(pasteboard.text, "History value")
+        XCTAssertNotNil(plugin.controller.items.first(where: { $0.id == historyItem.id })?.lastUsedAt)
+        XCTAssertEqual(plugin.controller.items.first?.capturedAt, historyItem.capturedAt)
 
         // The explicit queue owns a frozen template snapshot. Removing the source item after
         // queue creation must not change the queued content or its paste-time variables.
@@ -221,6 +223,10 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         let firstPaste = await waitUntil { sender.sendCount == 1 }
         XCTAssertTrue(firstPaste)
         XCTAssertEqual(board.text, "History value")
+        let historyUsageRecorded = await waitUntil {
+            plugin.controller.items.first(where: { $0.id == historyItem.id })?.lastUsedAt != nil
+        }
+        XCTAssertTrue(historyUsageRecorded)
         board.simulateCopy("second external copy")
         plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: historyItem.id))
         let secondPaste = await waitUntil { sender.sendCount == 2 }
@@ -245,6 +251,10 @@ final class ClipboardHistoryPluginTests: XCTestCase {
         let thirdPaste = await waitUntil { sender.sendCount == 3 }
         XCTAssertTrue(thirdPaste)
         XCTAssertEqual(board.text, "Hello Ada")
+        let snippetUsageRecorded = await waitUntil {
+            plugin.savedLibraryController.items.first(where: { $0.id == snippet.id })?.lastUsedAt != nil
+        }
+        XCTAssertTrue(snippetUsageRecorded)
         board.simulateCopy("Grace")
         plugin.handleShortcutAction(id: ClipboardItemShortcutStore.definitionID(for: snippet.id))
         let fourthPaste = await waitUntil { sender.sendCount == 4 }

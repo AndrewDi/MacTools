@@ -1630,7 +1630,7 @@ final class ClipboardHistoryPanelKeyboardTests: XCTestCase {
         XCTAssertEqual(Set(model.visibleItems.map(\.id)), Set([text.id, image.id]))
     }
 
-    func testPanelPresentationOrdersAllItemsByCaptureDate() async {
+    func testPanelPresentationOrdersByMostRecentCaptureOrUse() async {
         let now = Date()
         let recentlyCaptured = item(
             text: "new capture",
@@ -1650,17 +1650,24 @@ final class ClipboardHistoryPanelKeyboardTests: XCTestCase {
             capturedAt: now.addingTimeInterval(-600),
             lastUsedAt: nil
         )
-        let model = ClipboardHistoryPanelModel()
+        for asynchronous in [false, true] {
+            let model = ClipboardHistoryPanelModel()
+            let items = [recentlyCaptured, recentlyUsed, pinned]
+            if asynchronous {
+                model.prepareForPresentationAsynchronously(items: items)
+                await model.waitForPresentationPreparationForTesting()
+            } else {
+                model.prepareForPresentation(items: items)
+            }
+            await model.waitForSearchForTesting()
 
-        model.prepareForPresentation(items: [recentlyCaptured, recentlyUsed, pinned])
-        await model.waitForSearchForTesting()
-
-        XCTAssertEqual(model.visibleItems.map(\.id), [recentlyCaptured.id, recentlyUsed.id, pinned.id])
-        XCTAssertEqual(model.selectedItemID, recentlyCaptured.id)
-        XCTAssertEqual(model.consumeRequestedScrollItemID(), recentlyCaptured.id)
+            XCTAssertEqual(model.visibleItems.map(\.id), [recentlyUsed.id, recentlyCaptured.id, pinned.id])
+            XCTAssertEqual(model.selectedItemID, recentlyUsed.id)
+            XCTAssertEqual(model.consumeRequestedScrollItemID(), recentlyUsed.id)
+        }
     }
 
-    func testUsageUpdateNeverReordersHistory() async {
+    func testUsageMovesHistoryToFrontAndWarmReopenFocusesIt() async {
         let now = Date()
         let first = item(text: "first", pinned: false, capturedAt: now, lastUsedAt: nil)
         let second = item(
@@ -1670,21 +1677,30 @@ final class ClipboardHistoryPanelKeyboardTests: XCTestCase {
             lastUsedAt: nil
         )
         let model = ClipboardHistoryPanelModel()
-        model.prepareForPresentation(items: [first, second])
+        model.prepareForPresentation(items: [first, second], historyRevision: 1, savedRevision: 1)
         await model.waitForSearchForTesting()
+        model.setMultiSelectionEnabled(true)
+        model.toggleMultiSelection(for: second.id)
+        let selection = model.selectedItemIDs
+        let context = model.actionContext
 
         var usedSecond = second
         usedSecond.lastUsedAt = now.addingTimeInterval(30)
-        model.updateItems([first, usedSecond])
-        await model.waitForSearchForTesting()
+        model.updateItems([first, usedSecond], revision: 2, changedIDs: [second.id])
 
-        XCTAssertEqual(model.visibleItems.map(\.id), [first.id, second.id])
-        model.prepareForPresentation(items: [first, usedSecond])
-        await model.waitForSearchForTesting()
-        XCTAssertEqual(model.visibleItems.map(\.id), [first.id, second.id])
+        XCTAssertFalse(model.isSearching)
+        XCTAssertEqual(model.visibleItems.map(\.id), [second.id, first.id])
+        XCTAssertEqual(model.selectedItemID, first.id)
+        XCTAssertEqual(model.selectedItemIDs, selection)
+        XCTAssertEqual(model.actionContext, context)
+        model.prepareForPresentation(items: [first, usedSecond], historyRevision: 2, savedRevision: 1)
+        XCTAssertFalse(model.isSearching)
+        XCTAssertEqual(model.visibleItems.map(\.id), [second.id, first.id])
+        XCTAssertEqual(model.selectedItemID, second.id)
+        XCTAssertEqual(model.consumeRequestedScrollItemID(), second.id)
     }
 
-    func testAllScopeUsesCaptureAndUpdateDatesInsteadOfLastUseDates() async {
+    func testAllScopeIncludesSnippetUsageInRecencyOrder() async {
         let now = Date()
         let historyItem = item(
             text: "new capture",
@@ -1707,7 +1723,20 @@ final class ClipboardHistoryPanelKeyboardTests: XCTestCase {
         await model.waitForSearchForTesting()
 
         XCTAssertEqual(model.mode, .all)
+        XCTAssertEqual(model.visibleItems.map(\.id), [snippet.id, historyItem.id])
+        XCTAssertEqual(model.selectedItemID, snippet.id)
+
+        var reusedHistory = historyItem
+        reusedHistory.lastUsedAt = now.addingTimeInterval(120)
+        model.updateItems([reusedHistory], changedIDs: [historyItem.id])
         XCTAssertEqual(model.visibleItems.map(\.id), [historyItem.id, snippet.id])
+
+        var reusedSnippet = snippet
+        reusedSnippet.lastUsedAt = now.addingTimeInterval(180)
+        model.updateSavedItems([reusedSnippet])
+        XCTAssertFalse(model.isSearching)
+        XCTAssertEqual(model.visibleItems.map(\.id), [snippet.id, historyItem.id])
+        XCTAssertEqual(model.selectedItemID, snippet.id)
     }
 
     func testDeletingSelectedMiddleItemKeepsSelectionAtItsPosition() async {

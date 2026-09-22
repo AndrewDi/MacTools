@@ -948,7 +948,6 @@ final class ClipboardHistoryPanelModel: ObservableObject {
         let availableClipItemIDs: Set<UUID>
         let availableSnippetIDs: Set<UUID>
         let savedClipIDs: Set<UUID>
-        let newestHistoryItemID: UUID?
         let scopeModes: [ClipboardPanelMode]
         let contentFilters: [ClipboardHistoryContentFilter]
         let semanticFilters: [ClipboardHistorySemanticFilter]
@@ -1037,6 +1036,21 @@ final class ClipboardHistoryPanelModel: ObservableObject {
             }
         }
         refreshInitialPage()
+        let preparedQuery = ClipboardHistorySearch.PreparedQuery(query)
+        let changesResults = structural || changes.contains {
+            let matchedBefore = matchesCurrentSearch($0.before, query: preparedQuery)
+            let matchesAfter = matchesCurrentSearch($0.after, query: preparedQuery)
+            return matchedBefore != matchesAfter
+                || (matchesAfter && $0.before?.lastActivityAt != $0.after?.lastActivityAt)
+        }
+        // Indexed pages update synchronously. Publish their final order once instead of
+        // first publishing stale positions, then moving the same rows a second time.
+        if mode != .snippets, (isSearching || changesResults),
+           query.isEmpty, contentFilter == .all, semanticFilter == .any,
+           presentationIndex != nil {
+            scheduleSearch(debounced: false)
+            return
+        }
         let removedIDs = Set(changes.lazy.filter { $0.after == nil }.map(\.id))
         let changedByID = Dictionary(uniqueKeysWithValues: changes.compactMap { change in
             change.after.map { (change.id, $0) }
@@ -1046,10 +1060,6 @@ final class ClipboardHistoryPanelModel: ObservableObject {
         }
         if immediatelyReconciled != visibleItems { visibleItems = immediatelyReconciled }
         guard mode != .snippets else { return }
-        let preparedQuery = ClipboardHistorySearch.PreparedQuery(query)
-        let changesResults = structural || changes.contains {
-            matchesCurrentSearch($0.before, query: preparedQuery) != matchesCurrentSearch($0.after, query: preparedQuery)
-        }
         if isSearching || changesResults {
             scheduleSearch(debounced: false)
         } else {
@@ -1191,7 +1201,7 @@ final class ClipboardHistoryPanelModel: ObservableObject {
         visibleItems = []
         visibleSavedPresentationItemIDs = []
         hasMoreResults = false
-        selectedItemID = preparation.newestHistoryItemID
+        selectedItemID = preparation.index.page(in: mode, limit: 1).first?.item.id
         requestedScrollItemID = selectedItemID
         isMultiSelectionEnabled = false
         selectedItemIDs = []
@@ -1853,7 +1863,7 @@ final class ClipboardHistoryPanelModel: ObservableObject {
             visibleSavedPresentationItemIDs = []
             hasMoreResults = false
         }
-        selectedItemID = visibleItems.first?.id ?? preparation.newestHistoryItemID
+        selectedItemID = preparation.index.page(in: mode, limit: 1).first?.item.id
         requestedScrollItemID = selectedItemID
         isMultiSelectionEnabled = false
         selectedItemIDs = []
@@ -1873,8 +1883,6 @@ final class ClipboardHistoryPanelModel: ObservableObject {
         var availableClipItemIDs = Set<UUID>()
         availableClipItemIDs.reserveCapacity(items.count)
         var savedClipIDs = Set<UUID>()
-        var newestHistoryItemID: UUID?
-        var newestHistoryCaptureDate: Date?
 
         for (index, item) in items.enumerated() {
             if index.isMultiple(of: 64) {
@@ -1885,10 +1893,6 @@ final class ClipboardHistoryPanelModel: ObservableObject {
             availableClipItemIDs.insert(item.id)
             if item.isInHistory {
                 historyItemCount += 1
-                if newestHistoryCaptureDate.map({ item.capturedAt > $0 }) ?? true {
-                    newestHistoryCaptureDate = item.capturedAt
-                    newestHistoryItemID = item.id
-                }
             }
             if item.isSaved { savedClipIDs.insert(item.id) }
         }
@@ -1913,7 +1917,6 @@ final class ClipboardHistoryPanelModel: ObservableObject {
             availableClipItemIDs: availableClipItemIDs,
             availableSnippetIDs: availableSnippetIDs,
             savedClipIDs: savedClipIDs,
-            newestHistoryItemID: newestHistoryItemID,
             scopeModes: index.scopeModes,
             contentFilters: index.contentFilters,
             semanticFilters: index.semanticFilters,
@@ -2032,7 +2035,7 @@ final class ClipboardHistoryPanelModel: ObservableObject {
                         collector.consider(ClipboardPanelSearchCandidate(
                             item: item,
                             isSnippet: false,
-                            sortDate: item.capturedAt
+                            sortDate: item.lastActivityAt
                         ))
                     }
                     guard mode == .all || mode == .snippets else { return }
@@ -2049,7 +2052,7 @@ final class ClipboardHistoryPanelModel: ObservableObject {
                         collector.consider(ClipboardPanelSearchCandidate(
                             item: presentation,
                             isSnippet: true,
-                            sortDate: savedItem.updatedAt
+                            sortDate: savedItem.lastActivityAt
                         ))
                     }
                 }
@@ -2485,8 +2488,8 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
     }
 
     private func beginPanelUserMovement() {
-        guard let panel, panel.isVisible, !isPositioningPanel else { return }
-        savePendingPanelPosition()
+        // The drag handle and AppKit can both announce the same movement.
+        guard let panel, panel.isVisible, !isPositioningPanel, positionSaveTask == nil else { return }
         positionTracker.beginUserMovement(
             frame: panel.frame,
             screens: ClipboardHistoryPanelScreen.currentScreens()
@@ -2587,6 +2590,13 @@ final class ClipboardHistoryPanelController: NSObject, NSWindowDelegate {
         removeKeyMonitor()
         let previousApplication = previousApplicationState.consume()
         if shouldRestore { previousApplication?.activate(options: []) }
+    }
+
+    func windowWillMove(_ notification: Notification) {
+        guard let panel, notification.object as? NSWindow === panel,
+              CGEventSource.buttonState(.combinedSessionState, button: .left)
+        else { return }
+        beginPanelUserMovement()
     }
 
     func windowDidMove(_ notification: Notification) {

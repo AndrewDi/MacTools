@@ -4,4 +4,4 @@ type: fixed
 area: Clipboard
 ---
 
-Clipboard remembers the final snapped window position on each display and keeps snap guides compatible with display changes.
+Clipboard remembers title-bar and top-handle drags on each display, including the final snapped position. Display changes preserve saved positions and keep snap guides aligned.

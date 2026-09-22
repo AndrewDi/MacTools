@@ -1155,26 +1155,38 @@ final class ClipboardHistoryControllerTests: XCTestCase {
         )
     }
 
-    func testCopyingHistoryItemDoesNotRecapturePluginWrite() async throws {
+    func testCopyingHistoryItemPromotesItWithoutRecaptureOrChangingQueueOrder() async throws {
         let existing = ClipboardHistoryItem(
             id: UUID(),
             text: "reuse me",
-            capturedAt: Date(),
+            capturedAt: Date().addingTimeInterval(-60),
             sourceApplication: nil,
             isPinned: false,
             lastUsedAt: nil
         )
-        let fixture = makeFixture(initialItems: [existing])
+        let newer = item(text: "newer capture", pinned: false)
+        let fixture = makeFixture(initialItems: [newer, existing])
         fixture.controller.start()
         await waitUntilLoaded(fixture.controller)
+        let model = ClipboardHistoryPanelModel()
+        model.prepareForPresentation(items: fixture.controller.items)
+        await model.waitForSearchForTesting()
+        let subscription = fixture.controller.itemUpdates.sink { update in
+            model.updateItems(update.items, changedIDs: update.changedIDs)
+        }
 
         let didCopy = await fixture.controller.copyItem(id: existing.id)
         XCTAssertTrue(didCopy)
         fixture.controller.processPasteboardChange()
 
-        XCTAssertEqual(fixture.controller.items.count, 1)
+        XCTAssertEqual(fixture.controller.items.map(\.id), [newer.id, existing.id])
+        XCTAssertEqual(fixture.controller.recentItemIDsForSequentialPaste, [newer.id, existing.id])
         XCTAssertEqual(fixture.pasteboard.text, existing.text)
-        XCTAssertNotNil(fixture.controller.items.first?.lastUsedAt)
+        XCTAssertEqual(fixture.controller.items.last?.capturedAt, existing.capturedAt)
+        XCTAssertNotNil(fixture.controller.items.last?.lastUsedAt)
+        XCTAssertEqual(model.visibleItems.map(\.id), [existing.id, newer.id])
+        XCTAssertFalse(model.isSearching)
+        withExtendedLifetime(subscription) {}
         fixture.controller.stop()
     }
 

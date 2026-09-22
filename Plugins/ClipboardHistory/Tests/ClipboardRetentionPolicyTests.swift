@@ -95,6 +95,7 @@ final class ClipboardRetentionPolicyTests: XCTestCase {
         var settings = ClipboardHistorySettings.defaults
         settings.maximumItemCount = ClipboardHistorySettings.maximumSupportedItemCount
         settings.maximumItemByteCount = 1_024 * 1_024
+        settings.maximumTotalPayloadByteCount = 64 * 1_024 * 1_024
         let payload = ClipboardHistoryPayload(pasteboardItems: [
             ClipboardStoredPasteboardItem(representations: [
                 ClipboardStoredRepresentation(
@@ -120,7 +121,7 @@ final class ClipboardRetentionPolicyTests: XCTestCase {
         XCTAssertEqual(retained.count, 64)
         XCTAssertLessThanOrEqual(
             retained.reduce(0) { $0 + $1.payloadByteCount },
-            ClipboardRetentionPolicy.maximumTotalPayloadByteCount
+            settings.maximumTotalPayloadByteCount
         )
         XCTAssertTrue(ClipboardHistorySearch.filter(retained, query: "z").isEmpty)
     }
