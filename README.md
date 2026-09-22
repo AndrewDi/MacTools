@@ -54,7 +54,7 @@ Try development features with `MacTools-Nightly.dmg` from a [`nightly-*` prerele
   <tr>
     <td width="50%" valign="top">
       <h3>Custom panels</h3>
-      <p>Mix live widgets, quick controls, and feature rows. Drag to rearrange them, move them between panels, and choose each panel's icon.</p>
+      <p>Mix live widgets, quick controls, and feature rows. Drag to rearrange them, move them between panels, and choose each panel's icon. More and editing menus open on the first click from a background app; detail panels stay open during internal focus changes.</p>
       <a href="docs/assets/screenshots/readme/components-en-dark.png"><img width="100%" src="docs/assets/screenshots/readme/components-en-dark.png" alt="MacTools component library with a System Status widget preview"></a>
     </td>
     <td width="50%" valign="top">
