@@ -110,6 +110,12 @@ Clipboard history defaults to a 512 MB content capacity, with 64 MB, 256 MB, 512
 
 Clipboard opens on the display under the pointer and remembers each display's window position after dragging the title bar or top handle. Automatic repositioning when displays change preserves those saved positions.
 
+Window Switcher, Command Palette, Clipboard History, and clipboard actions share compact search headers with soft gray fields. Existing close controls use borderless icons; each panel keeps its original controls. Hover and focus feedback stay subtle; Increase Contrast restores visible boundaries.
+
+The clipboard panel and action menu use neutral system gray selections. Native action buttons have matching heights and subtle hover feedback, with an icon-only More button. List titles use regular weight while detail headings remain emphasized.
+
+Clipboard selection and scrolling respond immediately. Rapid navigation skips transient preview requests, and recent image and rich-text previews are reused within bounded caches. Large rich-text items use their saved text summaries for preview.
+
 Screenshots work on macOS 14+; region recording and per-app volume require macOS 15+. Hardware controls depend on device support. See the [feature guides](docs/README.md) for details.
 
 **Take your setup with you:** export and import preferences, keep local backups, or sync supported settings through a cloud or shared folder. The app supports **11 languages** and follows your system language by default.

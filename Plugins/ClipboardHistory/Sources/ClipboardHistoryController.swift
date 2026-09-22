@@ -1669,13 +1669,10 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
         item.discardCachedPayloadIfReloadable()
     }
 
-    func requestImageTextIndexing(id: UUID?) {
-        guard let id,
-              let item = items.first(where: {
-                  $0.id == id && $0.kind == .image && !$0.hasCompletedImageTextIndexing
-              }) else {
-            return
-        }
+    func requestImageTextIndexing(for item: ClipboardHistoryItem) {
+        // The panel already has the item. The queue validates its current history
+        // membership and indexing state when work starts.
+        guard item.kind == .image, !item.hasCompletedImageTextIndexing else { return }
         imageIndexAttemptedItemIDs.remove(item.id)
         enqueueImageTextIndexing(for: [item])
     }

@@ -13,6 +13,14 @@ Command Palette and Clipboard History use `PluginPaletteSurface` from PluginKit.
 
 Apple references: [custom SwiftUI glass](https://developer.apple.com/documentation/swiftui/applying-liquid-glass-to-custom-views), [macOS 27 AppKit design updates](https://developer.apple.com/videos/play/wwdc2026/289/).
 
+## Search headers and icon controls
+
+- Command Palette, Clipboard History, clipboard actions, and Window Switcher share a 36-point search header. Window Switcher's expandable inline field retains its compact 32-point layout.
+- `PluginPaletteSearchChrome` applies search spacing, a neutral semantic fill, and a subtle focus-fill change without replacing the native text field or its input-method handling. Pass the field's accessibility identifier and current Increase Contrast state. Custom AppKit headers use `PluginPaletteChrome` colors and the same metrics. Both APIs require host 1.3.1.
+- Search text uses the regular system font. Keep the magnifying glass, placeholder, clear action, and insertion caret recognizable. Clear buttons retain a 24-point hit target. Preserve each panel's original controls: style existing close buttons consistently, but do not add one solely to match another panel's layout.
+- `PluginPaletteToolbarControlStyle` has no permanent border or fill in the standard appearance. Hover and press use neutral fills; disabled controls do not react. Native AppKit icon controls use inline bezels with mouse-over borders. Increase Contrast restores search and SwiftUI control outlines, while native controls follow the system accessibility appearance.
+- Preserve existing search commands, IME composition, focus restoration, and the distinction between clearing a query, collapsing inline search, and dismissing a panel.
+
 ## Validation
 
 Palette appearance and native interaction are checked manually. Automated screenshot capture, native pointer injection, and UI XCTest fixtures have been removed from the routine suite. Keep logic coverage in the command/search models, action executor, and clipboard controllers; see the [core test scope](../testing/core-tests.md).

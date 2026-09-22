@@ -412,7 +412,7 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
         search.identifier = NSUserInterfaceItemIdentifier("window-switcher-search")
         search.setAccessibilitySubrole(.searchField)
         search.setAccessibilityLabel(localization.string("chooser.search", defaultValue: "搜索窗口标题或应用"))
-        search.font = .systemFont(ofSize: 15, weight: .medium)
+        search.font = .systemFont(ofSize: NSFont.systemFontSize)
         search.controlSize = .regular
         search.cell?.usesSingleLineMode = true
         search.cell?.isScrollable = true
@@ -423,7 +423,6 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
         searchLeading = search.leadingAnchor.constraint(equalTo: searchSurface.leadingAnchor,
             constant: PluginPaletteMetrics.searchHorizontalPadding + 26)
         clearSearchButton.image = NSImage(systemSymbolName: "xmark.circle.fill", accessibilityDescription: nil)
-        clearSearchButton.isBordered = false
         clearSearchButton.contentTintColor = .secondaryLabelColor
         clearSearchButton.target = self; clearSearchButton.action = #selector(clearSearch)
         clearSearchButton.identifier = NSUserInterfaceItemIdentifier("window-switcher-clear-search")
@@ -456,8 +455,7 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
         more.identifier = NSUserInterfaceItemIdentifier("window-switcher-options")
         more.controlSize = .small
         more.target = self; more.action = #selector(showOptions)
-        more.bezelStyle = .texturedRounded
-        more.isBordered = false; more.contentTintColor = .secondaryLabelColor
+        more.contentTintColor = .secondaryLabelColor
         more.imagePosition = .imageOnly
         more.setAccessibilityLabel(localization.string("chooser.more", defaultValue: "更多选项"))
         searchHeader.addArrangedSubview(searchSurface)
@@ -546,7 +544,6 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
         modeTitle.lineBreakMode = .byTruncatingTail
         modeTitle.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         enterSearchButton.controlSize = .small
-        enterSearchButton.isBordered = false
         enterSearchButton.imagePosition = .imageOnly
         enterSearchButton.contentTintColor = .secondaryLabelColor
         enterSearchButton.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
@@ -651,7 +648,7 @@ final class WindowSwitcherOverlayController: NSObject, NSWindowDelegate, NSTable
         inlineSearch.isHidden = !inline
         enterSearchButton.isHidden = !inline
         searchIcon.isHidden = inline
-        search.font = .systemFont(ofSize: inline ? 13 : 15, weight: .medium)
+        search.font = .systemFont(ofSize: NSFont.systemFontSize)
         searchLeading.constant = inline ? 10 : PluginPaletteMetrics.searchHorizontalPadding + 26
         searchSurfaceHeight.constant = inline ? 32 : PluginPaletteMetrics.toolbarControlSize.height
         searchSurface.isHidden = inline
