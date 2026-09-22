@@ -1484,7 +1484,7 @@ private struct MenuBarPanelEditingDoneButton: View {
             .accessibilityIdentifier("panel.layout.edit")
             .help(PanelLayoutCopy.finishEditingHint)
             .accessibilityHint(PanelLayoutCopy.finishEditingHint)
-            .keyframeAnimator(initialValue: FeedbackFrame(), trigger: feedbackTrigger) { content, frame in
+            .keyframeAnimator(initialValue: FeedbackFrame(), trigger: feedbackTrigger) { [reduceMotion] content, frame in
                 content
                     .offset(x: reduceMotion ? 0 : frame.offset)
                     .brightness(reduceMotion ? frame.highlight * 0.14 : 0)

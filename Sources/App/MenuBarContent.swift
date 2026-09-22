@@ -2121,6 +2121,7 @@ private struct PluginPanelSegmentedControl: NSViewRepresentable {
         return CGSize(width: proposedWidth.isFinite ? max(0, proposedWidth) : intrinsicWidth, height: 24)
     }
 
+    @MainActor
     final class Coordinator: NSObject {
         var parent: PluginPanelSegmentedControl
 

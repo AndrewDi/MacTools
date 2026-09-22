@@ -86,6 +86,8 @@ make test TEST_FILTER=ActionExecutorTests
 
 Use `TEST_FILTER=ClassName/testMethod` for one method, or `make test` for all retained XCTest cases. The target regenerates the project and uses serial execution with per-test timeouts. `make script-tests` validates tooling separately; `make ci` also checks frozen-client binary compatibility. Use temporary directories, fixtures, and fake services rather than real user data or accounts. Broaden validation only for failures, shared contracts, or other affected behavior.
 
+Unsigned XCTest builds use `build/DerivedDataTests` by default, separate from the signed app used by `make run`. Override `TEST_DERIVED_DATA` when needed, keeping it separate from `DERIVED_DATA` to avoid leaving a test bundle inside the installed app.
+
 | Change | Verification scope |
 | --- | --- |
 | App or plugin behavior | Compile and run relevant existing tests. Add coverage only for missing core behavior or a regression; manually check hardware/system integration where needed. |

@@ -11,6 +11,8 @@ PLACEHOLDER_REMOTE_URL := git@github.com:owner/MacTools.git
 PROJECT_FILE := $(PROJECT_NAME).xcodeproj
 WORKSPACE_FILE := $(PROJECT_NAME).xcworkspace
 DERIVED_DATA := build/DerivedData
+# Keep unsigned XCTest host bundles out of the signed local app build.
+TEST_DERIVED_DATA ?= $(DERIVED_DATA)Tests
 APP_PATH := $(DERIVED_DATA)/Build/Products/Debug/$(APP_PRODUCT_NAME).app
 APP_EXECUTABLE := $(APP_PATH)/Contents/MacOS/$(APP_PRODUCT_NAME)
 ALLOW_MULTIPLE_DEBUG_APPS ?= 0
@@ -100,7 +102,7 @@ test: generate
 		-scheme $(PROJECT_NAME) \
 		-configuration Debug \
 		-destination "$(BUILD_DESTINATION)" \
-		-derivedDataPath $(DERIVED_DATA) \
+		-derivedDataPath $(TEST_DERIVED_DATA) \
 		CODE_SIGNING_ALLOWED=NO \
 		CODE_SIGNING_REQUIRED=NO \
 		CODE_SIGN_IDENTITY= \
@@ -114,7 +116,7 @@ test: generate
 
 ci: override TEST_FILTER :=
 ci: script-tests test
-	@./scripts/plugins/verify-plugin-kit-v7-binary-compatibility.sh "$(abspath $(DEBUG_BUILD_PRODUCTS_DIR))"
+	@./scripts/plugins/verify-plugin-kit-v7-binary-compatibility.sh "$(abspath $(TEST_DERIVED_DATA)/Build/Products/Debug)"
 
 sync-debug-plugins: build
 	@if [ -n "$(PLUGIN)" ]; then \
