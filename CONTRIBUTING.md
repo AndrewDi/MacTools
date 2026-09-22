@@ -70,6 +70,8 @@ Follow the [plugin development standards](docs/plugins/development-guidelines.md
 - **Keep background work economical.** Use cached snapshots, event-driven updates, bounded asynchronous work, and visibility-aware presentation. Preserve intentional monitoring while hidden; stop owned work on deactivation. See [performance requirements](docs/plugins/development-guidelines.md#performance-and-energy).
 - **Preserve user control.** Handle denied permissions, cancellation, unsupported hardware, and system changes. Keep existing confirmations, recovery paths, and destructive-operation safeguards.
 
+Shared filesystem metadata code lives in `Sources/MacToolsFileSystem`. Disk Clean and Storage Explorer link this static module into their bundles; their core targets use it as a build dependency. Keep cleanup policy in the owning plugin and run both plugins' filesystem tests after changing the shared parser.
+
 ## Validation
 
 Cover core outcomes and real regression risks. Reuse existing tests; add or update a focused test when a changed behavior is not already protected. Prioritize the main use case and consequential boundaries such as data loss, permission checks, cancellation, or compatibility when affected.
