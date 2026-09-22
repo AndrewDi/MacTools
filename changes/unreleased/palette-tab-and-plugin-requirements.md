@@ -1,5 +1,7 @@
 ---
 release: app
 type: added
+area: Plugins
 ---
-Complete selected text actions with Tab. Plugin installation and activation now check declared macOS and app requirements, with clear explanations and a recheck option.
+
+Plugin installation and activation now check macOS and app version requirements, explain incompatibilities, and offer a recheck option.

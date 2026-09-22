@@ -1,5 +1,7 @@
 ---
 release: plugin
 type: fixed
+area: Performance
 ---
-Reduce hidden monitoring-card updates and repeated window and clipboard processing. Tracking, battery alerts, and current readings remain available when panels reopen.
+
+Reduced background work in monitoring widgets, Duo Status, per-app volume, and window tools while preserving tracking, battery alerts, and responsive controls.

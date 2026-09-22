@@ -1,5 +1,7 @@
 ---
 release: app
 type: fixed
+area: Menu-bar Panels
 ---
-Prevent crashes when reopening widget removal confirmations. Use compact text in the editor footer, with Add Widgets on the left and Delete Panel and Add Panel on the right; remove deletion from tab menus.
+
+Fixed crashes when removing widgets, deleting panels, or reopening the widget library. Dragging small widgets now keeps drop previews and row layouts stable.

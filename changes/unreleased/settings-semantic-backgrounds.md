@@ -4,4 +4,4 @@ type: changed
 area: Settings
 ---
 
-- Coordinate custom settings cards with native forms using adaptive system backgrounds, with softer neutral inset areas in light and dark appearance.
+Settings uses consistent adaptive backgrounds, aligned controls, and clearer shortcut sections. Marketplace appears first in Customize.

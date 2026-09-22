@@ -1,5 +1,7 @@
 ---
 release: plugin
 type: fixed
+area: Window Switcher
 ---
-Fix Window Switcher activation, previews, helper entries, and selection and recency across metadata changes or failed scans; label shortcut scopes and add keyboard controls with consistent palette styling.
+
+Window Switcher keeps actions on the intended window, cancels delayed switches after dismissal or a change of active app, and pauses switching while recording shortcuts.

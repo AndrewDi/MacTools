@@ -1,5 +1,7 @@
 ---
 release: app
 type: changed
+area: Menu-bar Panels
 ---
-Check for Updates now stays above Quit in the Actions menu. Automatic checks continue, with an indicator dot on Actions and the update item when a new version is available.
+
+Menu-bar panels place Settings and Actions beside their tabs, with update indicators and editing-only footer controls. Option groups show descriptions and adapt to long translated labels.

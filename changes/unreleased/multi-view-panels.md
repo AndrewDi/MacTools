@@ -1,5 +1,7 @@
 ---
 release: app
-type: added
+type: changed
+area: Plugins
 ---
-Add multiple plugin views with independent copies and migrated layouts; manage components in panel editing instead of search. Rows start collapsed; PluginKit v7 needs compatible plugin updates.
+
+MacTools now uses PluginKit v7 for multiple plugin views and shared window guides. Existing layouts migrate automatically; installed plugins need compatible updates.

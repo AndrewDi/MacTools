@@ -1,5 +1,7 @@
 ---
 release: app
 type: fixed
+area: Menu-bar Panels
 ---
-Keep panel layout recovery effective after restarting when older preferences are unreadable. Preserve readable plugin order and allow imported ordering to take effect immediately.
+
+Panel layouts recover after restarting with unreadable older preferences, preserve valid plugin ordering, and apply imported ordering immediately.

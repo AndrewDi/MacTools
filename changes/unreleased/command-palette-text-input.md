@@ -1,6 +1,7 @@
 ---
 release: app
 type: added
+area: Command Palette
 ---
 
-Enter text for supported actions in the command palette, or use a command alias to send it with a single Return.
+Command Palette accepts text for supported actions, with customizable trigger phrases, Tab completion, and safeguards for unfinished IME input and conflicting triggers.

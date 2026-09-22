@@ -1,5 +1,7 @@
 ---
 release: plugin
 type: changed
+area: Plugins
 ---
-Migrate plugin views to the unified panel library with their default placement and shared background services. Activity Bar copies resize independently, and Sidecar starts collapsed; requires a PluginKit v7 host.
+
+Updated plugin views join the unified panel library and require MacTools 1.3.1 with PluginKit v7. Activity Stats widget copies can be resized independently.

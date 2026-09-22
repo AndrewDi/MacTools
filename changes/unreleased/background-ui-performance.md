@@ -1,5 +1,7 @@
 ---
 release: app
 type: fixed
+area: Performance
 ---
-Reduce idle CPU use from unchanged menu-bar icons and hidden panels. Reopened panels retain their interaction state and show current data.
+
+Reduced idle CPU use and delays when navigating Settings, switching large panels, editing widgets, or changing shortcuts. Reopened panels retain their state and show current data.

@@ -1,6 +1,7 @@
 ---
 release: plugin
 type: fixed
+area: Clipboard
 ---
 
-Clipboard opens faster with large histories and reuses the most recent rich-text preview when reopened.
+Clipboard opens and navigates large histories faster, reuses recent previews, and keeps rich text readable in light and dark appearance. Large rich-text items show saved summaries without loading the original content.

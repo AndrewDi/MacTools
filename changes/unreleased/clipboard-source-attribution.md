@@ -1,6 +1,7 @@
 ---
 release: plugin
 type: fixed
+area: Clipboard
 ---
 
-Clipboard labels Universal Clipboard content as Other Device and respects declared source apps. Unknown declarations remain unknown, and source details survive saving and reopening.
+Clipboard identifies Universal Clipboard content as Other Device, honors declared source apps, and preserves source details when saving, reopening, or restoring items.

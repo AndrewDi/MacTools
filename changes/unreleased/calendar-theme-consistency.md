@@ -4,4 +4,4 @@ type: fixed
 area: Calendar
 ---
 
-Calendar highlights and hover states follow the theme, with distinct, readable tints for holiday and makeup-workday badges. Event colors stay faithful to their source calendar.
+Calendar highlights, holiday badges, and event popovers now follow light, dark, and custom themes while preserving event colors from the source calendar.

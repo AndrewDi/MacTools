@@ -4,4 +4,4 @@ type: changed
 area: Settings
 ---
 
-- Refine System Status alignment and narrow-window layouts with subtle row separators; simplify Trackpad Gestures cards and clarify search fields and Action Grid slots while preserving interaction feedback.
+Improved plugin settings readability, including System Status charts and narrow layouts, simpler Trackpad Gestures cards, and clearer Action Grid slots and search fields.

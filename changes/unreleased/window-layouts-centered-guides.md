@@ -1,6 +1,7 @@
 ---
 release: plugin
 type: added
+area: Window Layouts
 ---
 
-Window Layouts can optionally show centered guides while dragging other apps’ windows and snap on release near the center, respecting the Dock and Stage Manager. The setting is off by default.
+Window Layouts can show centering guides while dragging app windows and snap them to the center on release, respecting the Dock and Stage Manager. This option is off by default.

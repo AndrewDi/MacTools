@@ -1,5 +1,7 @@
 ---
 release: plugin
 type: changed
+area: Physical Clean Mode
 ---
-Use entry buttons instead of toggles for Physical Clean Mode in both panel views, preserving permission checks and emergency exit controls.
+
+Physical Clean Mode now uses entry buttons in panel views, with permission checks and emergency exit controls preserved.

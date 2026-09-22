@@ -1,6 +1,7 @@
 ---
 release: plugin
 type: added
+area: Siri
 ---
 
-Send a message into a new Siri conversation from MacTools on macOS 27, with draft protection and delivery feedback.
+Send a message to a new Siri conversation on macOS 27 from Command Palette or the panel composer, with draft protection, cancellation, delivery feedback, and retries that avoid duplicate sends.

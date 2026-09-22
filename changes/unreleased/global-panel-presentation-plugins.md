@@ -1,5 +1,7 @@
 ---
 release: plugin
 type: fixed
+area: Panels
 ---
-Window Switcher and Clipboard History open without activating MacTools, preserving the foreground app while retaining search, preview controls, and paste targets.
+
+Window Switcher and Clipboard open without activating MacTools, preserving the foreground app and paste target while keeping search and preview controls available.

@@ -1,6 +1,7 @@
 ---
 release: app
 type: changed
+area: Command Palette
 ---
 
-Command Palette follows system Liquid Glass appearance, with readable selections and native material or opaque accessibility fallbacks.
+Command Palette uses a consistent Liquid Glass surface and compact search header in Settings and its standalone window, with readable selections and accessibility fallbacks.

@@ -4,4 +4,4 @@ type: fixed
 area: Clipboard
 ---
 
-Clipboard opens in All consistently, including empty and history-only collections, while Manage Snippets still opens Snippets directly.
+Clipboard consistently opens All, including empty collections. Manage Snippets opens Snippets directly, even while the history is still loading.

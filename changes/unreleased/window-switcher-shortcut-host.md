@@ -1,5 +1,7 @@
 ---
 release: app
 type: fixed
+area: Shortcuts
 ---
-Window-switching shortcuts respect conflicts, including reverse cycling, after preset changes. The current-app chooser keeps targeting the app used before opening the command palette.
+
+Window-switching shortcuts respect conflicts after preset changes, including reverse cycling. The current-app chooser targets the app used before opening Command Palette.

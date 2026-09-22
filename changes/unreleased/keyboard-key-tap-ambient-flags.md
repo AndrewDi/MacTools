@@ -4,4 +4,4 @@ type: fixed
 area: Input
 ---
 
-Prevented generated single-key taps from inheriting unrelated held modifiers.
+Generated single-key taps no longer inherit unrelated held modifiers.

@@ -4,4 +4,5 @@ type: changed
 area: Calendar
 ---
 
-View events grouped by date below Calendar. Choose 1–7 days in the past, future, or both, with the next three days shown by default.
+- Calendar shows events grouped by date below the month in an adaptive card. Choose 1-7 days before or after the selected date, or both; the next three days appear by default.
+- Calendar offers an optional Chinese lunar calendar, initially selected by app language. Date cells stay compact, and Chinese holiday badges remain region-specific.

@@ -1,5 +1,7 @@
 ---
 release: app
 type: removed
+area: Settings
 ---
-Remove the separate Dashboard and Feature Panel layout pages from Settings. Edit panels directly in the menu bar, and manage their shortcuts in Actions & Shortcuts.
+
+Removed separate panel layout pages and the click-swap setting. Edit panels in the menu bar and manage shortcuts in Actions & Shortcuts; existing bindings and panel order are preserved.

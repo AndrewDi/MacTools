@@ -1,5 +1,7 @@
 ---
 release: plugin
 type: added
+area: Widgets
 ---
-Add optional, theme-aware icon widgets for 31 single-action controls and settings entry points. Full names, descriptions, and errors remain available on hover; complex rows remain unchanged.
+
+Added optional icon widgets for 31 single-action controls and settings entry points, with theme support and names, descriptions, and errors available on hover.

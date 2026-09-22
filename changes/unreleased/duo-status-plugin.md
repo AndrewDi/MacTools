@@ -4,4 +4,4 @@ type: added
 area: Duo Status
 ---
 
-Add a Duo menu-bar icon for battery, Wi-Fi signal, and network status. Choose a separate icon or replace the app icon in plugin settings, with clear guidance for occupied icons and pending restarts.
+Added Duo Status to show battery, Wi-Fi signal, and network status in the menu bar, either as a separate icon or as a replacement for the MacTools icon.

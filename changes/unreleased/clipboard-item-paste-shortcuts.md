@@ -4,4 +4,4 @@ type: added
 area: Clipboard
 ---
 
-Assign one shortcut to plain-text Clipboard items, or separate Original and Plain Text shortcuts when paste results differ. Choose 5 minutes, 1 hour, 1 day, or Until removed; timed History items stay available.
+Clipboard items support paste shortcuts with separate Original and Plain Text bindings when needed. Shortcuts last 5 minutes, 1 hour, 1 day, or until removed; timed History items stay available.

@@ -1,7 +1,7 @@
 ---
 release: app
 type: added
-area: Menu Bar Icon
+area: Menu Bar
 ---
 
-Added MacTools Original, the first MacTools T icon, to the online gallery's featured group.
+Added MacTools Original, the original T menu-bar icon, to the online gallery.

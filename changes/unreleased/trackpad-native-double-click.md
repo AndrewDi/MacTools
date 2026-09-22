@@ -4,4 +4,4 @@ type: fixed
 area: Trackpad Gestures
 ---
 
-Preserve ordinary one-finger tap-to-click and double-click responsiveness with TipTap enabled, and keep replayed native clicks in order.
+Trackpad Gestures preserves normal one-finger tap-to-click and double-click responsiveness with TipTap enabled and keeps replayed clicks in order.

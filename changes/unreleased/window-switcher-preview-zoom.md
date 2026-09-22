@@ -1,6 +1,7 @@
 ---
 release: plugin
 type: added
+area: Window Switcher
 ---
 
-Window Switcher previews support pinch-to-zoom, panning, and Fit controls, with sharper previews requested only when inspecting a window.
+Window Switcher previews support pinch-to-zoom, panning, and Fit controls, with sharper images loaded when inspecting a window.

@@ -4,4 +4,4 @@ type: changed
 area: Clipboard
 ---
 
-Clipboard opens on the display under the pointer, centered until moved. Each display remembers its own position across launches, and restored windows stay within the available screen area.
+Clipboard opens on the pointer display, supports dragging and snapping with alignment guides, and remembers each display's position across launches. Display changes preserve saved positions and keep the window visible.

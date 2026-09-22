@@ -1,7 +1,8 @@
 ---
 release: plugin
 type: changed
-area: Productivity
+area: Clipboard
 ---
 
-Move clipboard items and snippets to the front when reused, including through paste shortcuts. Keep selections and sequential paste queue order stable.
+- Clipboard moves reused items and snippets to the front while preserving selections and paste queue order. History expires from its latest use or capture.
+- Clipboard now defaults to a 512 MB history capacity and a 30 MB per-item limit. Existing saved limits are preserved.

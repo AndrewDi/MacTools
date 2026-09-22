@@ -1,6 +1,7 @@
 ---
 release: app
 type: added
+area: Command Line
 ---
 
-Apple silicon Nightly builds can install the matching CLI from Settings, keep it updated, and resume interrupted removal or cleanup while preserving manual installations and rollback.
+Apple silicon Nightly builds can install the CLI from Settings, update it with MacTools, and roll back until the next app release. Failed installation or removal can be retried without affecting manual installations.

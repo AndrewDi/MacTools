@@ -1,6 +1,7 @@
 ---
 release: plugin
 type: fixed
+area: Device Battery
 ---
 
-Device Battery keeps its last readings visible when reopening the panel and shows loading only before the first result, avoiding a brief empty-state flash.
+Device Battery keeps its last readings visible when reopening the panel, avoiding a brief empty state while refreshing.
