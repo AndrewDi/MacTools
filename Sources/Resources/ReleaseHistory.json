@@ -2,6 +2,55 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "id": "v2.0.0",
+      "kind": "app",
+      "version": "2.0.0",
+      "date": "2026-09-22",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Apple silicon Nightly builds can install the CLI from Settings, update it with MacTools, and roll back until the next app release. Failed installation or removal can be retried without affecting manual installations.",
+            "Added preference sync through iCloud Drive or a custom folder, with conflict resolution, retryable imports, and protection for pending local edits and device-specific settings.",
+            "Command Palette supports dragging and snapping with alignment guides, saved screen-relative positions, and a reset action.",
+            "Command Palette accepts text for supported actions, with customizable trigger phrases, Tab completion, and safeguards for unfinished IME input and conflicting triggers.",
+            "Create up to five menu-bar panels that mix widgets and feature actions, with customizable tab icons and a searchable widget library that supports multiple copies.",
+            "Reorder items within or between panels using drag and drop or move menus, with automatic saving and Undo. Edit panels and manage widgets directly from the menu bar.",
+            "Added MacTools Original, the original T menu-bar icon, to the online gallery.",
+            "Plugin installation and activation now check macOS and app version requirements, explain incompatibilities, and offer a recheck option.",
+            "Plugins can replace the main menu-bar icon while preserving panel access and activity badges. Settings identifies the active provider, and successful plugin removal restores the original icon."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "Command Palette uses a consistent Liquid Glass surface and compact search header in Settings and its standalone window, with readable selections and accessibility fallbacks.",
+            "Menu-bar panels fit up to five compact controls per row, with consistent sizing in the editor and widget library.",
+            "MacTools now uses PluginKit v7 for multiple plugin views and shared window guides. Existing layouts migrate automatically; installed plugins need compatible updates.",
+            "Menu-bar panels place Settings and Actions beside their tabs, with update indicators and editing-only footer controls. Option groups show descriptions and adapt to long translated labels.",
+            "Settings uses consistent adaptive backgrounds, aligned controls, and clearer shortcut sections. Marketplace appears first in Customize."
+          ]
+        },
+        {
+          "kind": "removed",
+          "entries": [
+            "Removed separate panel layout pages and the click-swap setting. Edit panels in the menu bar and manage shortcuts in Actions & Shortcuts; existing bindings and panel order are preserved."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Reduced idle CPU use and delays when navigating Settings, switching large panels, editing widgets, or changing shortcuts. Reopened panels retain their state and show current data.",
+            "Global command and action panels now open without bringing Settings forward. Menu-bar search opens the standalone Command Palette.",
+            "Generated single-key taps no longer inherit unrelated held modifiers.",
+            "Fixed crashes when removing widgets, deleting panels, or reopening the widget library. Dragging small widgets now keeps drop previews and row layouts stable.",
+            "Panel layouts recover after restarting with unreadable older preferences, preserve valid plugin ordering, and apply imported ordering immediately.",
+            "Window-switching shortcuts respect conflicts after preset changes, including reverse cycling. The current-app chooser targets the app used before opening Command Palette."
+          ]
+        }
+      ]
+    },
+    {
       "id": "plugins-2.0.0",
       "kind": "plugin",
       "version": "2.0.0",
