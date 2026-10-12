@@ -145,22 +145,24 @@ final class AutomaticPreferencesBackupTests: XCTestCase {
         )
         var marker = "first"
         var publishedSummary: AutomaticPreferencesBackupSummary?
+        let summaryPublished = expectation(description: "Automatic backup summary published")
         coordinator.snapshotProvider = { [unowned self] in
             self.makeBackup(marker: marker)
         }
-        coordinator.summaryHandler = { publishedSummary = $0 }
+        coordinator.summaryHandler = {
+            publishedSummary = $0
+            summaryPublished.fulfill()
+        }
 
         coordinator.committedPreferencesDidChange()
         marker = "second"
         coordinator.committedPreferencesDidChange()
-        for _ in 0 ..< 50 {
-            if (try? backupFiles(in: directory).count) == 1 { break }
-            try await Task.sleep(for: .milliseconds(20))
-        }
+        await fulfillment(of: [summaryPublished], timeout: 5)
 
         let files = try backupFiles(in: directory)
         XCTAssertEqual(files.count, 1)
-        let backup = try await PreferencesBackup.decodeJSON(contentsOf: files[0])
+        let file = try XCTUnwrap(files.first)
+        let backup = try await PreferencesBackup.decodeJSON(contentsOf: file)
         XCTAssertEqual(backup.pluginDisplay.orderedPluginIDs, ["second"])
         XCTAssertEqual(publishedSummary?.snapshotCount, 1)
     }
