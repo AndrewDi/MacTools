@@ -1,0 +1,211 @@
+{
+  "id": "container-indicator",
+  "displayName": "Apple Container状态",
+  "summary": "查看并控制 container 服务、容器与虚拟机",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "حالة Apple Container",
+      "summary": "عرض والتحكم في خدمة container والحاويات والأجهزة الافتراضية."
+    },
+    "de": {
+      "displayName": "Apple Container Status",
+      "summary": "Dienst, Container und virtuelle Maschinen von container anzeigen und steuern."
+    },
+    "en": {
+      "displayName": "Apple Container Status",
+      "summary": "View and control the container service, containers, and virtual machines."
+    },
+    "es": {
+      "displayName": "Estado de Apple Container",
+      "summary": "Muestra y controla el servicio container, los contenedores y las máquinas virtuales."
+    },
+    "fr": {
+      "displayName": "Statut d'Apple Container",
+      "summary": "Affiche et contrôle le service container, les conteneurs et les machines virtuelles."
+    },
+    "ja": {
+      "displayName": "Apple Container のステータス",
+      "summary": "container サービス、コンテナ、仮想マシンを確認して操作します。"
+    },
+    "ko": {
+      "displayName": "Apple Container 상태",
+      "summary": "container 서비스, 컨테이너, 가상 머신을 확인하고 제어합니다."
+    },
+    "pt": {
+      "displayName": "Status do Apple Container",
+      "summary": "Visualize e controle o serviço container, os contêineres e as máquinas virtuais."
+    },
+    "ru": {
+      "displayName": "Состояние Apple Container",
+      "summary": "Просмотр и управление службой container, контейнерами и виртуальными машинами."
+    },
+    "tr": {
+      "displayName": "Apple Container Durumu",
+      "summary": "container hizmetini, konteynerleri ve sanal makineleri görüntüleyin ve yönetin."
+    },
+    "zh-Hans": {
+      "displayName": "Apple Container状态",
+      "summary": "查看并控制 container 服务、容器与虚拟机"
+    },
+    "zh-Hant": {
+      "displayName": "Apple Container狀態",
+      "summary": "檢視並控制 container 服務、容器與虛擬機"
+    }
+  },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary",
+    "setup.requirements.title": "@standardSetup.requirements.title",
+    "setup.requirements.description": "@standardSetup.requirements.description"
+  },
+  "version": "1.0.0",
+  "minHostVersion": "2.0.1",
+  "pluginKitVersion": 7,
+  "bundleRelativePath": "ContainerIndicator.bundle",
+  "factoryClass": "ContainerIndicatorPlugin.ContainerIndicatorPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "ContainerIndicatorPlugin"
+  },
+  "capabilities": {
+    "panelItems": [
+      "widget"
+    ],
+    "settings": "none"
+  },
+  "permissions": [],
+  "category": "monitoring",
+  "presentation": {
+    "longDescription": "@productStrings.summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@productStrings.summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "GPL-3.0-only"
+  },
+  "discovery": {
+    "keywords": [
+      "container",
+      "containers",
+      "container service",
+      "machine",
+      "virtual machine",
+      "容器",
+      "虚拟机",
+      "apple container"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "حالة Apple Container",
+        "حالة الحاويات"
+      ],
+      "de": [
+        "Apple Container Status",
+        "Container-Status"
+      ],
+      "en": [
+        "Apple Container Status",
+        "Container Status"
+      ],
+      "es": [
+        "Estado de Apple Container",
+        "Estado de contenedores"
+      ],
+      "fr": [
+        "Statut d'Apple Container",
+        "État des conteneurs"
+      ],
+      "ja": [
+        "Apple Container のステータス",
+        "コンテナのステータス"
+      ],
+      "ko": [
+        "Apple Container 상태",
+        "컨테이너 상태"
+      ],
+      "pt": [
+        "Status do Apple Container",
+        "Status de contêineres"
+      ],
+      "ru": [
+        "Состояние Apple Container",
+        "Статус контейнеров"
+      ],
+      "tr": [
+        "Apple Container Durumu",
+        "Konteyner Durumu"
+      ],
+      "zh-Hans": [
+        "Apple Container状态",
+        "容器状态"
+      ],
+      "zh-Hant": [
+        "Apple Container狀態",
+        "容器狀態"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@productStrings.display-name"
+      }
+    ],
+    "goalCategories": [
+      "monitoring"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [
+      "container"
+    ],
+    "permissionIDs": [],
+    "setupComplexity": "simple",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "container-service-state"
+    ],
+    "dataPersisted": [],
+    "retention": {
+      "policy": "none"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [
+      {
+        "id": "review-requirements",
+        "title": "@productStrings.setup.requirements.title",
+        "description": "@productStrings.setup.requirements.description"
+      }
+    ],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  }
+}

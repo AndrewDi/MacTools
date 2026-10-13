@@ -1,0 +1,3 @@
+import ContainerIndicatorPlugin
+
+private let containerIndicatorPluginFactoryAnchor: Any.Type = ContainerIndicatorPluginFactory.self
