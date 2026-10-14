@@ -96,15 +96,21 @@ public struct ContainerCommandRunner: ContainerCommandRunning {
         executable: String,
         arguments: [String]
     ) async throws -> ContainerCommandResult {
-        try await withCheckedThrowingContinuation { continuation in
-            let execution = ContainerCommandExecution(
-                executable: executable,
-                arguments: arguments,
-                environment: Self.environment(environment: ProcessInfo.processInfo.environment),
-                timeout: timeout,
-                continuation: continuation
-            )
-            execution.start()
+        let execution = ContainerCommandExecution(
+            executable: executable,
+            arguments: arguments,
+            environment: Self.environment(environment: ProcessInfo.processInfo.environment),
+            timeout: timeout
+        )
+        // Cancelling the awaiting task terminates the child process group, so a
+        // hidden panel never leaves a `container` command running behind it.
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<ContainerCommandResult, Error>) in
+                execution.start(continuation: continuation)
+            }
+        } onCancel: {
+            execution.cancel()
         }
     }
 
@@ -137,6 +143,7 @@ private final class ContainerCommandExecution: @unchecked Sendable {
 
     private static let forcedKillDelay: TimeInterval = 0.25
     private static let drainDeadline: TimeInterval = 0.2
+    private static let cancelDeadline: TimeInterval = 1
 
     private let executable: String
     private let arguments: [String]
@@ -156,9 +163,16 @@ private final class ContainerCommandExecution: @unchecked Sendable {
     private var timeoutWorkItem: DispatchWorkItem?
     private var forcedKillWorkItem: DispatchWorkItem?
     private var drainWorkItem: DispatchWorkItem?
+    private var cancelWorkItem: DispatchWorkItem?
     private var leaderDidExit = false
     private var didTimeOut = false
     private var didFinish = false
+    /// Set by `cancel()`: the caller stopped waiting, so the command must fail
+    /// with `CancellationError` instead of reporting whatever the CLI returned.
+    private var didCancel = false
+    /// Set by `cancel()` even when the continuation is not stored yet, so a
+    /// cancellation that wins the race against `start` still avoids the spawn.
+    private var isCancelRequested = false
     private var closedStreamCount = 0
 
     // Accessed only from ioQueue.
@@ -175,19 +189,23 @@ private final class ContainerCommandExecution: @unchecked Sendable {
         executable: String,
         arguments: [String],
         environment: [String: String],
-        timeout: TimeInterval,
-        continuation: Continuation
+        timeout: TimeInterval
     ) {
         self.executable = executable
         self.arguments = arguments
         self.environment = environment
         self.timeout = max(1, timeout)
-        self.continuation = continuation
     }
 
-    func start() {
+    func start(continuation: Continuation) {
         controlQueue.async { [self] in
-            guard !didFinish else { return }
+            self.continuation = continuation
+            // A cancellation that arrived before the spawn must fail the call
+            // instead of launching a command nobody is waiting for.
+            guard !isCancelRequested else {
+                finish(throwing: CancellationError())
+                return
+            }
             do {
                 let launch = try spawn()
                 let processLease = PluginProcessGroupLease(processID: launch.processID)
@@ -206,6 +224,31 @@ private final class ContainerCommandExecution: @unchecked Sendable {
             } catch {
                 finish(throwing: error)
             }
+        }
+    }
+
+    /// Terminates the child process group and fails the pending command, so the
+    /// caller's cancellation reaches the CLI instead of only dropping its result.
+    func cancel() {
+        controlQueue.async { [self] in
+            isCancelRequested = true
+            guard !didFinish else { return }
+            guard continuation != nil else {
+                // `start` has not stored the continuation yet; it observes the
+                // flag and finishes without spawning.
+                return
+            }
+            didCancel = true
+            lease?.signal(SIGTERM)
+            scheduleForcedKill()
+            // A child that ignores SIGTERM must not keep the caller suspended.
+            let workItem = DispatchWorkItem { [self] in
+                guard !didFinish else { return }
+                lease?.signal(SIGKILL)
+                closeStreamsAndFinish(throwing: CancellationError())
+            }
+            cancelWorkItem = workItem
+            controlQueue.asyncAfter(deadline: .now() + Self.cancelDeadline, execute: workItem)
         }
     }
 
@@ -322,13 +365,20 @@ private final class ContainerCommandExecution: @unchecked Sendable {
         controlQueue.asyncAfter(deadline: .now() + Self.drainDeadline, execute: workItem)
     }
 
+    /// Cancellation outranks the timeout: the caller already stopped waiting,
+    /// so reporting a timeout would describe a deadline it no longer has.
+    private var terminalFailure: Error? {
+        if didCancel { return CancellationError() }
+        return didTimeOut ? ContainerCommandError.timedOut : nil
+    }
+
     private func finishIfReady() {
         guard leaderDidExit, closedStreamCount == 2, !didFinish else { return }
-        captureStreamsAndFinish(throwing: didTimeOut ? ContainerCommandError.timedOut : nil)
+        captureStreamsAndFinish(throwing: terminalFailure)
     }
 
     private func closeStreamsAndFinish(throwing failure: Error?) {
-        let resolvedFailure = failure ?? (didTimeOut ? ContainerCommandError.timedOut : nil)
+        let resolvedFailure = failure ?? terminalFailure
         ioQueue.async { [self] in
             if outputDescriptor >= 0 {
                 drain(descriptor: outputDescriptor, stream: .standardOutput)
@@ -369,6 +419,8 @@ private final class ContainerCommandExecution: @unchecked Sendable {
         timeoutWorkItem = nil
         forcedKillWorkItem?.cancel()
         forcedKillWorkItem = nil
+        cancelWorkItem?.cancel()
+        cancelWorkItem = nil
         let rawStatus = lease?.reapLeader()
         lease = nil
 

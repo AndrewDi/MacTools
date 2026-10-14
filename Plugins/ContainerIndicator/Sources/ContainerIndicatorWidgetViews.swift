@@ -36,6 +36,12 @@ struct ContainerIndicatorWidgetCard: View {
         PluginObservedContent(controller) { state in
             VStack(alignment: .leading, spacing: 8) {
                 header(state)
+                // The host never renders `lastErrorMessage`, so the card shows
+                // operation and check failures itself. They stay visible until
+                // the next attempt replaces them.
+                if let message = state.lastErrorMessage {
+                    errorMessage(message)
+                }
                 if state.isCommandAvailable {
                     containersSection(state)
                     machinesSection(state)
@@ -132,8 +138,15 @@ struct ContainerIndicatorWidgetCard: View {
                 localization.string("panel.detail.containers", defaultValue: "容器"),
                 systemImage: "shippingbox"
             )
+            if let failure = state.snapshot.containersFailure {
+                failureText(failure)
+            }
             if state.snapshot.containers.isEmpty {
-                emptyText(state)
+                // A failed read reports itself; only a healthy empty list
+                // falls back to the empty message.
+                if state.snapshot.containersFailure == nil {
+                    emptyText(state)
+                }
             } else {
                 VStack(spacing: 4) {
                     ForEach(state.snapshot.containers) { container in
@@ -163,8 +176,15 @@ struct ContainerIndicatorWidgetCard: View {
                 localization.string("panel.detail.machines", defaultValue: "虚拟机"),
                 systemImage: "internaldrive"
             )
+            if let failure = state.snapshot.machinesFailure {
+                failureText(failure)
+            }
             if state.snapshot.machines.isEmpty {
-                emptyText(state)
+                // A failed read reports itself; only a healthy empty list
+                // falls back to the empty message.
+                if state.snapshot.machinesFailure == nil {
+                    emptyText(state)
+                }
             } else {
                 VStack(spacing: 4) {
                     ForEach(state.snapshot.machines) { machine in
@@ -322,6 +342,36 @@ struct ContainerIndicatorWidgetCard: View {
         return Text(text)
             .font(PluginTypography.caption.font)
             .foregroundStyle(theme.text.secondary)
+    }
+
+    /// A failed read keeps the previous entries; this line marks them as stale
+    /// and names the reason instead of leaving the section looking current.
+    private func failureText(_ message: String) -> some View {
+        Label {
+            Text(message)
+                .font(PluginTypography.caption.font)
+                .lineLimit(2)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle")
+                .font(PluginTypography.caption.font)
+        }
+        .foregroundStyle(theme.status.warning)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Operation and check failures stay in the card until the next attempt
+    /// replaces them, so a failed start or stop is never silent.
+    private func errorMessage(_ message: String) -> some View {
+        Label {
+            Text(message)
+                .font(PluginTypography.caption.font)
+                .lineLimit(2)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(PluginTypography.caption.font)
+        }
+        .foregroundStyle(theme.status.critical)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func statusColor(_ state: ContainerIndicatorController) -> Color {

@@ -151,6 +151,12 @@ public struct ContainerSnapshot: Equatable, Sendable {
     public let containers: [ContainerInstance]
     public let machines: [ContainerMachine]
     public let updatedAt: Date?
+    /// Why the latest `container list` read failed. The entries then come from
+    /// the last successful read, so the card must not present them as current
+    /// or fall back to an empty-list message.
+    public let containersFailure: String?
+    /// Same as `containersFailure`, for `container machine list`.
+    public let machinesFailure: String?
 
     public static let unavailable = ContainerSnapshot(
         status: .unknown,
@@ -163,12 +169,16 @@ public struct ContainerSnapshot: Equatable, Sendable {
         status: ContainerServiceStatus,
         containers: [ContainerInstance],
         machines: [ContainerMachine],
-        updatedAt: Date?
+        updatedAt: Date?,
+        containersFailure: String? = nil,
+        machinesFailure: String? = nil
     ) {
         self.status = status
         self.containers = containers
         self.machines = machines
         self.updatedAt = updatedAt
+        self.containersFailure = containersFailure
+        self.machinesFailure = machinesFailure
     }
 
     public var runningContainerCount: Int {

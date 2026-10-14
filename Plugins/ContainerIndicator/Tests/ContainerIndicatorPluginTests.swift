@@ -314,6 +314,114 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         XCTAssertFalse(controller.isPerformingAction)
     }
 
+    func testFailedListReadKeepsPreviousEntriesAndReportsWhy() async {
+        let probe = CommandProbe()
+        await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
+        await probe.stubContainers(
+            "[{\"id\":\"c1\",\"configuration\":{\"id\":\"web\"},\"status\":{\"state\":\"running\"}}]"
+        )
+        await probe.stubMachines("[{\"id\":\"kylin\",\"status\":\"Running\"}]")
+        let controller = makeController(probe: probe)
+
+        await controller.refresh()
+        XCTAssertEqual(controller.snapshot.containers.count, 1)
+        XCTAssertEqual(controller.snapshot.machines.count, 1)
+        XCTAssertNil(controller.snapshot.containersFailure)
+        XCTAssertNil(controller.snapshot.machinesFailure)
+
+        // The daemon still reports the service as running but stops answering
+        // the list commands.
+        await probe.stubCommandResult(
+            arguments: ["list", "--all", "--format", "json"],
+            exitCode: 1,
+            error: "error: daemon not reachable"
+        )
+        await probe.stubCommandResult(
+            arguments: ["machine", "list", "--format", "json"],
+            exitCode: 1,
+            error: "error: daemon not reachable"
+        )
+        await controller.refresh()
+
+        XCTAssertEqual(
+            controller.snapshot.containers.count,
+            1,
+            "A failed read must keep the last successful entries, not blank the list"
+        )
+        XCTAssertEqual(controller.snapshot.machines.count, 1)
+        XCTAssertEqual(
+            controller.snapshot.containersFailure,
+            "容器列表读取失败：error: daemon not reachable",
+            "The card explains the failure instead of presenting an empty list"
+        )
+        XCTAssertEqual(
+            controller.snapshot.machinesFailure,
+            "虚拟机列表读取失败：error: daemon not reachable"
+        )
+    }
+
+    func testNewerRefreshDiscardsResultsFromAnOlderOne() async throws {
+        let probe = CommandProbe()
+        await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
+        await probe.stubContainers(
+            "[{\"id\":\"c1\",\"configuration\":{\"id\":\"web\"},\"status\":{\"state\":\"running\"}}]"
+        )
+        await probe.holdCommand(["list", "--all", "--format", "json"])
+        let controller = makeController(probe: probe)
+
+        let olderRefresh = Task { await controller.refresh() }
+        await waitUntil {
+            await probe.invocationCount(for: ["list", "--all", "--format", "json"]) >= 1
+        }
+
+        // The service stops while the older refresh is still waiting on its list.
+        await probe.stubService(exitCode: 1, output: "")
+        await controller.refresh()
+
+        XCTAssertEqual(controller.snapshot.status, .stopped)
+        XCTAssertTrue(controller.snapshot.containers.isEmpty)
+
+        // Releasing the held read must not resurrect the older snapshot.
+        await probe.releaseCommand(["list", "--all", "--format", "json"])
+        await olderRefresh.value
+
+        XCTAssertEqual(
+            controller.snapshot.status,
+            .stopped,
+            "A superseded refresh must not publish its outdated result"
+        )
+        XCTAssertTrue(controller.snapshot.containers.isEmpty)
+    }
+
+    func testHidingThePanelCancelsTheRunningStatusCommand() async {
+        let probe = CommandProbe()
+        await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
+        await probe.holdCommand(["system", "status", "--format", "json"])
+        let controller = makeController(probe: probe)
+
+        controller.startMonitoring()
+        await waitUntil {
+            await probe.invocationCount(for: ["system", "status", "--format", "json"]) >= 1
+        }
+
+        controller.stopMonitoring()
+        await waitUntil {
+            await probe.wasCancelled(["system", "status", "--format", "json"])
+        }
+
+        // Releasing the held command must not publish a hidden panel's refresh.
+        await probe.releaseCommand(["system", "status", "--format", "json"])
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(
+            controller.snapshot.status,
+            .unknown,
+            "A cancelled refresh must not publish after the panel is hidden"
+        )
+        XCTAssertFalse(controller.isChecking)
+        XCTAssertFalse(controller.isMonitoring)
+    }
+
     // MARK: - Helpers
 
     private func makeController(
@@ -367,6 +475,52 @@ private actor CommandProbe: ContainerCommandRunning {
     private var imagesOutput = "[]"
     private var machineInspectOutputs: [String: String] = [:]
     private var overrides: [String: ContainerCommandResult] = [:]
+    private var heldCommands: Set<String> = []
+    private var waiters: [String: [CheckedContinuation<Void, Never>]] = [:]
+    private var cancelledCommands: Set<String> = []
+
+    /// Blocks the command until `releaseCommand` is called, so a test can
+    /// interleave a newer refresh with one that is still in flight.
+    func holdCommand(_ arguments: [String]) {
+        heldCommands.insert(Self.key(arguments))
+    }
+
+    func releaseCommand(_ arguments: [String]) {
+        let key = Self.key(arguments)
+        heldCommands.remove(key)
+        let pending = waiters.removeValue(forKey: key) ?? []
+        pending.forEach { $0.resume() }
+    }
+
+    func invocationCount(for arguments: [String]) -> Int {
+        invocations.filter { $0 == arguments }.count
+    }
+
+    func wasCancelled(_ arguments: [String]) -> Bool {
+        cancelledCommands.contains(Self.key(arguments))
+    }
+
+    private static func key(_ arguments: [String]) -> String {
+        arguments.joined(separator: " ")
+    }
+
+    /// The hold records cancellation but keeps the command suspended, so a test
+    /// can prove the refresh discarded a result it no longer owned.
+    private func waitWhileHeld(_ arguments: [String]) async {
+        let key = Self.key(arguments)
+        guard heldCommands.contains(key) else { return }
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                waiters[key, default: []].append(continuation)
+            }
+        } onCancel: {
+            Task { await self.noteCancellation(key) }
+        }
+    }
+
+    private func noteCancellation(_ key: String) {
+        cancelledCommands.insert(key)
+    }
 
     func stubService(exitCode: Int32, output: String) {
         serviceExitCode = exitCode
@@ -399,6 +553,7 @@ private actor CommandProbe: ContainerCommandRunning {
 
     nonisolated func run(executable: String, arguments: [String]) async throws -> ContainerCommandResult {
         await record(arguments)
+        await waitWhileHeld(arguments)
         if let override = await resultOverride(for: arguments) {
             return override
         }

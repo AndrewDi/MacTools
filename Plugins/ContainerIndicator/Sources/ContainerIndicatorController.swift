@@ -27,6 +27,13 @@ public final class ContainerIndicatorController: ObservableObject {
     private let commandPathProvider: () -> String?
     private let localization: PluginLocalization
     private var pollTask: Task<Void, Never>?
+    /// The single refresh currently allowed to publish. Superseding it or
+    /// hiding the panel cancels it, which also terminates the CLI command it
+    /// is waiting on.
+    private var refreshTask: Task<Void, Never>?
+    /// Identifies the newest refresh; older ones compare against it and drop
+    /// the results they gathered before being replaced.
+    private var refreshGeneration: UInt64 = 0
     public private(set) var isMonitoring = false
 
     public init(
@@ -94,6 +101,9 @@ public final class ContainerIndicatorController: ObservableObject {
         isMonitoring = false
         pollTask?.cancel()
         pollTask = nil
+        // Cancelling the refresh also cancels the CLI command it is waiting on,
+        // so a hidden panel never leaves a `container` process running behind it.
+        cancelInFlightRefresh()
     }
 
     public func refreshNow() {
@@ -102,14 +112,47 @@ public final class ContainerIndicatorController: ObservableObject {
         }
     }
 
+    /// Runs one refresh. Only the newest request may publish, so a check that
+    /// finishes late cannot overwrite state that has since changed.
     public func refresh() async {
-        guard !isPerformingAction else { return }
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
+        refreshTask?.cancel()
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.performRefresh(generation: generation)
+        }
+        refreshTask = task
+        await task.value
+    }
+
+    /// Drops any check still in flight: its results describe a state that has
+    /// already moved on, and its process must not outlive the panel.
+    private func cancelInFlightRefresh() {
+        refreshGeneration &+= 1
+        refreshTask?.cancel()
+        refreshTask = nil
+        if isChecking {
+            isChecking = false
+            onStateChange?()
+        }
+    }
+
+    /// A refresh may only act and publish while it is still the newest one and
+    /// has not been cancelled by hiding the panel or by an operation.
+    private func isCurrent(generation: UInt64) -> Bool {
+        !Task.isCancelled && generation == refreshGeneration
+    }
+
+    private func performRefresh(generation: UInt64) async {
+        guard isCurrent(generation: generation), !isPerformingAction else { return }
         resolveCommandPathIfNeeded()
         guard let path = commandPath else {
-            publish(.unavailable)
+            publish(.unavailable, generation: generation)
             return
         }
 
+        let previous = snapshot
         isChecking = true
         onStateChange?()
 
@@ -120,15 +163,20 @@ public final class ContainerIndicatorController: ObservableObject {
                 arguments: ["system", "status", "--format", "json"]
             )
         } catch {
-            // A spawn/timeout failure is a check failure, not an operation failure.
+            // A spawn/timeout failure is a check failure, not an operation
+            // failure. An unreachable service is not an empty one, so the last
+            // known entries stay on screen and the error line explains why.
+            guard isCurrent(generation: generation) else { return }
             isChecking = false
             checkErrorMessage = localization.string(
                 "panel.error.commandFailed",
                 defaultValue: "命令执行失败"
             )
-            publish(ContainerSnapshot(status: .unknown, containers: [], machines: [], updatedAt: Date()))
+            publish(staleSnapshot(status: .unknown), generation: generation)
             return
         }
+        guard isCurrent(generation: generation) else { return }
+
         let status = ContainerIndicatorParser.serviceStatus(
             exitCode: statusResult.exitCode,
             output: statusResult.standardOutput
@@ -144,26 +192,66 @@ public final class ContainerIndicatorController: ObservableObject {
             } else {
                 checkErrorMessage = nil
             }
-            publish(ContainerSnapshot(status: status, containers: [], machines: [], updatedAt: Date()))
+            // A stopped or unregistered service genuinely reports no entries;
+            // only an inconclusive status keeps the last known ones.
+            let keepsEntries = status == .unknown
+            publish(
+                ContainerSnapshot(
+                    status: status,
+                    containers: keepsEntries ? previous.containers : [],
+                    machines: keepsEntries ? previous.machines : [],
+                    updatedAt: Date()
+                ),
+                generation: generation
+            )
             return
         }
 
-        var containers: [ContainerInstance] = []
+        // Each list reads independently: a failure keeps the entries from the
+        // last successful read and records why, so the card never presents a
+        // failed read as an empty list.
+        var containers = previous.containers
+        var containersFailure: String?
         let containerResult = try? await commandRunner.run(
             executable: path,
             arguments: ["list", "--all", "--format", "json"]
         )
+        guard isCurrent(generation: generation) else { return }
         if containerResult?.exitCode == 0 {
-            containers = ContainerIndicatorParser.containers(fromJSON: containerResult?.standardOutput ?? "")
+            containers = ContainerIndicatorParser.containers(
+                fromJSON: containerResult?.standardOutput ?? ""
+            )
+        } else {
+            containersFailure = listFailureMessage(
+                label: localization.string(
+                    "panel.error.containersReadFailed",
+                    defaultValue: "容器列表读取失败"
+                ),
+                exitCode: containerResult?.exitCode,
+                standardError: containerResult?.standardError ?? ""
+            )
         }
 
-        var machines: [ContainerMachine] = []
+        var machines = previous.machines
+        var machinesFailure: String?
         let machineResult = try? await commandRunner.run(
             executable: path,
             arguments: ["machine", "list", "--format", "json"]
         )
+        guard isCurrent(generation: generation) else { return }
         if machineResult?.exitCode == 0 {
-            machines = ContainerIndicatorParser.machines(fromJSON: machineResult?.standardOutput ?? "")
+            machines = ContainerIndicatorParser.machines(
+                fromJSON: machineResult?.standardOutput ?? ""
+            )
+        } else {
+            machinesFailure = listFailureMessage(
+                label: localization.string(
+                    "panel.error.machinesReadFailed",
+                    defaultValue: "虚拟机列表读取失败"
+                ),
+                exitCode: machineResult?.exitCode,
+                standardError: machineResult?.standardError ?? ""
+            )
         }
 
         // Machine images only exist in per-machine inspect output; a failed
@@ -174,6 +262,7 @@ public final class ContainerIndicatorController: ObservableObject {
                 executable: path,
                 arguments: ["machine", "inspect", machine.id]
             )
+            guard isCurrent(generation: generation) else { return }
             let image = inspectResult?.exitCode == 0
                 ? ContainerIndicatorParser.machineImage(
                     fromInspectJSON: inspectResult?.standardOutput ?? ""
@@ -183,34 +272,40 @@ public final class ContainerIndicatorController: ObservableObject {
         }
         machines = resolvedMachines
 
-        // The image list supplies per-architecture storage sizes; a missing or
-        // failed image list only leaves the storage column empty.
-        var imageStorage: [String: [String: Int]] = [:]
+        // The image list supplies per-architecture storage sizes; only a
+        // successful read replaces them, so a failed one leaves the sizes the
+        // carried-over entries already show.
         let imageResult = try? await commandRunner.run(
             executable: path,
             arguments: ["image", "list", "--format", "json"]
         )
+        guard isCurrent(generation: generation) else { return }
         if imageResult?.exitCode == 0 {
-            imageStorage = ContainerIndicatorParser.imageStorageSizes(
+            let imageStorage = ContainerIndicatorParser.imageStorageSizes(
                 fromJSON: imageResult?.standardOutput ?? ""
             )
-        }
-        containers = containers.map { container in
-            let sizes = imageStorage[container.image]
-            let bytes = sizes?[container.architecture]
-                ?? sizes?.first { $0.key != "unknown" }?.value
-                ?? sizes?.first?.value
-            return container.withImageStorage(bytes)
+            containers = containers.map { container in
+                let sizes = imageStorage[container.image]
+                let bytes = sizes?[container.architecture]
+                    ?? sizes?.first { $0.key != "unknown" }?.value
+                    ?? sizes?.first?.value
+                return container.withImageStorage(bytes)
+            }
         }
 
         isChecking = false
         checkErrorMessage = nil
-        publish(ContainerSnapshot(
-            status: .running,
-            containers: containers,
-            machines: machines,
-            updatedAt: Date()
-        ))
+        publish(
+            ContainerSnapshot(
+                status: .running,
+                containers: containers,
+                machines: machines,
+                updatedAt: Date(),
+                containersFailure: containersFailure,
+                machinesFailure: machinesFailure
+            ),
+            generation: generation
+        )
     }
 
     // MARK: - Operations
@@ -262,6 +357,9 @@ public final class ContainerIndicatorController: ObservableObject {
             return
         }
 
+        // Checks that started before this operation describe the state the
+        // operation is about to change; drop them instead of letting them win.
+        cancelInFlightRefresh()
         isPerformingAction = true
         operationErrorMessage = nil
         onStateChange?()
@@ -294,11 +392,50 @@ public final class ContainerIndicatorController: ObservableObject {
 
     // MARK: - Helpers
 
-    private func publish(_ newSnapshot: ContainerSnapshot) {
+    private func publish(_ newSnapshot: ContainerSnapshot, generation: UInt64) {
+        // Only the newest refresh may publish; a superseded one drops the
+        // results it gathered before it was replaced.
+        guard isCurrent(generation: generation) else { return }
         if snapshot != newSnapshot {
             snapshot = newSnapshot
         }
         onStateChange?()
+    }
+
+    /// Keeps the last known entries when a read failed, so an unavailable
+    /// service never looks like one that has nothing in it.
+    private func staleSnapshot(status: ContainerServiceStatus) -> ContainerSnapshot {
+        ContainerSnapshot(
+            status: status,
+            containers: snapshot.containers,
+            machines: snapshot.machines,
+            updatedAt: Date()
+        )
+    }
+
+    /// A failed read reports its label, plus the CLI's own first stderr line
+    /// when there is one, so the card explains what went wrong.
+    private func listFailureMessage(
+        label: String,
+        exitCode: Int32?,
+        standardError: String
+    ) -> String {
+        guard let exitCode, exitCode != 0 else {
+            // The command never produced a result: spawn failure or timeout.
+            return label
+        }
+        let detail = standardError
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { !$0.isEmpty }
+            .map { String($0.prefix(160)) }
+        guard let detail else { return label }
+        return localization.format(
+            "panel.error.readFailedDetailFormat",
+            defaultValue: "%1$@：%2$@",
+            label,
+            detail
+        )
     }
 
     private func resolveCommandPathIfNeeded() {
