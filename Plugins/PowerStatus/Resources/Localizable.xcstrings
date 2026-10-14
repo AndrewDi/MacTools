@@ -208,6 +208,262 @@
         "tr" : { "stringUnit" : { "state" : "translated", "value" : "Döngü Sayısı" } },
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "عدد الدورات" } }
       }
+    },
+    "metric.timeEstimate.help" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Estimated from the remaining charge and recent average power use" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "基于剩余电量与近期平均功耗估算" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "基於剩餘電量與近期平均功耗估算" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "残り充電と最近の平均消費電力から推定" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "남은 전력과 최근 평균 전력 소비로 추정" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Geschätzt aus der Restladung und dem aktuellen Durchschnittsverbrauch" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Estimé à partir de la charge restante et de la consommation moyenne récente" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Estimado con la carga restante y el consumo medio reciente" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Estimado com a carga restante e o consumo médio recente" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Оценка по оставшемуся заряду и среднему недавнему потреблению" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kalan şarj ve son ortalama güç tüketiminden tahmin" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تقدير من الشحن المتبقي ومتوسط الاستهلاك الأخير" } }
+      }
+    },
+    "metric.timeToFull" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Time to Full" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "预计充满时间" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "預計充滿時間" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "充満までの時間" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "완충까지 남은 시간" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zeit bis vollgeladen" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Temps avant charge complète" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Tiempo hasta cargar" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Tempo até carregar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Время до полного заряда" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Dolma Süresi" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الوقت حتى الاكتمال" } }
+      }
+    },
+    "metric.fullyCharged" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Fully Charged" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已充满" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "已充滿" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "充電完了" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "완충됨" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Voll geladen" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Entièrement chargée" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cargada al 100 %" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Totalmente carregada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Полностью заряжена" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tam Şarjlı" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "مشحونة بالكامل" } }
+      }
+    },
+    "flow.ac" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "AC Power" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "交流电" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "交流電" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "交流電源" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "교류 전원" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wechselstrom" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Courant alternatif" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Corriente alterna" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Corrente alternada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Переменный ток" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "AC Güç" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تيار متردد" } }
+      }
+    },
+    "flow.system" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "System" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "系统" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "系統" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "システム" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "시스템" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "System" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Système" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Sistema" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Sistema" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Система" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Sistem" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "النظام" } }
+      }
+    },
+    "flow.battery" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Battery" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电池" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "電池" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バッテリー" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "배터리" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Batterie" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Batterie" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Batería" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Bateria" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Батарея" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Pil" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "البطارية" } }
+      }
+    },
+    "flow.charging" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Charging" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充电" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "充電" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "充電" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "충전" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Laden" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Charge" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Carga" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Carregamento" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Зарядка" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Şarj" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "شحن" } }
+      }
+    },
+    "detail.group.capacity" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Battery Capacity" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电池容量" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "電池容量" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バッテリー容量" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "배터리 용량" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Batteriekapazität" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Capacité de la batterie" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Capacidad de la batería" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Capacidade da bateria" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ёмкость батареи" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Batarya Kapasitesi" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "سعة البطارية" } }
+      }
+    },
+    "detail.voltage" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Voltage" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电压" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "電壓" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "電圧" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전압" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Spannung" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Tension" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Voltaje" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Tensão" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Напряжение" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Gerilim" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الجهد" } }
+      }
+    },
+    "detail.current" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Current" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电流" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "電流" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "電流" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전류" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Strom" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Courant" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Corriente" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Corrente" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ток" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Akım" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "التيار" } }
+      }
+    },
+    "detail.chargingVoltage" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Charging Voltage" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充电电压" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "充電電壓" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "充電電圧" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "충전 전압" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ladespannung" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Tension de charge" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Voltaje de carga" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Tensão de carregamento" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Напряжение зарядки" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Şarj Gerilimi" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "جهد الشحن" } }
+      }
+    },
+    "detail.chargingCurrent" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Charging Current" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "充电电流" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "充電電流" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "充電電流" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "충전 전류" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ladestrom" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Courant de charge" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Corriente de carga" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Corrente de carregamento" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ток зарядки" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Şarj Akımı" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "تيار الشحن" } }
+      }
+    },
+    "detail.remainingCapacity" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remaining Capacity" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "剩余容量" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "剩餘容量" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "残り容量" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "잔여 용량" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbleibende Kapazität" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Capacité restante" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Capacidad restante" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Capacidade restante" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Оставшаяся ёмкость" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kalan Kapasite" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "السعة المتبقية" } }
+      }
+    },
+    "detail.designCapacity" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Design Capacity" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设计容量" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "設計容量" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "設計容量" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "정격 용량" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nennkapazität" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Capacité nominale" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Capacidad de diseño" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Capacidade de projeto" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Номинальная ёмкость" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tasarım Kapasitesi" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "السعة التصميمية" } }
+      }
+    },
+    "detail.fullChargeCapacity" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Full-Charge Capacity" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "满电容量" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "滿電容量" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "満充電容量" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "완충 용량" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vollladekapazität" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Capacité à pleine charge" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Capacidad de carga completa" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Capacidade de carga total" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ёмкость при полном заряде" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tam Şarj Kapasitesi" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "سعة الشحن الكامل" } }
+      }
+    },
+    "detail.group.voltage" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Voltage & Current" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电压与电流" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "電壓與電流" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "電圧と電流" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전압 및 전류" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Spannung & Strom" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Tension et courant" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Voltaje y corriente" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Tensão e corrente" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Напряжение и ток" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Gerilim ve Akım" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الجهد والتيار" } }
+      }
     }
   },
   "version" : "1.0"

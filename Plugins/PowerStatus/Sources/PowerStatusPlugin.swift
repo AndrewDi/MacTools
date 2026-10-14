@@ -56,6 +56,8 @@ final class PowerStatusPlugin: MacToolsPlugin {
                 flowRowCount: PowerStatusLayout.flowRowCount(for: snapshot),
                 miniMetricRowCount: PowerStatusLayout.miniMetricRowCount(for: snapshot),
                 diagramRowCount: PowerStatusLayout.flowDiagramRowCount(for: snapshot),
+                telemetryRowCount: PowerStatusLayout.telemetryRowCount(for: snapshot),
+                telemetryGroupCount: PowerStatusLayout.telemetryGroupCount(for: snapshot),
                 isDataAvailable: snapshot.isDataAvailable
             )
         )

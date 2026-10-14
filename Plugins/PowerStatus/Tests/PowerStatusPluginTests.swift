@@ -205,18 +205,83 @@ final class PowerStatusPluginTests: XCTestCase {
             flowRowCount: 3,
             miniMetricRowCount: 2,
             diagramRowCount: 1,
+            telemetryRowCount: 4,
+            telemetryGroupCount: 2,
             isDataAvailable: true
         )
         let twoRows = PowerStatusLayout.contentHeight(
             flowRowCount: 3,
             miniMetricRowCount: 2,
             diagramRowCount: 2,
+            telemetryRowCount: 4,
+            telemetryGroupCount: 2,
             isDataAvailable: true
         )
 
         let expectedDelta = PowerStatusLayout.flowRowHeight + PowerStatusLayout.flowRowSpacing
         XCTAssertEqual(twoRows - oneRow, expectedDelta, accuracy: 0.5)
         XCTAssertGreaterThan(oneRow, 0)
+    }
+
+    func testContentHeightGrowsWithTelemetryGroups() {
+        let withoutTelemetry = PowerStatusLayout.contentHeight(
+            flowRowCount: 3,
+            miniMetricRowCount: 2,
+            diagramRowCount: 1,
+            telemetryRowCount: 0,
+            telemetryGroupCount: 0,
+            isDataAvailable: true
+        )
+        let withTelemetry = PowerStatusLayout.contentHeight(
+            flowRowCount: 3,
+            miniMetricRowCount: 2,
+            diagramRowCount: 1,
+            telemetryRowCount: 4,
+            telemetryGroupCount: 2,
+            isDataAvailable: true
+        )
+
+        XCTAssertGreaterThan(withTelemetry, withoutTelemetry)
+    }
+
+    func testFullyChargedTileShownOnlyWhileStillOnPower() {
+        let charged = makeSnapshot(batteryPercent: 100, isOnAC: true, fullyCharged: true, flowState: .onAC)
+        XCTAssertTrue(charged.showFullyCharged)
+
+        let charging = makeSnapshot(
+            batteryPercent: 100,
+            isOnAC: true,
+            isCharging: true,
+            fullyCharged: true,
+            flowState: .charging(rateW: 2)
+        )
+        XCTAssertTrue(charging.showFullyCharged)
+
+        // A full pack on battery power still wants the discharge estimate.
+        let discharging = makeSnapshot(batteryPercent: 100, flowState: .discharging(rateW: 12))
+        XCTAssertFalse(discharging.showFullyCharged)
+
+        let partial = makeSnapshot(batteryPercent: 80, isOnAC: true, flowState: .charging(rateW: 15))
+        XCTAssertFalse(partial.showFullyCharged)
+    }
+
+    func testTelemetryGroupsAppearOnlyWhenDataExists() {
+        let bare = makeSnapshot(flowState: .onAC)
+        XCTAssertFalse(bare.hasVoltageCurrentDetail)
+        XCTAssertFalse(bare.hasCapacityDetail)
+        XCTAssertEqual(PowerStatusLayout.telemetryRowCount(for: bare), 0)
+        XCTAssertEqual(PowerStatusLayout.telemetryGroupCount(for: bare), 0)
+
+        let full = makeSnapshot(
+            batteryVoltageMV: 12_000,
+            batteryAmperageMA: -800,
+            remainingCapacityMAH: 3_000,
+            flowState: .discharging(rateW: 12)
+        )
+        XCTAssertTrue(full.hasVoltageCurrentDetail)
+        XCTAssertTrue(full.hasCapacityDetail)
+        XCTAssertEqual(PowerStatusLayout.telemetryRowCount(for: full), 2)
+        XCTAssertEqual(PowerStatusLayout.telemetryGroupCount(for: full), 2)
     }
 
     // MARK: - Helpers

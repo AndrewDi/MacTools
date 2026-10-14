@@ -221,6 +221,29 @@ struct PowerStatusSnapshot: Equatable {
         return "\(health)%"
     }
 
+    /// Whether the pack is full while still on power, so the charging-time
+    /// slot can show "fully charged" instead of an empty estimate.
+    var showFullyCharged: Bool {
+        guard fullyCharged || batteryPercent >= 100 else { return false }
+        switch flowState {
+        case .discharging, .supplementalDischarge:
+            return false
+        default:
+            return true
+        }
+    }
+
+    /// Whether any battery voltage or current value is reported.
+    var hasVoltageCurrentDetail: Bool {
+        batteryVoltageMV != nil || batteryAmperageMA != nil
+            || chargingVoltageMV != nil || chargingCurrentMA != nil
+    }
+
+    /// Whether any battery capacity value is reported.
+    var hasCapacityDetail: Bool {
+        remainingCapacityMAH != nil || designCapacityMAH != nil || fullChargeCapacityMAH != nil
+    }
+
     // MARK: - Private helpers
 
     private var validAvgTimeToEmptyMinutes: Int? {
