@@ -4,6 +4,7 @@ import MacToolsPluginKit
 struct PowerStatusComponentView: View {
     @ObservedObject var viewModel: PowerStatusViewModel
     let localization: PluginLocalization
+    var onContentHeightChange: (CGFloat) -> Void = { _ in }
     @Environment(\.pluginComponentTheme) private var theme
 
     var body: some View {
@@ -13,6 +14,23 @@ struct PowerStatusComponentView: View {
     }
 
     private var content: some View {
+        card
+            .fixedSize(horizontal: false, vertical: true)
+            .background {
+                GeometryReader { geometry in
+                    Color.clear.preference(
+                        key: PowerStatusContentHeightPreferenceKey.self,
+                        value: geometry.size.height
+                    )
+                }
+            }
+            .onPreferenceChange(PowerStatusContentHeightPreferenceKey.self) { height in
+                onContentHeightChange(height)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var card: some View {
         Group {
             if !viewModel.snapshot.isDataAvailable {
                 emptyState
@@ -20,7 +38,6 @@ struct PowerStatusComponentView: View {
                 mainContent
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     // MARK: - Empty state
@@ -46,7 +63,6 @@ struct PowerStatusComponentView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(PluginComponentCardBackground(cornerRadius: PowerStatusLayout.cornerRadius))
     }
 
@@ -65,7 +81,6 @@ struct PowerStatusComponentView: View {
         }
         .padding(.vertical, PowerStatusLayout.cardVerticalPadding)
         .frame(maxWidth: .infinity)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(PluginComponentCardBackground(cornerRadius: PowerStatusLayout.cornerRadius))
     }
 
@@ -303,6 +318,67 @@ enum PowerStatusLayout {
     static let section: CGFloat = 12
     static let sectionHeaderContent: CGFloat = 6
     static let rowVertical: CGFloat = 6
+
+    static let headerRowHeight: CGFloat = 22
+    static let metricRowHeight: CGFloat = 17
+    static let batteryBarHeight: CGFloat = 26
+    static let miniMetricRowHeight: CGFloat = 31
+    static let emptyContentHeight: CGFloat = 122
+
+    /// Estimated intrinsic content height, used for the declared widget span.
+    /// The host refines the span from the measured height reported by the view.
+    static func contentHeight(
+        flowRowCount: Int,
+        miniMetricRowCount: Int,
+        isDataAvailable: Bool
+    ) -> CGFloat {
+        guard isDataAvailable else {
+            return emptyContentHeight
+        }
+
+        let rows = max(flowRowCount, 1)
+        let header = headerRowHeight + sectionHeaderContent
+        let powerFlow = CGFloat(rows) * metricRowHeight
+            + CGFloat(max(rows - 1, 0)) * rowVertical
+            + section
+        let miniRows = max(miniMetricRowCount, 1)
+        let battery = batteryBarHeight + rowVertical
+            + CGFloat(miniRows) * miniMetricRowHeight
+            + CGFloat(max(miniRows - 1, 0)) * rowVertical
+        let padding = cardVerticalPadding * 2
+        return header + powerFlow + battery + padding
+    }
+
+    /// Mirrors the rows rendered by `PowerStatusComponentView`.
+    static func flowRowCount(for snapshot: PowerStatusSnapshot) -> Int {
+        guard snapshot.isDataAvailable else { return 0 }
+        var count = 2 // system power + AC input
+        if snapshot.batteryChargeRateW > 0 || snapshot.batteryDischargeRateW > 0 {
+            count += 1
+        }
+        if snapshot.acAdapterWattage > 0 {
+            count += 1
+        }
+        return count
+    }
+
+    /// Mirrors the mini metric tiles rendered by `PowerStatusComponentView`.
+    static func miniMetricRowCount(for snapshot: PowerStatusSnapshot) -> Int {
+        guard snapshot.isDataAvailable else { return 0 }
+        let count = (snapshot.batteryHealthPercent != nil ? 1 : 0)
+            + (snapshot.batteryTemperatureC != nil ? 1 : 0)
+            + (snapshot.cycleCount != nil ? 1 : 0)
+            + (snapshot.estimatedTimeRemainingMinutes != nil ? 1 : 0)
+        return (count + 1) / 2
+    }
+}
+
+private struct PowerStatusContentHeightPreferenceKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
 }
 
 // MARK: - Subviews

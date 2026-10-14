@@ -50,11 +50,16 @@ final class PowerStatusPlugin: MacToolsPlugin {
     }
 
     var descriptor: PluginPanelWidgetDescriptor {
-        PluginPanelWidgetDescriptor(
-            span: PluginPanelWidgetSpan(
-                width: 4,
-                height: 4
-            )!
+        let snapshot = viewModel.snapshot
+        let spanHeight = PluginPanelWidgetLayoutMetrics.default.heightSpan(
+            fittingContentHeight: PowerStatusLayout.contentHeight(
+                flowRowCount: PowerStatusLayout.flowRowCount(for: snapshot),
+                miniMetricRowCount: PowerStatusLayout.miniMetricRowCount(for: snapshot),
+                isDataAvailable: snapshot.isDataAvailable
+            )
+        )
+        return PluginPanelWidgetDescriptor(
+            span: PluginPanelWidgetSpan(width: 4, height: spanHeight)!
         )
     }
 
@@ -110,7 +115,8 @@ final class PowerStatusPlugin: MacToolsPlugin {
         AnyView(
             PowerStatusComponentView(
                 viewModel: viewModel,
-                localization: localization
+                localization: localization,
+                onContentHeightChange: context.reportContentHeight
             )
         )
     }
