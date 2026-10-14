@@ -484,6 +484,12 @@ final class PluginHost: ObservableObject {
     @Published private(set) var actionRegistryIssues: [ActionRegistryIssue] = []
     @Published private(set) var shortcutBindingRevision: UInt64 = 0
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
+    @Published private(set) var pluginMarketplaceOperations: [String: PluginMarketplaceOperation] = [:]
+    @Published private(set) var isUpdatingAvailablePlugins = false
+    @Published private(set) var hasActiveMarketplaceOperation = false
+    private var marketplaceOperationAttemptsByPluginID: [String: UUID] = [:]
+    // Superseding feedback does not cancel the underlying package request.
+    private var marketplaceOperationAttemptsInFlight: Set<UUID> = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
     @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
     @Published private(set) var hasActivePlugin = false
@@ -2118,6 +2124,21 @@ final class PluginHost: ObservableObject {
         pluginSettingsItems.contains(where: { $0.id == pluginID })
     }
 
+    func marketplaceSetupPresentation(pluginID: String) -> MarketplacePluginSetupPresentation? {
+        guard let item = pluginManagementItems.first(where: { $0.id == pluginID }) else {
+            return nil
+        }
+        return MarketplacePluginSetupPresentation(
+            item: item,
+            missingPermissionCards: pluginSettingsItems.first(where: { $0.pluginID == pluginID })?
+                .missingPermissionCards ?? [],
+            runtimeIsolationFailure: isolatedPluginFailures[pluginID],
+            isRuntimeLoaded: corePlugin(for: pluginID) != nil,
+            isPreparingRuntime: isPreparingPlugins,
+            hasSettings: hasPluginSettings(pluginID: pluginID)
+        )
+    }
+
     func hasMarketplaceDetail(target: MarketplacePluginDetailTarget) -> Bool {
         guard let item = pluginManagementItems.first(where: { $0.id == target.pluginID }) else {
             return false
@@ -2374,6 +2395,8 @@ final class PluginHost: ObservableObject {
     }
 
     func recheckPluginRequirements() {
+        // Startup updates must replace packages before loading installed native bundles.
+        guard !isPreparingPlugins else { return }
         dynamicPluginManager?.reloadInstalledPlugins()
         syncPluginManagementState()
     }
@@ -2507,51 +2530,118 @@ final class PluginHost: ObservableObject {
     }
 
     func installPluginFromCatalog(pluginID: String) async throws {
-        guard let pluginCatalogManager else {
-            return
-        }
-
-        try await pluginCatalogManager.installPlugin(id: pluginID)
-        syncPluginManagementState()
+        try await performMarketplaceOperation(pluginID: pluginID, kind: .install)
     }
 
     func updatePluginFromCatalog(pluginID: String) async throws {
-        guard let pluginCatalogManager else {
-            return
-        }
+        try await performMarketplaceOperation(pluginID: pluginID, kind: .update)
+    }
 
-        try await pluginCatalogManager.updatePlugin(id: pluginID)
-        syncPluginManagementState()
+    private func performMarketplaceOperation(
+        pluginID: String,
+        kind: PluginMarketplaceOperation.Kind
+    ) async throws {
+        guard !isUpdatingAvailablePlugins,
+              pluginMarketplaceOperations[pluginID]?.isActive != true else {
+            throw PluginMarketplaceOperationError.operationInProgress
+        }
+        let attemptID = UUID()
+        marketplaceOperationAttemptsInFlight.insert(attemptID)
+        marketplaceOperationAttemptsByPluginID[pluginID] = attemptID
+        pluginMarketplaceOperations[pluginID] = .init(kind: kind, phase: .running)
+        syncMarketplaceOperationActivity()
+        defer {
+            if marketplaceOperationAttemptsByPluginID[pluginID] == attemptID {
+                marketplaceOperationAttemptsByPluginID.removeValue(forKey: pluginID)
+            }
+            marketplaceOperationAttemptsInFlight.remove(attemptID)
+            syncMarketplaceOperationActivity()
+        }
+        do {
+            guard let pluginCatalogManager else {
+                throw PluginMarketplaceOperationError.catalogUnavailable
+            }
+            switch kind {
+            case .install:
+                try await pluginCatalogManager.installPlugin(id: pluginID)
+            case .update:
+                try await pluginCatalogManager.updatePlugin(id: pluginID)
+            }
+            syncPluginManagementState()
+            guard marketplaceOperationAttemptsByPluginID[pluginID] == attemptID else { return }
+            if dynamicPluginManager?.isInstalledPlugin(pluginID) == true {
+                pluginMarketplaceOperations[pluginID] = .init(kind: kind, phase: .completed)
+            } else {
+                pluginMarketplaceOperations.removeValue(forKey: pluginID)
+            }
+        } catch {
+            syncPluginManagementState()
+            if marketplaceOperationAttemptsByPluginID[pluginID] == attemptID {
+                pluginMarketplaceOperations[pluginID] = .init(kind: kind, phase: .failed(error.localizedDescription))
+            }
+            throw error
+        }
     }
 
     func updateAvailablePluginsFromCatalog(
         progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
     ) async throws {
+        guard !hasActiveMarketplaceOperation else {
+            throw PluginMarketplaceOperationError.operationInProgress
+        }
         guard let pluginCatalogManager else {
             return
         }
 
+        isUpdatingAvailablePlugins = true
+        syncMarketplaceOperationActivity()
         defer {
             syncPluginManagementState()
+            isUpdatingAvailablePlugins = false
+            syncMarketplaceOperationActivity()
         }
 
         try await pluginCatalogManager.updateAvailablePlugins(progress: progress)
     }
 
+    private func syncMarketplaceOperationActivity() {
+        hasActiveMarketplaceOperation = isUpdatingAvailablePlugins
+            || !marketplaceOperationAttemptsInFlight.isEmpty
+    }
+
     func installPluginPackage(from sourceURL: URL) throws {
+        guard !isUpdatingAvailablePlugins else {
+            throw PluginMarketplaceOperationError.operationInProgress
+        }
         try dynamicPluginManager?.installPluginPackage(from: sourceURL)
+        clearTerminalMarketplaceFeedback(forPackageAt: sourceURL)
         pluginCatalogManager?.rebuildManagementItems()
         syncPluginManagementState()
     }
 
     func updatePluginPackage(from sourceURL: URL) throws {
+        guard !isUpdatingAvailablePlugins else {
+            throw PluginMarketplaceOperationError.operationInProgress
+        }
         try dynamicPluginManager?.updatePluginPackage(from: sourceURL)
+        clearTerminalMarketplaceFeedback(forPackageAt: sourceURL)
         pluginCatalogManager?.rebuildManagementItems()
         syncPluginManagementState()
     }
 
+    private func clearTerminalMarketplaceFeedback(forPackageAt sourceURL: URL) {
+        guard let id = try? PluginPackageManifestLoader.load(from: sourceURL).id,
+              pluginMarketplaceOperations[id]?.isActive == false else { return }
+        pluginMarketplaceOperations.removeValue(forKey: id)
+    }
+
     func uninstallDynamicPlugin(pluginID: String, removeData: Bool = false) throws {
+        guard !isUpdatingAvailablePlugins else {
+            throw PluginMarketplaceOperationError.operationInProgress
+        }
         try dynamicPluginManager?.uninstallPlugin(pluginID: pluginID, removeData: removeData)
+        marketplaceOperationAttemptsByPluginID.removeValue(forKey: pluginID)
+        pluginMarketplaceOperations.removeValue(forKey: pluginID)
         pluginOrderingStore.removePlugin(pluginID)
         menuBarPanelStore.removePlugin(id: pluginID)
         shortcutStore.removeCustomizations(forPluginID: pluginID)
@@ -3204,10 +3294,17 @@ final class PluginHost: ObservableObject {
 
     private func syncPluginManagementState(installedMetadata: InstalledPluginMetadata? = nil) {
         let metadata = installedMetadata ?? dynamicPluginManager?.installedMetadata()
+        let nextManifests = metadata?.manifestsByID ?? [:]
+        // A successful mutation through another surface supersedes old terminal feedback.
+        for (id, operation) in pluginMarketplaceOperations where !operation.isActive {
+            if dynamicPluginManifestsByID[id]?.version != nextManifests[id]?.version {
+                pluginMarketplaceOperations.removeValue(forKey: id)
+            }
+        }
         dynamicPluginCapabilitiesByID = metadata?.capabilitiesByID ?? [:]
         dynamicPluginCategoriesByID = metadata?.categoriesByID ?? [:]
         dynamicPluginReleaseChannelsByID = metadata?.releaseChannelsByID ?? [:]
-        dynamicPluginManifestsByID = metadata?.manifestsByID ?? [:]
+        dynamicPluginManifestsByID = nextManifests
         dynamicPluginInstalledAtByID = metadata?.installedAtByID ?? [:]
         pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
