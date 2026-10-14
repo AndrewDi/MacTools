@@ -79,6 +79,8 @@ final class PowerStatusPlugin: MacToolsPlugin {
             }
         }
     }
+    var requestPermissionGuidance: ((String) -> Void)?
+    var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
     var widgetState: PluginPanelWidgetState {
         PluginPanelWidgetState(

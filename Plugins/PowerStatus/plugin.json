@@ -68,7 +68,8 @@
   "capabilities": {
     "panelItems": [
       "widget"
-    ]
+    ],
+    "settings": "none"
   },
   "permissions": [],
   "category": "monitoring",

@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import IOKit.ps
 import MacToolsPluginKit
 
 /// Observable view model that manages power status data collection.
@@ -10,9 +11,9 @@ final class PowerStatusViewModel: ObservableObject {
 
     var onSnapshotChange: (() -> Void)?
 
-    private var timer: Timer?
-    private var powerSourceNotifier: CFRunLoopSource?
-    private var iopsRetainedContext: UnsafeMutableRawPointer?
+    private nonisolated(unsafe) var timer: Timer?
+    private nonisolated(unsafe) var powerSourceNotifier: CFRunLoopSource?
+    private nonisolated(unsafe) var iopsRetainedContext: UnsafeMutableRawPointer?
     private let updateInterval: TimeInterval = 2.0
 
     // MARK: - Panel visibility
