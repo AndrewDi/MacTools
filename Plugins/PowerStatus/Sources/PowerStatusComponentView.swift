@@ -107,7 +107,7 @@ struct PowerStatusComponentView: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(headerIconTint)
 
-            Text(viewModel.snapshot.powerSourceDescription)
+            Text(viewModel.snapshot.powerSourceText(localization))
                 .font(PluginTypography.detail.font.weight(.medium))
                 .foregroundStyle(theme.text.primary)
                 .lineLimit(1)
@@ -296,7 +296,7 @@ struct PowerStatusComponentView: View {
                         PowerStatusMiniMetric(
                             icon: "clock",
                             iconTint: theme.status.informational,
-                            title: snapshot.estimatedTimeLabel,
+                            title: snapshot.estimatedTimeLabelText(localization) ?? "",
                             value: timeText,
                             help: snapshot.estimatedTimeIsComputed
                                 ? localization.string(

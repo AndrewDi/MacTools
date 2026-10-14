@@ -384,26 +384,31 @@ enum PowerStatusSampler {
     static func readBatteryCapacitySnapshot(from props: [String: Any]) -> BatteryCapacitySnapshot {
         let batteryData = extractDict(from: props, key: "BatteryData")
 
-        // DesignCapacity moved under BatteryData on Apple silicon.
-        let designCapacity = extractInt(from: props, key: "DesignCapacity")
-            ?? batteryData.flatMap { extractInt(from: $0, key: "DesignCapacity") }
+        // Depending on the machine and macOS version these fields appear either
+        // at the top level or nested under BatteryData, so read both.
+        func capacityValue(_ key: String) -> Int? {
+            batteryData.flatMap { extractInt(from: $0, key: key) }
+                ?? extractInt(from: props, key: key)
+        }
+
         // Top-level MaxCapacity is a normalized 0-100 percentage on modern Macs,
         // so it must never be read as a milliamp capacity.
-        let rawMaxCapacity = batteryData.flatMap { extractInt(from: $0, key: "AppleRawMaxCapacity") }
-        let fullChargeCapacity = batteryData.flatMap { extractInt(from: $0, key: "FullChargeCapacity") }
-        let nominalChargeCapacity = batteryData.flatMap { extractInt(from: $0, key: "NominalChargeCapacity") }
+        let designCapacity = capacityValue("DesignCapacity")
+        let rawMaxCapacity = capacityValue("AppleRawMaxCapacity")
+        let fullChargeCapacity = capacityValue("FullChargeCapacity")
+        let nominalChargeCapacity = capacityValue("NominalChargeCapacity")
 
         // Temperature is in centidegrees
-        let temperature = batteryData.flatMap { extractInt(from: $0, key: "Temperature") }
-            ?? extractInt(from: props, key: "Temperature")
+        let temperature = capacityValue("Temperature")
 
-        // Compute health percentage
+        // Health is a measured milliamp capacity over the design capacity.
         var healthPercent: Int?
         if let design = designCapacity, design > 0 {
-            if let rawMax = rawMaxCapacity {
-                healthPercent = min(100, rawMax * 100 / design)
-            } else if let fcc = fullChargeCapacity {
-                healthPercent = min(100, fcc * 100 / design)
+            for measured in [rawMaxCapacity, fullChargeCapacity, nominalChargeCapacity] {
+                if let measured, measured > 0 {
+                    healthPercent = min(100, measured * 100 / design)
+                    break
+                }
             }
         }
 

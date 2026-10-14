@@ -14,12 +14,21 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(snapshot.flowState, .idle)
     }
 
-    func testFlowStateDescription() {
-        XCTAssertEqual(PowerFlowState.onAC.description, "交流供电")
-        XCTAssertEqual(PowerFlowState.charging(rateW: 30).description, "充电中")
-        XCTAssertEqual(PowerFlowState.discharging(rateW: 15).description, "电池放电")
-        XCTAssertEqual(PowerFlowState.supplementalDischarge(rateW: 5).description, "电池辅助供电")
-        XCTAssertEqual(PowerFlowState.idle.description, "空闲")
+    func testPowerSourceLabelKeyMatchesFlowState() {
+        XCTAssertEqual(makeSnapshot(flowState: .onAC).powerSourceLocalizationKey, "flow.source.ac")
+        XCTAssertEqual(
+            makeSnapshot(flowState: .charging(rateW: 10)).powerSourceLocalizationKey,
+            "flow.source.charging"
+        )
+        XCTAssertEqual(
+            makeSnapshot(flowState: .discharging(rateW: 15)).powerSourceLocalizationKey,
+            "flow.source.battery"
+        )
+        XCTAssertEqual(
+            makeSnapshot(flowState: .supplementalDischarge(rateW: 5)).powerSourceLocalizationKey,
+            "flow.source.supplemental"
+        )
+        XCTAssertEqual(makeSnapshot(flowState: .idle).powerSourceLocalizationKey, "flow.source.idle")
     }
 
     func testChargingSnapshotComputedProperties() {
@@ -139,6 +148,53 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertNil(snapshot.rawMaxCapacityMAH)
     }
 
+    func testBatteryHealthReportsNinetyPercentFromRawMaxCapacity() {
+        let props: [String: Any] = [
+            "MaxCapacity": 100,
+            "BatteryData": [
+                "DesignCapacity": 5000,
+                "AppleRawMaxCapacity": 4500,
+            ] as [String: Any],
+        ]
+
+        let snapshot = PowerStatusSampler.readBatteryCapacitySnapshot(from: props)
+
+        XCTAssertEqual(snapshot.healthPercent, 90)
+        XCTAssertEqual(snapshot.rawMaxCapacityMAH, 4500)
+    }
+
+    func testBatteryHealthFallsBackToNominalChargeCapacity() {
+        // Some machines report neither AppleRawMaxCapacity nor
+        // FullChargeCapacity; NominalChargeCapacity is still a real mAh value.
+        let props: [String: Any] = [
+            "BatteryData": [
+                "DesignCapacity": 5000,
+                "NominalChargeCapacity": 4000,
+            ] as [String: Any],
+        ]
+
+        let snapshot = PowerStatusSampler.readBatteryCapacitySnapshot(from: props)
+
+        XCTAssertEqual(snapshot.healthPercent, 80)
+        XCTAssertEqual(snapshot.fullChargeCapacityMAH, 4000)
+    }
+
+    func testBatteryCapacityReadsTopLevelWhenBatteryDataAbsent() {
+        let props: [String: Any] = [
+            "MaxCapacity": 100,
+            "DesignCapacity": 5000,
+            "FullChargeCapacity": 4800,
+            "Temperature": 3150,
+        ]
+
+        let snapshot = PowerStatusSampler.readBatteryCapacitySnapshot(from: props)
+
+        XCTAssertEqual(snapshot.designCapacityMAH, 5000)
+        XCTAssertEqual(snapshot.fullChargeCapacityMAH, 4800)
+        XCTAssertEqual(snapshot.healthPercent, 96)
+        XCTAssertEqual(snapshot.temperatureCentidegrees, 3150)
+    }
+
     func testEstimatedTimeFormatting() {
         let snapshot1 = makeSnapshot(
             avgTimeToEmptyMinutes: 45,
@@ -159,15 +215,33 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertNil(snapshot3.estimatedTimeRemainingText)
     }
 
-    func testPowerSourceDescription() {
-        let acSnapshot = makeSnapshot(isOnAC: true, flowState: .onAC)
-        XCTAssertEqual(acSnapshot.powerSourceDescription, "交流供电")
+    func testEstimatedTimeLabelKeyMatchesFlowState() {
+        // Charging always reports time to full.
+        XCTAssertEqual(
+            makeSnapshot(flowState: .charging(rateW: 5)).estimatedTimeLabelKey,
+            "metric.timeToFull"
+        )
 
-        let chargingSnapshot = makeSnapshot(isOnAC: true, isCharging: true, flowState: .charging(rateW: 10))
-        XCTAssertEqual(chargingSnapshot.powerSourceDescription, "交流充电中")
+        // A valid macOS average is reported as remaining time.
+        XCTAssertEqual(
+            makeSnapshot(avgTimeToEmptyMinutes: 120, flowState: .discharging(rateW: 12)).estimatedTimeLabelKey,
+            "metric.timeEstimate.remaining"
+        )
 
-        let batterySnapshot = makeSnapshot(isOnAC: false, flowState: .discharging(rateW: 15))
-        XCTAssertEqual(batterySnapshot.powerSourceDescription, "电池供电")
+        // Without one, the estimate is computed locally and labelled as such.
+        XCTAssertEqual(
+            makeSnapshot(
+                batteryPowerW: 12,
+                batteryVoltageMV: 12_000,
+                remainingCapacityMAH: 3_000,
+                flowState: .discharging(rateW: 12)
+            ).estimatedTimeLabelKey,
+            "metric.timeEstimate.computed"
+        )
+
+        // No time estimate applies on AC or while idle.
+        XCTAssertNil(makeSnapshot(flowState: .onAC).estimatedTimeLabelKey)
+        XCTAssertNil(makeSnapshot(flowState: .idle).estimatedTimeLabelKey)
     }
 
     func testComputedTimeToEmptyFallsBackWhenMacOSSilent() {
@@ -187,7 +261,7 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(snapshot.estimatedTimeRemainingMinutes ?? 0, 72, accuracy: 1)
         XCTAssertEqual(snapshot.estimatedTimeRemainingText, "1h 12m")
         XCTAssertTrue(snapshot.estimatedTimeIsComputed)
-        XCTAssertEqual(snapshot.estimatedTimeLabel, "预计可用时间")
+        XCTAssertEqual(snapshot.estimatedTimeLabelKey, "metric.timeEstimate.computed")
     }
 
     func testEstimatedTimeUsesMacOSValueWhenAvailable() {
@@ -201,7 +275,7 @@ final class PowerStatusPluginTests: XCTestCase {
 
         XCTAssertEqual(snapshot.estimatedTimeRemainingMinutes, 90)
         XCTAssertFalse(snapshot.estimatedTimeIsComputed)
-        XCTAssertEqual(snapshot.estimatedTimeLabel, "预计剩余时间")
+        XCTAssertEqual(snapshot.estimatedTimeLabelKey, "metric.timeEstimate.remaining")
     }
 
     func testNoTimeEstimateWhileOnAC() {

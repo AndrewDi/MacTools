@@ -1,4 +1,5 @@
 import Foundation
+import MacToolsPluginKit
 
 /// Power flow state describing the current energy direction.
 enum PowerFlowState: Equatable {
@@ -7,16 +8,6 @@ enum PowerFlowState: Equatable {
     case discharging(rateW: Double)
     case supplementalDischarge(rateW: Double)
     case idle
-
-    var description: String {
-        switch self {
-        case .onAC: return "交流供电"
-        case .charging: return "充电中"
-        case .discharging: return "电池放电"
-        case .supplementalDischarge: return "电池辅助供电"
-        case .idle: return "空闲"
-        }
-    }
 }
 
 /// A snapshot of power and battery telemetry collected from IOKit.
@@ -190,24 +181,27 @@ struct PowerStatusSnapshot: Equatable {
         return Self.formatDuration(minutes: minutes)
     }
 
-    var estimatedTimeLabel: String {
+    /// Catalog key for the remaining-time tile, or `nil` when no time applies.
+    /// The localized text is resolved by the caller, which owns the catalog.
+    var estimatedTimeLabelKey: String? {
         switch flowState {
         case .charging:
-            return "预计充满时间"
+            return "metric.timeToFull"
         case .discharging, .supplementalDischarge:
-            return estimatedTimeIsComputed ? "预计可用时间" : "预计剩余时间"
+            return estimatedTimeIsComputed ? "metric.timeEstimate.computed" : "metric.timeEstimate.remaining"
         default:
-            return ""
+            return nil
         }
     }
 
-    var powerSourceDescription: String {
+    /// Catalog key describing where the machine is drawing power from.
+    var powerSourceLocalizationKey: String {
         switch flowState {
-        case .onAC: return "交流供电"
-        case .charging: return "交流充电中"
-        case .discharging: return "电池供电"
-        case .supplementalDischarge: return "交流 + 电池辅助"
-        case .idle: return "空闲"
+        case .onAC: return "flow.source.ac"
+        case .charging: return "flow.source.charging"
+        case .discharging: return "flow.source.battery"
+        case .supplementalDischarge: return "flow.source.supplemental"
+        case .idle: return "flow.source.idle"
         }
     }
 
@@ -237,6 +231,21 @@ struct PowerStatusSnapshot: Equatable {
     var hasVoltageCurrentDetail: Bool {
         batteryVoltageMV != nil || batteryAmperageMA != nil
             || chargingVoltageMV != nil || chargingCurrentMA != nil
+    }
+
+    // MARK: - Localized labels
+
+    /// Localized power-source caption, falling back to Simplified Chinese when
+    /// a catalog is missing the entry.
+    func powerSourceText(_ localization: PluginLocalization) -> String {
+        localization.string(powerSourceLocalizationKey, defaultValue: "交流供电")
+    }
+
+    /// Localized label for the remaining-time tile, or `nil` when no time
+    /// estimate applies to the current flow.
+    func estimatedTimeLabelText(_ localization: PluginLocalization) -> String? {
+        guard let key = estimatedTimeLabelKey else { return nil }
+        return localization.string(key, defaultValue: "预计剩余时间")
     }
 
     // MARK: - Private helpers

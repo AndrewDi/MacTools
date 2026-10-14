@@ -464,6 +464,118 @@
         "tr" : { "stringUnit" : { "state" : "translated", "value" : "Gerilim ve Akım" } },
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "الجهد والتيار" } }
       }
+    },
+    "flow.source.ac" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "On AC Power" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "交流供电" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "交流供電" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "AC電源" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "AC 전원" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Netzbetrieb" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Sur secteur" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Con corriente" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Na tomada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "От сети" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Şebekede" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يعمل على التيار" } }
+      }
+    },
+    "flow.source.charging" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Charging on AC" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "交流充电中" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "交流充電中" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ACで充電中" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "AC 충전 중" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Lädt am Netz" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "En charge sur secteur" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cargando con corriente" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Carregando na tomada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Зарядка от сети" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Şebekede şarj oluyor" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يشحن من التيار" } }
+      }
+    },
+    "flow.source.battery" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "On Battery" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电池供电" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "電池供電" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バッテリー駆動" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "배터리 전원" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Akkubetrieb" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Sur batterie" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Con batería" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Na bateria" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "От батареи" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bataryadan" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "يعمل على البطارية" } }
+      }
+    },
+    "flow.source.supplemental" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "AC + Battery Boost" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "交流 + 电池辅助" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "交流 + 電池輔助" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "AC + バッテリー補助" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "AC + 배터리 보조" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Netz + Akku-Unterstützung" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Secteur + batterie" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Red + batería" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Tomada + bateria" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сеть + батарея" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Şebeke + batarya" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "التيار مع مساعدة البطارية" } }
+      }
+    },
+    "flow.source.idle" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Idle" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "空闲" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "空閒" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "待機中" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "유휴" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Inaktiv" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Inactif" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Inactivo" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Inativo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Простой" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Boşta" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "خامل" } }
+      }
+    },
+    "metric.timeEstimate.remaining" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Time Remaining" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "预计剩余时间" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "預計剩餘時間" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "残り時間の推定" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "남은 시간 추정" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbleibende Zeit" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Temps restant" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Tiempo restante" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Tempo restante" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Оставшееся время" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kalan süre" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الوقت المتبقي" } }
+      }
+    },
+    "metric.timeEstimate.computed" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Estimated Runtime" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "预计可用时间" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "預計可用時間" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "稼働時間の推定" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "예상 사용 가능 시간" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Geschätzte Laufzeit" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Autonomie estimée" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Duración estimada" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Duração estimada" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Расчётное время работы" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tahmini çalışma süresi" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "مدة التشغيل المقدّرة" } }
+      }
     }
   },
   "version" : "1.0"
