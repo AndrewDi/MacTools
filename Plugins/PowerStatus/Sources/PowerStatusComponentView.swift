@@ -6,6 +6,7 @@ struct PowerStatusComponentView: View {
     let localization: PluginLocalization
     var onContentHeightChange: (CGFloat) -> Void = { _ in }
     @Environment(\.pluginComponentTheme) private var theme
+    @State private var showingDetail = false
 
     var body: some View {
         PluginObservedContent(viewModel) { _ in
@@ -113,6 +114,13 @@ struct PowerStatusComponentView: View {
                 .lineLimit(1)
 
             Spacer(minLength: 4)
+
+            Button(action: { showingDetail.toggle() }) {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 12, weight: .medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(theme.status.informational)
+            }
 
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(String(format: "%.0f", viewModel.snapshot.headerPowerW))
