@@ -346,11 +346,13 @@ enum PowerStatusLayout {
     static let emptyContentHeight: CGFloat = 122
 
     // Animated power-flow diagram
-    static let flowRowHeight: CGFloat = 38
+    static let flowRowHeight: CGFloat = 40
     static let flowRowSpacing: CGFloat = 6
     static let flowLineHeight: CGFloat = 20
     static let flowNodeSpacing: CGFloat = 8
     static let flowNodeWidth: CGFloat = 84
+    /// Two diagram rows plus their spacing; the fork canvas spans both rows.
+    static let forkHeight: CGFloat = flowRowHeight * 2 + flowRowSpacing
 
     /// Estimated intrinsic content height, used for the declared widget span.
     /// The host refines the span from the measured height reported by the view.
@@ -448,51 +450,15 @@ private struct PowerFlowDiagramSection: View {
                     color: theme.status.informational
                 )
             case .charging:
-                flowRow(
-                    source: acNode(value: snapshot.effectiveACOutputW),
-                    destination: systemNode,
-                    color: theme.status.informational
-                )
-                flowRow(
-                    source: acNode(value: snapshot.effectiveACOutputW),
-                    destination: PowerFlowNodeModel(
-                        icon: "battery.100percent.bolt",
-                        title: localization.string("flow.charging", defaultValue: "充电"),
-                        value: Self.wattText(snapshot.batteryChargeRateW),
-                        tint: theme.status.success,
-                        powerW: snapshot.batteryChargeRateW
-                    ),
-                    color: theme.status.success
-                )
+                chargingForkRow
             case .discharging:
                 flowRow(
-                    source: PowerFlowNodeModel(
-                        icon: "battery.50percent",
-                        title: localization.string("flow.battery", defaultValue: "电池"),
-                        value: Self.wattText(snapshot.batteryDischargeRateW),
-                        tint: theme.status.warning,
-                        powerW: snapshot.batteryDischargeRateW
-                    ),
+                    source: batteryNode,
                     destination: systemNode,
                     color: theme.status.warning
                 )
             case .supplementalDischarge:
-                flowRow(
-                    source: acNode(value: snapshot.acInputW),
-                    destination: systemNode,
-                    color: theme.status.informational
-                )
-                flowRow(
-                    source: PowerFlowNodeModel(
-                        icon: "battery.50percent",
-                        title: localization.string("flow.battery", defaultValue: "电池"),
-                        value: Self.wattText(snapshot.batteryDischargeRateW),
-                        tint: theme.status.warning,
-                        powerW: snapshot.batteryDischargeRateW
-                    ),
-                    destination: systemNode,
-                    color: theme.status.warning
-                )
+                supplementalMergeRow
             }
         }
     }
@@ -530,6 +496,72 @@ private struct PowerFlowDiagramSection: View {
             tint: theme.text.primary,
             powerW: snapshot.systemPowerW
         )
+    }
+
+    private var batteryNode: PowerFlowNodeModel {
+        PowerFlowNodeModel(
+            icon: "battery.50percent",
+            title: localization.string("flow.battery", defaultValue: "电池"),
+            value: Self.wattText(snapshot.batteryDischargeRateW),
+            tint: theme.status.warning,
+            powerW: snapshot.batteryDischargeRateW
+        )
+    }
+
+    private var chargingNode: PowerFlowNodeModel {
+        PowerFlowNodeModel(
+            icon: "battery.100percent.bolt",
+            title: localization.string("flow.charging", defaultValue: "充电"),
+            value: Self.wattText(snapshot.batteryChargeRateW),
+            tint: theme.status.success,
+            powerW: snapshot.batteryChargeRateW
+        )
+    }
+
+    /// A single AC source forking into the system and the battery charger.
+    private var chargingForkRow: some View {
+        HStack(spacing: PowerStatusLayout.flowNodeSpacing) {
+            PowerFlowNode(model: acNode(value: snapshot.effectiveACOutputW))
+
+            PowerFlowJunctionLine(
+                mode: .fork,
+                trunkColor: theme.status.informational,
+                trunkPowerW: snapshot.effectiveACOutputW,
+                topColor: theme.status.informational,
+                topPowerW: snapshot.systemPowerW,
+                bottomColor: theme.status.success,
+                bottomPowerW: snapshot.batteryChargeRateW
+            )
+            .frame(height: PowerStatusLayout.forkHeight)
+
+            VStack(spacing: PowerStatusLayout.flowRowSpacing) {
+                PowerFlowNode(model: systemNode)
+                PowerFlowNode(model: chargingNode)
+            }
+        }
+    }
+
+    /// AC and battery sources merging into a single system feed.
+    private var supplementalMergeRow: some View {
+        HStack(spacing: PowerStatusLayout.flowNodeSpacing) {
+            VStack(spacing: PowerStatusLayout.flowRowSpacing) {
+                PowerFlowNode(model: acNode(value: snapshot.acInputW))
+                PowerFlowNode(model: batteryNode)
+            }
+
+            PowerFlowJunctionLine(
+                mode: .merge,
+                trunkColor: theme.status.informational,
+                trunkPowerW: snapshot.systemPowerW,
+                topColor: theme.status.informational,
+                topPowerW: snapshot.acInputW,
+                bottomColor: theme.status.warning,
+                bottomPowerW: snapshot.batteryDischargeRateW
+            )
+            .frame(height: PowerStatusLayout.forkHeight)
+
+            PowerFlowNode(model: systemNode)
+        }
     }
 
     private static func wattText(_ watts: Double) -> String {
@@ -576,7 +608,11 @@ private struct PowerFlowNode: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .frame(width: PowerStatusLayout.flowNodeWidth, alignment: .leading)
+        .frame(
+            width: PowerStatusLayout.flowNodeWidth,
+            height: PowerStatusLayout.flowRowHeight,
+            alignment: .leading
+        )
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(theme.surfaces.backplate)
@@ -647,6 +683,155 @@ private struct PowerFlowLine: View {
             }
         }
         .accessibilityHidden(true)
+    }
+}
+
+/// A junction connector spanning two diagram rows: one trunk forking into
+/// two branches, or two branches merging into one trunk. Dashes animate
+/// along the flow direction on every segment.
+private struct PowerFlowJunctionLine: View {
+    enum Mode {
+        /// Trunk on the left splits into top and bottom branches on the right.
+        case fork
+        /// Top and bottom branches on the left merge into a trunk on the right.
+        case merge
+    }
+
+    let mode: Mode
+    let trunkColor: Color
+    let trunkPowerW: Double
+    let topColor: Color
+    let topPowerW: Double
+    let bottomColor: Color
+    let bottomPowerW: Double
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dashPhase: CGFloat = 0
+
+    private static let dashPattern: [CGFloat] = [3, 5]
+    private static let dashPeriod: CGFloat = 8
+    private static let cornerRadius: CGFloat = 6
+
+    var body: some View {
+        Canvas { context, size in
+            let trunkY = size.height / 2
+            let topY = PowerStatusLayout.flowRowHeight / 2
+            let bottomY = size.height - PowerStatusLayout.flowRowHeight / 2
+            let endX = max(8, size.width - 9)
+            let splitX: CGFloat
+            switch mode {
+            case .fork:
+                splitX = min(max(10, size.width * 0.35), max(10, endX - 16))
+            case .merge:
+                splitX = min(max(16, size.width * 0.55), max(16, endX))
+            }
+            let r = Self.cornerRadius
+
+            switch mode {
+            case .fork:
+                var trunk = Path()
+                trunk.move(to: CGPoint(x: 1, y: trunkY))
+                trunk.addLine(to: CGPoint(x: splitX, y: trunkY))
+                stroke(context, path: trunk, color: trunkColor, powerW: trunkPowerW)
+
+                stroke(context, path: branch(from: .init(x: splitX, y: trunkY),
+                                             to: topY, exitingRight: true, splitX: splitX, endX: endX, r: r),
+                       color: topColor, powerW: topPowerW)
+                stroke(context, path: branch(from: .init(x: splitX, y: trunkY),
+                                             to: bottomY, exitingRight: true, splitX: splitX, endX: endX, r: r),
+                       color: bottomColor, powerW: bottomPowerW)
+
+                drawArrow(context, at: CGPoint(x: endX, y: topY), color: topColor)
+                drawArrow(context, at: CGPoint(x: endX, y: bottomY), color: bottomColor)
+
+            case .merge:
+                stroke(context, path: branch(from: CGPoint(x: 1, y: topY),
+                                             to: trunkY, exitingRight: false, splitX: splitX, endX: endX, r: r),
+                       color: topColor, powerW: topPowerW)
+                stroke(context, path: branch(from: CGPoint(x: 1, y: bottomY),
+                                             to: trunkY, exitingRight: false, splitX: splitX, endX: endX, r: r),
+                       color: bottomColor, powerW: bottomPowerW)
+
+                var trunk = Path()
+                trunk.move(to: CGPoint(x: splitX, y: trunkY))
+                trunk.addLine(to: CGPoint(x: endX, y: trunkY))
+                stroke(context, path: trunk, color: trunkColor, powerW: trunkPowerW)
+
+                drawArrow(context, at: CGPoint(x: endX, y: trunkY), color: trunkColor)
+            }
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            dashPhase = 0
+            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                // Decreasing the phase moves dashes toward the destination.
+                dashPhase = -Self.dashPeriod
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// Builds one branch: horizontal run, rounded corner, vertical run to the
+    /// trunk line, either entering from the left or exiting to the right.
+    private func branch(
+        from start: CGPoint,
+        to endY: CGFloat,
+        exitingRight: Bool,
+        splitX: CGFloat,
+        endX: CGFloat,
+        r: CGFloat
+    ) -> Path {
+        var path = Path()
+        path.move(to: start)
+        if exitingRight {
+            path.addLine(to: CGPoint(x: splitX, y: endY + (endY < start.y ? r : -r)))
+            path.addQuadCurve(
+                to: CGPoint(x: splitX + r, y: endY),
+                control: CGPoint(x: splitX, y: endY)
+            )
+            path.addLine(to: CGPoint(x: endX, y: endY))
+        } else {
+            let cornerX = min(max(splitX - r, start.x + r), endX - r)
+            path.addLine(to: CGPoint(x: cornerX, y: start.y))
+            path.addQuadCurve(
+                to: CGPoint(x: cornerX + r, y: start.y + (endY > start.y ? r : -r)),
+                control: CGPoint(x: cornerX + r, y: start.y)
+            )
+            path.addLine(to: CGPoint(x: cornerX + r, y: endY))
+        }
+        return path
+    }
+
+    private func stroke(_ context: GraphicsContext, path: Path, color: Color, powerW: Double) {
+        let lineWidth = 2.5 + min(max(powerW, 0) / 60, 1) * 2
+        context.stroke(
+            path,
+            with: .color(color.opacity(0.22)),
+            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round, lineJoin: .round)
+        )
+        context.stroke(
+            path,
+            with: .color(color.opacity(0.9)),
+            style: StrokeStyle(
+                lineWidth: lineWidth,
+                lineCap: .round,
+                lineJoin: .round,
+                dash: Self.dashPattern,
+                dashPhase: dashPhase
+            )
+        )
+    }
+
+    private func drawArrow(_ context: GraphicsContext, at tip: CGPoint, color: Color) {
+        var arrow = Path()
+        arrow.move(to: CGPoint(x: tip.x - 6, y: tip.y - 4.5))
+        arrow.addLine(to: CGPoint(x: tip.x + 1, y: tip.y))
+        arrow.addLine(to: CGPoint(x: tip.x - 6, y: tip.y + 4.5))
+        context.stroke(
+            arrow,
+            with: .color(color),
+            style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
+        )
     }
 }
 
