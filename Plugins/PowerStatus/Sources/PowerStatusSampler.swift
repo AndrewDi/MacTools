@@ -158,7 +158,7 @@ enum PowerStatusSampler {
         if batteryPowerW > 0.3 {
             flow = isOnAC ? .supplementalDischarge(rateW: batteryPowerW) : .discharging(rateW: batteryPowerW)
         } else if batteryPowerW < -0.3 {
-            flow = .charging(rateW: abs(batteryPowerW))
+            flow = isOnAC ? .supplementalDischarge(rateW: abs(batteryPowerW)) : .discharging(rateW: abs(batteryPowerW))
         } else if isOnAC {
             flow = .onAC
         } else {
@@ -219,7 +219,7 @@ enum PowerStatusSampler {
                 : .discharging(rateW: batteryPowerFromTelemetry)
         }
         if batteryPowerFromTelemetry < -powerThreshold {
-            return .charging(rateW: abs(batteryPowerFromTelemetry))
+            return isOnAC ? .charging(rateW: abs(batteryPowerFromTelemetry)) : .discharging(rateW: abs(batteryPowerFromTelemetry))
         }
 
         if isOnAC {
