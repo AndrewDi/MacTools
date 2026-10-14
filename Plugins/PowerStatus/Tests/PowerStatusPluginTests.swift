@@ -175,6 +175,50 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(smoothed.estimatedTimeRemainingMinutes ?? 0, 144, accuracy: 1)
     }
 
+    func testFlowDiagramRowCountMatchesFlowState() {
+        XCTAssertEqual(
+            PowerStatusLayout.flowDiagramRowCount(for: makeSnapshot(flowState: .onAC)),
+            1
+        )
+        XCTAssertEqual(
+            PowerStatusLayout.flowDiagramRowCount(for: makeSnapshot(flowState: .discharging(rateW: 15))),
+            1
+        )
+        XCTAssertEqual(
+            PowerStatusLayout.flowDiagramRowCount(
+                for: makeSnapshot(isOnAC: true, isCharging: true, flowState: .charging(rateW: 12))
+            ),
+            2
+        )
+        XCTAssertEqual(
+            PowerStatusLayout.flowDiagramRowCount(for: makeSnapshot(flowState: .supplementalDischarge(rateW: 8))),
+            2
+        )
+        XCTAssertEqual(
+            PowerStatusLayout.flowDiagramRowCount(for: makeSnapshot(isDataAvailable: false)),
+            0
+        )
+    }
+
+    func testContentHeightGrowsWithDiagramRows() {
+        let oneRow = PowerStatusLayout.contentHeight(
+            flowRowCount: 3,
+            miniMetricRowCount: 2,
+            diagramRowCount: 1,
+            isDataAvailable: true
+        )
+        let twoRows = PowerStatusLayout.contentHeight(
+            flowRowCount: 3,
+            miniMetricRowCount: 2,
+            diagramRowCount: 2,
+            isDataAvailable: true
+        )
+
+        let expectedDelta = PowerStatusLayout.flowRowHeight + PowerStatusLayout.flowRowSpacing
+        XCTAssertEqual(twoRows - oneRow, expectedDelta, accuracy: 0.5)
+        XCTAssertGreaterThan(oneRow, 0)
+    }
+
     // MARK: - Helpers
 
     private func makeSnapshot(

@@ -55,6 +55,7 @@ final class PowerStatusPlugin: MacToolsPlugin {
             fittingContentHeight: PowerStatusLayout.contentHeight(
                 flowRowCount: PowerStatusLayout.flowRowCount(for: snapshot),
                 miniMetricRowCount: PowerStatusLayout.miniMetricRowCount(for: snapshot),
+                diagramRowCount: PowerStatusLayout.flowDiagramRowCount(for: snapshot),
                 isDataAvailable: snapshot.isDataAvailable
             )
         )

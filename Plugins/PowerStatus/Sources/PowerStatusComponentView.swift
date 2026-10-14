@@ -73,6 +73,9 @@ struct PowerStatusComponentView: View {
             // Header: power source + main wattage
             headerSection
 
+            // Animated power flow diagram
+            flowDiagramSection
+
             // Power flow metrics
             powerFlowSection
 
@@ -82,6 +85,17 @@ struct PowerStatusComponentView: View {
         .padding(.vertical, PowerStatusLayout.cardVerticalPadding)
         .frame(maxWidth: .infinity)
         .background(PluginComponentCardBackground(cornerRadius: PowerStatusLayout.cornerRadius))
+    }
+
+    // MARK: - Power flow diagram
+
+    private var flowDiagramSection: some View {
+        PowerFlowDiagramSection(
+            snapshot: viewModel.snapshot,
+            localization: localization
+        )
+        .padding(.horizontal, PowerStatusLayout.horizontalPadding)
+        .padding(.bottom, PowerStatusLayout.section)
     }
 
     // MARK: - Header
@@ -331,11 +345,19 @@ enum PowerStatusLayout {
     static let miniMetricRowHeight: CGFloat = 31
     static let emptyContentHeight: CGFloat = 122
 
+    // Animated power-flow diagram
+    static let flowRowHeight: CGFloat = 38
+    static let flowRowSpacing: CGFloat = 6
+    static let flowLineHeight: CGFloat = 20
+    static let flowNodeSpacing: CGFloat = 8
+    static let flowNodeWidth: CGFloat = 84
+
     /// Estimated intrinsic content height, used for the declared widget span.
     /// The host refines the span from the measured height reported by the view.
     static func contentHeight(
         flowRowCount: Int,
         miniMetricRowCount: Int,
+        diagramRowCount: Int,
         isDataAvailable: Bool
     ) -> CGFloat {
         guard isDataAvailable else {
@@ -344,6 +366,7 @@ enum PowerStatusLayout {
 
         let rows = max(flowRowCount, 1)
         let header = headerRowHeight + sectionHeaderContent
+        let diagram = diagramHeight(diagramRowCount: diagramRowCount)
         let powerFlow = CGFloat(rows) * metricRowHeight
             + CGFloat(max(rows - 1, 0)) * rowVertical
             + section
@@ -352,7 +375,25 @@ enum PowerStatusLayout {
             + CGFloat(miniRows) * miniMetricRowHeight
             + CGFloat(max(miniRows - 1, 0)) * rowVertical
         let padding = cardVerticalPadding * 2
-        return header + powerFlow + battery + padding
+        return header + diagram + powerFlow + battery + padding
+    }
+
+    private static func diagramHeight(diagramRowCount: Int) -> CGFloat {
+        guard diagramRowCount > 0 else { return 0 }
+        return CGFloat(diagramRowCount) * flowRowHeight
+            + CGFloat(max(diagramRowCount - 1, 0)) * flowRowSpacing
+            + section
+    }
+
+    /// Mirrors the rows rendered by the animated power-flow diagram.
+    static func flowDiagramRowCount(for snapshot: PowerStatusSnapshot) -> Int {
+        guard snapshot.isDataAvailable else { return 0 }
+        switch snapshot.flowState {
+        case .charging, .supplementalDischarge:
+            return 2
+        case .onAC, .discharging, .idle:
+            return 1
+        }
     }
 
     /// Mirrors the rows rendered by `PowerStatusComponentView`.
@@ -387,7 +428,227 @@ private struct PowerStatusContentHeightPreferenceKey: PreferenceKey {
     }
 }
 
-// MARK: - Subviews
+// MARK: - Power flow diagram
+
+/// Animated diagram showing how power flows between the AC adapter,
+/// the system, and the battery for the current flow state.
+private struct PowerFlowDiagramSection: View {
+    let snapshot: PowerStatusSnapshot
+    let localization: PluginLocalization
+
+    @Environment(\.pluginComponentTheme) private var theme
+
+    var body: some View {
+        VStack(spacing: PowerStatusLayout.flowRowSpacing) {
+            switch snapshot.flowState {
+            case .onAC, .idle:
+                flowRow(
+                    source: acNode(value: snapshot.effectiveACOutputW),
+                    destination: systemNode,
+                    color: theme.status.informational
+                )
+            case .charging:
+                flowRow(
+                    source: acNode(value: snapshot.effectiveACOutputW),
+                    destination: systemNode,
+                    color: theme.status.informational
+                )
+                flowRow(
+                    source: acNode(value: snapshot.effectiveACOutputW),
+                    destination: PowerFlowNodeModel(
+                        icon: "battery.100percent.bolt",
+                        title: localization.string("flow.charging", defaultValue: "充电"),
+                        value: Self.wattText(snapshot.batteryChargeRateW),
+                        tint: theme.status.success,
+                        powerW: snapshot.batteryChargeRateW
+                    ),
+                    color: theme.status.success
+                )
+            case .discharging:
+                flowRow(
+                    source: PowerFlowNodeModel(
+                        icon: "battery.50percent",
+                        title: localization.string("flow.battery", defaultValue: "电池"),
+                        value: Self.wattText(snapshot.batteryDischargeRateW),
+                        tint: theme.status.warning,
+                        powerW: snapshot.batteryDischargeRateW
+                    ),
+                    destination: systemNode,
+                    color: theme.status.warning
+                )
+            case .supplementalDischarge:
+                flowRow(
+                    source: acNode(value: snapshot.acInputW),
+                    destination: systemNode,
+                    color: theme.status.informational
+                )
+                flowRow(
+                    source: PowerFlowNodeModel(
+                        icon: "battery.50percent",
+                        title: localization.string("flow.battery", defaultValue: "电池"),
+                        value: Self.wattText(snapshot.batteryDischargeRateW),
+                        tint: theme.status.warning,
+                        powerW: snapshot.batteryDischargeRateW
+                    ),
+                    destination: systemNode,
+                    color: theme.status.warning
+                )
+            }
+        }
+    }
+
+    private func flowRow(
+        source: PowerFlowNodeModel,
+        destination: PowerFlowNodeModel,
+        color: Color
+    ) -> some View {
+        HStack(spacing: PowerStatusLayout.flowNodeSpacing) {
+            PowerFlowNode(model: source)
+
+            PowerFlowLine(color: color, powerW: source.powerW)
+                .frame(height: PowerStatusLayout.flowLineHeight)
+
+            PowerFlowNode(model: destination)
+        }
+    }
+
+    private func acNode(value: Double) -> PowerFlowNodeModel {
+        PowerFlowNodeModel(
+            icon: "powerplug.fill",
+            title: localization.string("flow.ac", defaultValue: "交流电"),
+            value: Self.wattText(value),
+            tint: theme.status.informational,
+            powerW: value
+        )
+    }
+
+    private var systemNode: PowerFlowNodeModel {
+        PowerFlowNodeModel(
+            icon: "desktopcomputer",
+            title: localization.string("flow.system", defaultValue: "系统"),
+            value: Self.wattText(snapshot.systemPowerW),
+            tint: theme.text.primary,
+            powerW: snapshot.systemPowerW
+        )
+    }
+
+    private static func wattText(_ watts: Double) -> String {
+        String(format: "%.1f W", max(0, watts))
+    }
+}
+
+private struct PowerFlowNodeModel {
+    let icon: String
+    let title: String
+    let value: String
+    let tint: Color
+    /// Watts behind this node; drives the flow line thickness.
+    let powerW: Double
+}
+
+private struct PowerFlowNode: View {
+    let model: PowerFlowNodeModel
+
+    @Environment(\.pluginComponentTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: model.icon)
+                .font(.system(size: 13, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(model.tint)
+                .frame(width: 18)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(model.title)
+                    .font(PluginTypography.caption.font)
+                    .foregroundStyle(theme.text.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Text(model.value)
+                    .font(PluginTypography.detail.font.weight(.semibold))
+                    .foregroundStyle(theme.text.primary)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(width: PowerStatusLayout.flowNodeWidth, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(theme.surfaces.backplate)
+        )
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(model.title) \(model.value)")
+    }
+}
+
+/// A horizontal flow line with dashes animating toward the destination,
+/// so the direction and share of power are visible at a glance.
+private struct PowerFlowLine: View {
+    let color: Color
+    let powerW: Double
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var dashPhase: CGFloat = 0
+
+    private static let dashPattern: [CGFloat] = [3, 5]
+    private static let dashPeriod: CGFloat = 8
+
+    var body: some View {
+        Canvas { context, size in
+            let midY = size.height / 2
+            let endX = max(6, size.width - 9)
+            var path = Path()
+            path.move(to: CGPoint(x: 1, y: midY))
+            path.addLine(to: CGPoint(x: endX, y: midY))
+
+            let lineWidth = 2.5 + min(max(powerW, 0) / 60, 1) * 2
+
+            // Base track.
+            context.stroke(
+                path,
+                with: .color(color.opacity(0.22)),
+                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+            )
+
+            // Animated flow dashes.
+            context.stroke(
+                path,
+                with: .color(color.opacity(0.9)),
+                style: StrokeStyle(
+                    lineWidth: lineWidth,
+                    lineCap: .round,
+                    dash: Self.dashPattern,
+                    dashPhase: dashPhase
+                )
+            )
+
+            // Arrow head pointing at the destination.
+            var arrow = Path()
+            arrow.move(to: CGPoint(x: endX - 6, y: midY - 4.5))
+            arrow.addLine(to: CGPoint(x: endX + 1, y: midY))
+            arrow.addLine(to: CGPoint(x: endX - 6, y: midY + 4.5))
+            context.stroke(
+                arrow,
+                with: .color(color),
+                style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
+            )
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            dashPhase = 0
+            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                // Decreasing the phase moves dashes toward the destination.
+                dashPhase = -Self.dashPeriod
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
 
 private struct PowerStatusMetricRow: View {
     let icon: String
