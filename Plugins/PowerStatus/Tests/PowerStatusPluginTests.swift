@@ -270,18 +270,16 @@ final class PowerStatusPluginTests: XCTestCase {
     func testContentHeightGrowsWithDiagramRows() {
         let oneRow = PowerStatusLayout.contentHeight(
             flowRowCount: 3,
-            miniMetricRowCount: 2,
             diagramRowCount: 1,
-            telemetryRowCount: 4,
-            telemetryGroupCount: 2,
+            capacityTileCount: 7,
+            voltageCurrentTileCount: 4,
             isDataAvailable: true
         )
         let twoRows = PowerStatusLayout.contentHeight(
             flowRowCount: 3,
-            miniMetricRowCount: 2,
             diagramRowCount: 2,
-            telemetryRowCount: 4,
-            telemetryGroupCount: 2,
+            capacityTileCount: 7,
+            voltageCurrentTileCount: 4,
             isDataAvailable: true
         )
 
@@ -290,25 +288,23 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertGreaterThan(oneRow, 0)
     }
 
-    func testContentHeightGrowsWithTelemetryGroups() {
-        let withoutTelemetry = PowerStatusLayout.contentHeight(
+    func testContentHeightGrowsWithCapacityTiles() {
+        let fewTiles = PowerStatusLayout.contentHeight(
             flowRowCount: 3,
-            miniMetricRowCount: 2,
             diagramRowCount: 1,
-            telemetryRowCount: 0,
-            telemetryGroupCount: 0,
+            capacityTileCount: 1,
+            voltageCurrentTileCount: 0,
             isDataAvailable: true
         )
-        let withTelemetry = PowerStatusLayout.contentHeight(
+        let manyTiles = PowerStatusLayout.contentHeight(
             flowRowCount: 3,
-            miniMetricRowCount: 2,
             diagramRowCount: 1,
-            telemetryRowCount: 4,
-            telemetryGroupCount: 2,
+            capacityTileCount: 8,
+            voltageCurrentTileCount: 0,
             isDataAvailable: true
         )
 
-        XCTAssertGreaterThan(withTelemetry, withoutTelemetry)
+        XCTAssertGreaterThan(manyTiles, fewTiles)
     }
 
     func testFullyChargedTileShownOnlyWhileStillOnPower() {
@@ -332,23 +328,27 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertFalse(partial.showFullyCharged)
     }
 
-    func testTelemetryGroupsAppearOnlyWhenDataExists() {
+    func testTelemetryTileCountsMatchAvailableData() {
         let bare = makeSnapshot(flowState: .onAC)
         XCTAssertFalse(bare.hasVoltageCurrentDetail)
-        XCTAssertFalse(bare.hasCapacityDetail)
-        XCTAssertEqual(PowerStatusLayout.telemetryRowCount(for: bare), 0)
-        XCTAssertEqual(PowerStatusLayout.telemetryGroupCount(for: bare), 0)
+        XCTAssertEqual(PowerStatusLayout.capacityTileCount(for: bare), 0)
+        XCTAssertEqual(PowerStatusLayout.voltageCurrentTileCount(for: bare), 0)
 
         let full = makeSnapshot(
             batteryVoltageMV: 12_000,
             batteryAmperageMA: -800,
+            batteryTemperatureC: 31.5,
+            cycleCount: 240,
+            batteryHealthPercent: 84,
             remainingCapacityMAH: 3_000,
             flowState: .discharging(rateW: 12)
         )
         XCTAssertTrue(full.hasVoltageCurrentDetail)
-        XCTAssertTrue(full.hasCapacityDetail)
-        XCTAssertEqual(PowerStatusLayout.telemetryRowCount(for: full), 2)
-        XCTAssertEqual(PowerStatusLayout.telemetryGroupCount(for: full), 2)
+        // Voltage and current only; no charging readings off power.
+        XCTAssertEqual(PowerStatusLayout.voltageCurrentTileCount(for: full), 2)
+        // Remaining capacity, health, cycles, temperature, and the discharge
+        // time estimate, which resolves from 36 Wh of remaining energy.
+        XCTAssertEqual(PowerStatusLayout.capacityTileCount(for: full), 5)
     }
 
     // MARK: - Helpers

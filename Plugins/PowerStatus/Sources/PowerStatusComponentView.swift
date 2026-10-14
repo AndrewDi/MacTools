@@ -79,10 +79,7 @@ struct PowerStatusComponentView: View {
             // Power flow metrics
             powerFlowSection
 
-            // Battery info
-            batterySection
-
-            // Grouped telemetry that the sections above do not repeat
+            // Battery and electrical telemetry, grouped
             telemetrySection
         }
         .padding(.vertical, PowerStatusLayout.cardVerticalPadding)
@@ -211,164 +208,165 @@ struct PowerStatusComponentView: View {
 
     // MARK: - Battery section
 
-    private var batterySection: some View {
-        VStack(spacing: PowerStatusLayout.rowVertical) {
-            // Battery level bar
-            batteryLevelBar
-
-            // Battery metrics grid
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: PowerStatusLayout.rowVertical) {
-                if let health = viewModel.snapshot.healthText {
-                    PowerStatusMiniMetric(
-                        icon: "heart.fill",
-                        iconTint: theme.status.success,
-                        title: localization.string("metric.health", defaultValue: "健康度"),
-                        value: health
-                    )
-                }
-
-                if let temp = viewModel.snapshot.temperatureText {
-                    PowerStatusMiniMetric(
-                        icon: "thermometer.medium",
-                        iconTint: tempTint,
-                        title: localization.string("metric.temperature", defaultValue: "温度"),
-                        value: temp
-                    )
-                }
-
-                if let cycles = viewModel.snapshot.cycleCount {
-                    PowerStatusMiniMetric(
-                        icon: "arrow.triangle.2.circlepath",
-                        iconTint: theme.text.secondary,
-                        title: localization.string("metric.cycles", defaultValue: "循环次数"),
-                        value: "\(cycles)"
-                    )
-                }
-
-                if viewModel.snapshot.showFullyCharged {
-                    PowerStatusMiniMetric(
-                        icon: "checkmark.circle.fill",
-                        iconTint: theme.status.success,
-                        title: localization.string("metric.timeToFull", defaultValue: "预计充满时间"),
-                        value: localization.string("metric.fullyCharged", defaultValue: "已充满")
-                    )
-                } else if let timeText = viewModel.snapshot.estimatedTimeRemainingText {
-                    PowerStatusMiniMetric(
-                        icon: "clock",
-                        iconTint: theme.status.informational,
-                        title: viewModel.snapshot.estimatedTimeLabel,
-                        value: timeText,
-                        help: viewModel.snapshot.estimatedTimeIsComputed
-                            ? localization.string(
-                                "metric.timeEstimate.help",
-                                defaultValue: "基于剩余电量与近期平均功耗估算"
-                            )
-                            : nil
-                    )
-                }
-            }
-        }
-        .padding(.horizontal, PowerStatusLayout.horizontalPadding)
-    }
-
     // MARK: - Telemetry
 
-    /// Battery telemetry the sections above do not already show, split into
-    /// labeled groups so nothing is repeated and nothing is hidden.
+    /// Every reading the power rows above do not already show, split into two
+    /// groups so nothing is repeated and nothing is hidden.
     @ViewBuilder
     private var telemetrySection: some View {
-        let snapshot = viewModel.snapshot
-        let showsVoltageCurrent = snapshot.hasVoltageCurrentDetail
-        let showsCapacity = snapshot.hasCapacityDetail
-
-        if showsVoltageCurrent || showsCapacity {
+        if viewModel.snapshot.isDataAvailable {
             VStack(alignment: .leading, spacing: PowerStatusLayout.section) {
-                if showsVoltageCurrent {
-                    detailGroup(title: localization.string("detail.group.voltage", defaultValue: "电压与电流")) {
-                        LazyVGrid(
-                            columns: [GridItem(.flexible()), GridItem(.flexible())],
-                            spacing: PowerStatusLayout.rowVertical
-                        ) {
-                            if let voltage = snapshot.batteryVoltageMV {
-                                PowerStatusMiniMetric(
-                                    icon: "bolt.horizontal",
-                                    iconTint: theme.status.informational,
-                                    title: localization.string("detail.voltage", defaultValue: "电压"),
-                                    value: "\(voltage) mV"
-                                )
-                            }
+                capacityGroup
 
-                            if let amperage = snapshot.batteryAmperageMA {
-                                // IOKit signs Amperage by direction (negative
-                                // while discharging). The charge and discharge
-                                // rows above already carry that, so show magnitude.
-                                PowerStatusMiniMetric(
-                                    icon: "arrow.left.arrow.right",
-                                    iconTint: theme.status.warning,
-                                    title: localization.string("detail.current", defaultValue: "电流"),
-                                    value: "\(abs(amperage)) mA"
-                                )
-                            }
-
-                            if let chargingVoltage = snapshot.chargingVoltageMV {
-                                PowerStatusMiniMetric(
-                                    icon: "bolt.badge.checkmark",
-                                    iconTint: theme.status.success,
-                                    title: localization.string("detail.chargingVoltage", defaultValue: "充电电压"),
-                                    value: "\(chargingVoltage) mV"
-                                )
-                            }
-
-                            if let chargingCurrent = snapshot.chargingCurrentMA {
-                                PowerStatusMiniMetric(
-                                    icon: "arrow.down.circle",
-                                    iconTint: theme.status.success,
-                                    title: localization.string("detail.chargingCurrent", defaultValue: "充电电流"),
-                                    value: "\(chargingCurrent) mA"
-                                )
-                            }
-                        }
-                    }
-                }
-
-                if showsCapacity {
-                    detailGroup(title: localization.string("detail.group.capacity", defaultValue: "电池容量")) {
-                        LazyVGrid(
-                            columns: [GridItem(.flexible()), GridItem(.flexible())],
-                            spacing: PowerStatusLayout.rowVertical
-                        ) {
-                            if let remaining = snapshot.remainingCapacityMAH {
-                                PowerStatusMiniMetric(
-                                    icon: "gauge.with.needle",
-                                    iconTint: theme.status.informational,
-                                    title: localization.string("detail.remainingCapacity", defaultValue: "剩余容量"),
-                                    value: "\(remaining) mAh"
-                                )
-                            }
-
-                            if let design = snapshot.designCapacityMAH {
-                                PowerStatusMiniMetric(
-                                    icon: "cube",
-                                    iconTint: theme.text.secondary,
-                                    title: localization.string("detail.designCapacity", defaultValue: "设计容量"),
-                                    value: "\(design) mAh"
-                                )
-                            }
-
-                            if let fullCharge = snapshot.fullChargeCapacityMAH {
-                                PowerStatusMiniMetric(
-                                    icon: "checkmark.shield",
-                                    iconTint: theme.status.success,
-                                    title: localization.string("detail.fullChargeCapacity", defaultValue: "满电容量"),
-                                    value: "\(fullCharge) mAh"
-                                )
-                            }
-                        }
-                    }
+                if viewModel.snapshot.hasVoltageCurrentDetail {
+                    voltageCurrentGroup
                 }
             }
             .padding(.horizontal, PowerStatusLayout.horizontalPadding)
             .padding(.top, PowerStatusLayout.section)
+        }
+    }
+
+    /// The pack itself: level, capacity, health, cycles, time estimate, and
+    /// temperature. Health is the full-charge to design capacity ratio, so it
+    /// sits beside the two readings it is derived from.
+    private var capacityGroup: some View {
+        let snapshot = viewModel.snapshot
+        return detailGroup(title: localization.string("detail.group.capacity", defaultValue: "电池容量")) {
+            VStack(alignment: .leading, spacing: PowerStatusLayout.rowVertical) {
+                batteryLevelBar
+
+                LazyVGrid(
+                    columns: [GridItem(.flexible()), GridItem(.flexible())],
+                    spacing: PowerStatusLayout.rowVertical
+                ) {
+                    if let remaining = snapshot.remainingCapacityMAH {
+                        PowerStatusMiniMetric(
+                            icon: "gauge.with.needle",
+                            iconTint: theme.status.informational,
+                            title: localization.string("detail.remainingCapacity", defaultValue: "剩余容量"),
+                            value: "\(remaining) mAh"
+                        )
+                    }
+
+                    if let fullCharge = snapshot.fullChargeCapacityMAH {
+                        PowerStatusMiniMetric(
+                            icon: "checkmark.shield",
+                            iconTint: theme.status.success,
+                            title: localization.string("detail.fullChargeCapacity", defaultValue: "满电容量"),
+                            value: "\(fullCharge) mAh"
+                        )
+                    }
+
+                    if let design = snapshot.designCapacityMAH {
+                        PowerStatusMiniMetric(
+                            icon: "cube",
+                            iconTint: theme.text.secondary,
+                            title: localization.string("detail.designCapacity", defaultValue: "设计容量"),
+                            value: "\(design) mAh"
+                        )
+                    }
+
+                    if let health = snapshot.healthText {
+                        PowerStatusMiniMetric(
+                            icon: "heart.fill",
+                            iconTint: theme.status.success,
+                            title: localization.string("metric.health", defaultValue: "健康度"),
+                            value: health
+                        )
+                    }
+
+                    if let cycles = snapshot.cycleCount {
+                        PowerStatusMiniMetric(
+                            icon: "arrow.triangle.2.circlepath",
+                            iconTint: theme.text.secondary,
+                            title: localization.string("metric.cycles", defaultValue: "循环次数"),
+                            value: "\(cycles)"
+                        )
+                    }
+
+                    if snapshot.showFullyCharged {
+                        PowerStatusMiniMetric(
+                            icon: "checkmark.circle.fill",
+                            iconTint: theme.status.success,
+                            title: localization.string("metric.timeToFull", defaultValue: "预计充满时间"),
+                            value: localization.string("metric.fullyCharged", defaultValue: "已充满")
+                        )
+                    } else if let timeText = snapshot.estimatedTimeRemainingText {
+                        PowerStatusMiniMetric(
+                            icon: "clock",
+                            iconTint: theme.status.informational,
+                            title: snapshot.estimatedTimeLabel,
+                            value: timeText,
+                            help: snapshot.estimatedTimeIsComputed
+                                ? localization.string(
+                                    "metric.timeEstimate.help",
+                                    defaultValue: "基于剩余电量与近期平均功耗估算"
+                                )
+                                : nil
+                        )
+                    }
+
+                    if let temp = snapshot.temperatureText {
+                        PowerStatusMiniMetric(
+                            icon: "thermometer.medium",
+                            iconTint: tempTint,
+                            title: localization.string("metric.temperature", defaultValue: "温度"),
+                            value: temp
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /// Raw electrical telemetry reported by the pack.
+    private var voltageCurrentGroup: some View {
+        let snapshot = viewModel.snapshot
+        return detailGroup(title: localization.string("detail.group.voltage", defaultValue: "电压与电流")) {
+            LazyVGrid(
+                columns: [GridItem(.flexible()), GridItem(.flexible())],
+                spacing: PowerStatusLayout.rowVertical
+            ) {
+                if let voltage = snapshot.batteryVoltageMV {
+                    PowerStatusMiniMetric(
+                        icon: "bolt.horizontal",
+                        iconTint: theme.status.informational,
+                        title: localization.string("detail.voltage", defaultValue: "电压"),
+                        value: "\(voltage) mV"
+                    )
+                }
+
+                if let amperage = snapshot.batteryAmperageMA {
+                    // IOKit signs Amperage by direction (negative while
+                    // discharging). The charge and discharge rows above already
+                    // carry that, so show magnitude.
+                    PowerStatusMiniMetric(
+                        icon: "arrow.left.arrow.right",
+                        iconTint: theme.status.warning,
+                        title: localization.string("detail.current", defaultValue: "电流"),
+                        value: "\(abs(amperage)) mA"
+                    )
+                }
+
+                if let chargingVoltage = snapshot.chargingVoltageMV {
+                    PowerStatusMiniMetric(
+                        icon: "bolt.badge.checkmark",
+                        iconTint: theme.status.success,
+                        title: localization.string("detail.chargingVoltage", defaultValue: "充电电压"),
+                        value: "\(chargingVoltage) mV"
+                    )
+                }
+
+                if let chargingCurrent = snapshot.chargingCurrentMA {
+                    PowerStatusMiniMetric(
+                        icon: "arrow.down.circle",
+                        iconTint: theme.status.success,
+                        title: localization.string("detail.chargingCurrent", defaultValue: "充电电流"),
+                        value: "\(chargingCurrent) mA"
+                    )
+                }
+            }
         }
     }
 
@@ -484,10 +482,9 @@ enum PowerStatusLayout {
     /// The host refines the span from the measured height reported by the view.
     static func contentHeight(
         flowRowCount: Int,
-        miniMetricRowCount: Int,
         diagramRowCount: Int,
-        telemetryRowCount: Int,
-        telemetryGroupCount: Int,
+        capacityTileCount: Int,
+        voltageCurrentTileCount: Int,
         isDataAvailable: Bool
     ) -> CGFloat {
         guard isDataAvailable else {
@@ -500,23 +497,24 @@ enum PowerStatusLayout {
         let powerFlow = CGFloat(rows) * metricRowHeight
             + CGFloat(max(rows - 1, 0)) * rowVertical
             + section
-        let miniRows = max(miniMetricRowCount, 1)
-        let battery = batteryBarHeight + rowVertical
-            + CGFloat(miniRows) * miniMetricRowHeight
-            + CGFloat(max(miniRows - 1, 0)) * rowVertical
-        let telemetry = telemetryHeight(rowCount: telemetryRowCount, groupCount: telemetryGroupCount)
+        // The capacity group always renders; it carries the battery level bar.
+        let capacity = groupHeight(
+            barHeight: batteryBarHeight + rowVertical,
+            tileCount: capacityTileCount
+        )
+        let voltageCurrent = groupHeight(barHeight: 0, tileCount: voltageCurrentTileCount)
         let padding = cardVerticalPadding * 2
-        return header + diagram + powerFlow + battery + telemetry + padding
+        return header + diagram + powerFlow + capacity + voltageCurrent + padding
     }
 
-    private static func telemetryHeight(rowCount: Int, groupCount: Int) -> CGFloat {
-        guard rowCount > 0, groupCount > 0 else { return 0 }
-        // One header per group; tiles are spaced within their own group.
-        let grid = CGFloat(rowCount) * miniMetricRowHeight
-            + CGFloat(max(rowCount - groupCount, 0)) * rowVertical
-        let headers = CGFloat(groupCount) * (detailGroupHeaderHeight + sectionHeaderContent)
-        let groupSpacing = CGFloat(max(groupCount - 1, 0)) * section
-        return section + headers + groupSpacing + grid
+    /// One telemetry group: its own leading spacing, header, an optional
+    /// leading bar, and a two-column tile grid.
+    private static func groupHeight(barHeight: CGFloat, tileCount: Int) -> CGFloat {
+        guard tileCount > 0 || barHeight > 0 else { return 0 }
+        let rows = (tileCount + 1) / 2
+        let grid = CGFloat(rows) * miniMetricRowHeight
+            + CGFloat(max(rows - 1, 0)) * rowVertical
+        return section + detailGroupHeaderHeight + sectionHeaderContent + barHeight + grid
     }
 
     private static func diagramHeight(diagramRowCount: Int) -> CGFloat {
@@ -551,36 +549,26 @@ enum PowerStatusLayout {
         return count
     }
 
-    /// Mirrors the mini metric tiles rendered by `PowerStatusComponentView`.
-    static func miniMetricRowCount(for snapshot: PowerStatusSnapshot) -> Int {
+    /// Mirrors the tiles rendered by the battery-capacity group. The group also
+    /// carries the battery level bar, so it always renders when data exists.
+    static func capacityTileCount(for snapshot: PowerStatusSnapshot) -> Int {
         guard snapshot.isDataAvailable else { return 0 }
-        let count = (snapshot.batteryHealthPercent != nil ? 1 : 0)
-            + (snapshot.batteryTemperatureC != nil ? 1 : 0)
+        return (snapshot.remainingCapacityMAH != nil ? 1 : 0)
+            + (snapshot.fullChargeCapacityMAH != nil ? 1 : 0)
+            + (snapshot.designCapacityMAH != nil ? 1 : 0)
+            + (snapshot.batteryHealthPercent != nil ? 1 : 0)
             + (snapshot.cycleCount != nil ? 1 : 0)
             + (snapshot.estimatedTimeRemainingMinutes != nil || snapshot.showFullyCharged ? 1 : 0)
-        return (count + 1) / 2
+            + (snapshot.batteryTemperatureC != nil ? 1 : 0)
     }
 
-    /// Mirrors the tiles rendered by the grouped telemetry section.
-    static func telemetryRowCount(for snapshot: PowerStatusSnapshot) -> Int {
+    /// Mirrors the tiles rendered by the voltage and current group.
+    static func voltageCurrentTileCount(for snapshot: PowerStatusSnapshot) -> Int {
         guard snapshot.isDataAvailable else { return 0 }
-        let voltageCurrent = (snapshot.batteryVoltageMV != nil ? 1 : 0)
+        return (snapshot.batteryVoltageMV != nil ? 1 : 0)
             + (snapshot.batteryAmperageMA != nil ? 1 : 0)
             + (snapshot.chargingVoltageMV != nil ? 1 : 0)
             + (snapshot.chargingCurrentMA != nil ? 1 : 0)
-        let capacity = (snapshot.remainingCapacityMAH != nil ? 1 : 0)
-            + (snapshot.designCapacityMAH != nil ? 1 : 0)
-            + (snapshot.fullChargeCapacityMAH != nil ? 1 : 0)
-        return (voltageCurrent + 1) / 2 + (capacity + 1) / 2
-    }
-
-    /// Mirrors the group headers rendered by the grouped telemetry section.
-    static func telemetryGroupCount(for snapshot: PowerStatusSnapshot) -> Int {
-        guard snapshot.isDataAvailable else { return 0 }
-        var count = 0
-        if snapshot.hasVoltageCurrentDetail { count += 1 }
-        if snapshot.hasCapacityDetail { count += 1 }
-        return count
     }
 }
 

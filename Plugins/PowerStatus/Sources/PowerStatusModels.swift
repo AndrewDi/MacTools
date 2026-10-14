@@ -239,11 +239,6 @@ struct PowerStatusSnapshot: Equatable {
             || chargingVoltageMV != nil || chargingCurrentMA != nil
     }
 
-    /// Whether any battery capacity value is reported.
-    var hasCapacityDetail: Bool {
-        remainingCapacityMAH != nil || designCapacityMAH != nil || fullChargeCapacityMAH != nil
-    }
-
     // MARK: - Private helpers
 
     private var validAvgTimeToEmptyMinutes: Int? {
