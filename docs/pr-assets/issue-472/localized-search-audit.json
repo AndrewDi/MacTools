@@ -1,0 +1,4363 @@
+{
+  "baseline": "a0cc1406997135edf79804fd87d862e50cda1e22",
+  "pluginsAudited": 64,
+  "changedManifests": 47,
+  "capabilityLabels": 156,
+  "existingTranslations": 119,
+  "authoredTranslations": 37,
+  "capabilityQueries": 1872,
+  "metadataQueries": 1536,
+  "perLocale": {
+    "ar": {
+      "capabilityBefore": 9,
+      "capabilityAfter": 156,
+      "metadataBefore": 81,
+      "metadataAfter": 128
+    },
+    "de": {
+      "capabilityBefore": 8,
+      "capabilityAfter": 156,
+      "metadataBefore": 82,
+      "metadataAfter": 128
+    },
+    "en": {
+      "capabilityBefore": 114,
+      "capabilityAfter": 156,
+      "metadataBefore": 128,
+      "metadataAfter": 128
+    },
+    "es": {
+      "capabilityBefore": 8,
+      "capabilityAfter": 156,
+      "metadataBefore": 82,
+      "metadataAfter": 128
+    },
+    "fr": {
+      "capabilityBefore": 8,
+      "capabilityAfter": 156,
+      "metadataBefore": 82,
+      "metadataAfter": 128
+    },
+    "ja": {
+      "capabilityBefore": 13,
+      "capabilityAfter": 156,
+      "metadataBefore": 82,
+      "metadataAfter": 128
+    },
+    "ko": {
+      "capabilityBefore": 11,
+      "capabilityAfter": 156,
+      "metadataBefore": 82,
+      "metadataAfter": 128
+    },
+    "pt": {
+      "capabilityBefore": 7,
+      "capabilityAfter": 156,
+      "metadataBefore": 82,
+      "metadataAfter": 128
+    },
+    "ru": {
+      "capabilityBefore": 5,
+      "capabilityAfter": 156,
+      "metadataBefore": 82,
+      "metadataAfter": 128
+    },
+    "tr": {
+      "capabilityBefore": 11,
+      "capabilityAfter": 156,
+      "metadataBefore": 83,
+      "metadataAfter": 128
+    },
+    "zh-Hans": {
+      "capabilityBefore": 111,
+      "capabilityAfter": 156,
+      "metadataBefore": 128,
+      "metadataAfter": 128
+    },
+    "zh-Hant": {
+      "capabilityBefore": 13,
+      "capabilityAfter": 156,
+      "metadataBefore": 81,
+      "metadataAfter": 128
+    }
+  },
+  "plugins": [
+    {
+      "directory": "AIAssistant",
+      "pluginID": "ai-assistant",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "translate",
+          "source": "Plugins/AIAssistant/Resources/Localizable.xcstrings#prompt.default.translate.name",
+          "evidence": "Plugins/AIAssistant/Sources/Settings/AIAssistantPromptStore.swift:69",
+          "queries": {
+            "ar": "ترجمة",
+            "de": "Übersetzen",
+            "en": "Translate",
+            "es": "Traducir",
+            "fr": "Traduire",
+            "ja": "翻訳",
+            "ko": "번역",
+            "pt": "Traduzir",
+            "ru": "Перевести",
+            "tr": "Çevir",
+            "zh-Hans": "翻译",
+            "zh-Hant": "翻譯"
+          },
+          "beforeMatchedLocales": [
+            "ar",
+            "de",
+            "en",
+            "es",
+            "fr",
+            "ja",
+            "ko",
+            "pt",
+            "ru",
+            "tr",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "summarize",
+          "source": "Plugins/AIAssistant/Resources/Localizable.xcstrings#prompt.default.summarize.name",
+          "evidence": "Plugins/AIAssistant/Sources/Settings/AIAssistantPromptStore.swift:82",
+          "queries": {
+            "ar": "تلخيص",
+            "de": "Zusammenfassen",
+            "en": "Summarize",
+            "es": "Resumir",
+            "fr": "Résumer",
+            "ja": "要約",
+            "ko": "요약",
+            "pt": "Resumir",
+            "ru": "Кратко изложить",
+            "tr": "Özetle",
+            "zh-Hans": "总结",
+            "zh-Hant": "摘要"
+          },
+          "beforeMatchedLocales": [
+            "ar",
+            "de",
+            "en",
+            "es",
+            "fr",
+            "ja",
+            "ko",
+            "pt",
+            "tr",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "polish",
+          "source": "Plugins/AIAssistant/Resources/Localizable.xcstrings#prompt.default.polish.name",
+          "evidence": "Plugins/AIAssistant/Sources/Settings/AIAssistantPromptStore.swift:95",
+          "queries": {
+            "ar": "تحسين الصياغة",
+            "de": "Text verbessern",
+            "en": "Polish",
+            "es": "Mejorar redacción",
+            "fr": "Améliorer le style",
+            "ja": "文章を推敲",
+            "ko": "문장 다듬기",
+            "pt": "Aprimorar texto",
+            "ru": "Улучшить текст",
+            "tr": "İyileştir",
+            "zh-Hans": "润色",
+            "zh-Hant": "潤飾"
+          },
+          "beforeMatchedLocales": [
+            "ar",
+            "en",
+            "tr",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "prompt template",
+          "source": "Plugins/AIAssistant/Resources/Localizable.xcstrings#settings.prompt.template.title",
+          "evidence": "Plugins/AIAssistant/Sources/Settings/AIAssistantSettingsView.swift:765",
+          "queries": {
+            "ar": "قالب التوجيه",
+            "de": "Prompt-Vorlage",
+            "en": "Prompt Template",
+            "es": "Plantilla de prompt",
+            "fr": "Modèle de prompt",
+            "ja": "プロンプトテンプレート",
+            "ko": "프롬프트 템플릿",
+            "pt": "Modelo de prompt",
+            "ru": "Шаблон промпта",
+            "tr": "İstem Şablonu",
+            "zh-Hans": "提示词模板 (Prompt Template)",
+            "zh-Hant": "提示詞模板 (Prompt Template)"
+          },
+          "beforeMatchedLocales": [
+            "en"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "clipboard text",
+          "source": "Plugins/AIAssistant/Resources/Localizable.xcstrings#settings.shortcutInput.clipboard.title",
+          "evidence": "Plugins/AIAssistant/Sources/AIAssistantPlugin.swift:362",
+          "queries": {
+            "ar": "استخدم الحافظة",
+            "de": "Zwischenablage verwenden",
+            "en": "Use Clipboard",
+            "es": "Usar portapapeles",
+            "fr": "Utiliser le Presse-papiers",
+            "ja": "クリップボードを使用する",
+            "ko": "클립보드 사용",
+            "pt": "Usar área de transferência",
+            "ru": "Использовать буфер обмена",
+            "tr": "Panoyu Kullan",
+            "zh-Hans": "使用剪贴板",
+            "zh-Hant": "使用剪貼簿"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "custom prompts",
+          "source": "authored capability translation",
+          "evidence": "Plugins/AIAssistant/Sources/Settings/AIAssistantPromptEditor.swift:41",
+          "queries": {
+            "ar": "مطالبات مخصصة",
+            "de": "Eigene Prompts",
+            "en": "Custom Prompts",
+            "es": "Indicaciones personalizadas",
+            "fr": "Prompts personnalisés",
+            "ja": "カスタムプロンプト",
+            "ko": "사용자 지정 프롬프트",
+            "pt": "Prompts personalizados",
+            "ru": "Пользовательские запросы",
+            "tr": "Özel istemler",
+            "zh-Hans": "自定义提示词",
+            "zh-Hant": "自訂提示詞"
+          },
+          "beforeMatchedLocales": [
+            "en"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "AIUsage",
+      "pluginID": "ai-usage",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "remaining quota",
+          "source": "Plugins/AIUsage/Resources/Localizable.xcstrings#window.primary",
+          "evidence": "Plugins/AIUsage/Sources/AIUsagePresentation.swift:40",
+          "queries": {
+            "ar": "الحصة المتبقية",
+            "de": "Verbleibendes Kontingent",
+            "en": "Remaining quota",
+            "es": "Cuota restante",
+            "fr": "Quota restant",
+            "ja": "残りの利用枠",
+            "ko": "남은 할당량",
+            "pt": "Cota restante",
+            "ru": "Оставшаяся квота",
+            "tr": "Kalan kota",
+            "zh-Hans": "剩余额度",
+            "zh-Hant": "剩餘額度"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "quota pace",
+          "source": "authored capability translation",
+          "evidence": "Plugins/AIUsage/Sources/AIUsagePresentation.swift:36",
+          "queries": {
+            "ar": "معدل استهلاك الحصة",
+            "de": "Kontingentverbrauchsrate",
+            "en": "Quota Consumption Rate",
+            "es": "Ritmo de consumo de la cuota",
+            "fr": "Rythme de consommation du quota",
+            "ja": "クォータ消費速度",
+            "ko": "할당량 소모 속도",
+            "pt": "Ritmo de consumo da quota",
+            "ru": "Скорость расходования квоты",
+            "tr": "Kota tüketim hızı",
+            "zh-Hans": "额度消耗速率",
+            "zh-Hant": "額度消耗速率"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "ActionGrid",
+      "pluginID": "action-grid",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "folders",
+          "source": "Plugins/ActionGrid/Resources/Localizable.xcstrings#文件夹",
+          "evidence": "Plugins/ActionGrid/Sources/ActionGridSettingsView.swift:255",
+          "queries": {
+            "ar": "مجلد",
+            "de": "Ordner",
+            "en": "Folder",
+            "es": "Carpeta",
+            "fr": "Dossier",
+            "ja": "フォルダ",
+            "ko": "폴더",
+            "pt": "Pasta",
+            "ru": "Папка",
+            "tr": "Klasör",
+            "zh-Hans": "文件夹",
+            "zh-Hant": "資料夾"
+          },
+          "beforeMatchedLocales": [
+            "en"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "nested folders",
+          "source": "authored capability translation",
+          "evidence": "Plugins/ActionGrid/Sources/ActionGridStore.swift:88",
+          "queries": {
+            "ar": "مجلدات متداخلة",
+            "de": "Verschachtelte Ordner",
+            "en": "Nested Folders",
+            "es": "Carpetas anidadas",
+            "fr": "Dossiers imbriqués",
+            "ja": "入れ子のフォルダ",
+            "ko": "중첩 폴더",
+            "pt": "Pastas aninhadas",
+            "ru": "Вложенные папки",
+            "tr": "İç içe klasörler",
+            "zh-Hans": "嵌套文件夹",
+            "zh-Hant": "巢狀資料夾"
+          },
+          "beforeMatchedLocales": [
+            "en"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "ActivityBar",
+      "pluginID": "activity-bar",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "screen time",
+          "source": "authored discovery translation; unsuitable native Plugins/ActivityBar/Resources/Localizable.xcstrings#component.metric.screenTime",
+          "evidence": "Plugins/ActivityBar/Sources/ActivityBarComponentView.swift:350",
+          "queries": {
+            "ar": "وقت النظر إلى الشاشة",
+            "de": "Bildschirmzeit",
+            "en": "Screen Time",
+            "es": "Tiempo de pantalla",
+            "fr": "Temps d'écran",
+            "ja": "スクリーンタイム",
+            "ko": "스크린 타임",
+            "pt": "Tempo de uso",
+            "ru": "Экранное время",
+            "tr": "Ekran Süresi",
+            "zh-Hans": "屏幕时间",
+            "zh-Hant": "螢幕時間"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "keystrokes",
+          "source": "Plugins/ActivityBar/Resources/Localizable.xcstrings#component.metric.keystrokes",
+          "evidence": "Plugins/ActivityBar/Sources/ActivityBarComponentView.swift:332",
+          "queries": {
+            "ar": "ضغطات المفاتيح",
+            "de": "Tastenanschläge",
+            "en": "Keystrokes",
+            "es": "Pulsiones de teclas",
+            "fr": "Frappes au clavier",
+            "ja": "キーストローク",
+            "ko": "키 입력",
+            "pt": "Pressionamentos de teclas",
+            "ru": "Нажатия клавиш",
+            "tr": "Tuş vuruşu",
+            "zh-Hans": "按键",
+            "zh-Hant": "按鍵"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "mouse clicks",
+          "source": "Plugins/ActivityBar/Resources/Localizable.xcstrings#component.metric.clicks",
+          "evidence": "Plugins/ActivityBar/Sources/ActivityBarComponentView.swift:337",
+          "queries": {
+            "ar": "النقرات",
+            "de": "Klicks",
+            "en": "Clicks",
+            "es": "Clics",
+            "fr": "Clics",
+            "ja": "クリック数",
+            "ko": "클릭수",
+            "pt": "Cliques",
+            "ru": "Клики",
+            "tr": "Tıklama",
+            "zh-Hans": "点击",
+            "zh-Hant": "點擊"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "scrolls",
+          "source": "authored discovery translation; unsuitable native Plugins/ActivityBar/Resources/Localizable.xcstrings#component.metric.scrolls",
+          "evidence": "Plugins/ActivityBar/Sources/ActivityBarComponentView.swift:345",
+          "queries": {
+            "ar": "التمرير",
+            "de": "Scrollen",
+            "en": "Scrolls",
+            "es": "Desplazamiento",
+            "fr": "Défilement",
+            "ja": "スクロール",
+            "ko": "스크롤",
+            "pt": "Rolagem",
+            "ru": "Прокрутка",
+            "tr": "Kaydırma",
+            "zh-Hans": "滚动",
+            "zh-Hant": "滾動"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "AI work time",
+          "source": "Plugins/ActivityBar/Resources/Localizable.xcstrings#component.ai.title",
+          "evidence": "Plugins/ActivityBar/Sources/ActivityBarComponentView.swift:437",
+          "queries": {
+            "ar": "وقت عمل الذكاء الاصطناعي",
+            "de": "KI-Arbeitszeit",
+            "en": "AI Work Time",
+            "es": "Tiempo de trabajo de IA",
+            "fr": "Temps de travail de l'IA",
+            "ja": "AI の作業時間",
+            "ko": "AI 작업시간",
+            "pt": "Tempo de trabalho da IA",
+            "ru": "Время работы ИИ",
+            "tr": "Yapay Zekâ Çalışma Süresi",
+            "zh-Hans": "AI 工作时长",
+            "zh-Hant": "AI 工作時長"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "AppHotkey",
+      "pluginID": "app-hotkey",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "hide app",
+          "source": "authored capability translation",
+          "evidence": "Plugins/AppHotkey/Sources/AppHotkeyPlugin.swift:38",
+          "queries": {
+            "ar": "إخفاء التطبيق",
+            "de": "App ausblenden",
+            "en": "Hide App",
+            "es": "Ocultar aplicación",
+            "fr": "Masquer l’application",
+            "ja": "アプリを隠す",
+            "ko": "앱 숨기기",
+            "pt": "Ocultar aplicativo",
+            "ru": "Скрыть приложение",
+            "tr": "Uygulamayı gizle",
+            "zh-Hans": "隐藏应用",
+            "zh-Hant": "隱藏應用程式"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "AppVolume",
+      "pluginID": "app-volume",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "per-app volume",
+          "source": "authored capability translation",
+          "evidence": "Plugins/AppVolume/Sources/AppVolumePlugin.swift:756",
+          "queries": {
+            "ar": "مستوى الصوت لكل تطبيق",
+            "de": "Lautstärke pro App",
+            "en": "Per-App Volume",
+            "es": "Volumen por aplicación",
+            "fr": "Volume par application",
+            "ja": "アプリごとの音量",
+            "ko": "앱별 음량",
+            "pt": "Volume por aplicativo",
+            "ru": "Громкость отдельных приложений",
+            "tr": "Uygulama başına ses düzeyi",
+            "zh-Hans": "应用音量",
+            "zh-Hant": "應用程式音量"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "es",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "mute app",
+          "source": "authored capability translation",
+          "evidence": "Plugins/AppVolume/Sources/AppVolumePlugin.swift:756",
+          "queries": {
+            "ar": "كتم صوت التطبيق",
+            "de": "App stummschalten",
+            "en": "Mute App",
+            "es": "Silenciar aplicación",
+            "fr": "Couper le son d’une application",
+            "ja": "アプリを消音",
+            "ko": "앱 음소거",
+            "pt": "Silenciar aplicativo",
+            "ru": "Отключить звук приложения",
+            "tr": "Uygulamanın sesini kapat",
+            "zh-Hans": "应用静音",
+            "zh-Hant": "應用程式靜音"
+          },
+          "beforeMatchedLocales": [
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "audio mixer",
+          "source": "authored capability translation",
+          "evidence": "Plugins/AppVolume/Sources/AppVolumePlugin.swift:756",
+          "queries": {
+            "ar": "مزج الصوت",
+            "de": "Audiomixer",
+            "en": "Audio Mixer",
+            "es": "Mezclador de audio",
+            "fr": "Mixeur audio",
+            "ja": "オーディオミキサー",
+            "ko": "오디오 믹서",
+            "pt": "Mixer de áudio",
+            "ru": "Аудиомикшер",
+            "tr": "Ses mikseri",
+            "zh-Hans": "音量混音器",
+            "zh-Hant": "音訊混音器"
+          },
+          "beforeMatchedLocales": [
+            "de",
+            "en",
+            "ja",
+            "ko",
+            "ru"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "Appearance",
+      "pluginID": "appearance",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "AppleShortcuts",
+      "pluginID": "apple-shortcuts",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "run shortcuts",
+          "source": "authored capability translation",
+          "evidence": "Plugins/AppleShortcuts/Sources/AppleShortcutsSettingsView.swift:210",
+          "queries": {
+            "ar": "تشغيل الاختصارات",
+            "de": "Kurzbefehle ausführen",
+            "en": "Run Shortcuts",
+            "es": "Ejecutar atajos",
+            "fr": "Exécuter des raccourcis",
+            "ja": "ショートカットを実行",
+            "ko": "단축어 실행",
+            "pt": "Executar atalhos",
+            "ru": "Запуск команд",
+            "tr": "Kestirmeleri çalıştır",
+            "zh-Hans": "运行快捷指令",
+            "zh-Hant": "執行捷徑"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "shortcut folders",
+          "source": "authored capability translation",
+          "evidence": "Plugins/AppleShortcuts/Sources/AppleShortcutsSettingsView.swift:210",
+          "queries": {
+            "ar": "مجلدات الاختصارات",
+            "de": "Kurzbefehlordner",
+            "en": "Shortcut Folders",
+            "es": "Carpetas de atajos",
+            "fr": "Dossiers de raccourcis",
+            "ja": "ショートカットのフォルダ",
+            "ko": "단축어 폴더",
+            "pt": "Pastas de atalhos",
+            "ru": "Папки команд",
+            "tr": "Kestirme klasörleri",
+            "zh-Hans": "快捷指令文件夹",
+            "zh-Hant": "捷徑資料夾"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "AutoHideDock",
+      "pluginID": "auto-hide-dock",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "show dock",
+          "source": "Plugins/AutoHideDock/Resources/Localizable.xcstrings#action.show.title",
+          "evidence": "Plugins/AutoHideDock/Sources/AutoHideDockPlugin.swift:204",
+          "queries": {
+            "ar": "إظهار Dock",
+            "de": "Dock einblenden",
+            "en": "Show Dock",
+            "es": "Mostrar el Dock",
+            "fr": "Afficher le Dock",
+            "ja": "Dockを表示",
+            "ko": "Dock 보기",
+            "pt": "Mostrar Dock",
+            "ru": "Показать Dock",
+            "tr": "Dock'ı Göster",
+            "zh-Hans": "显示程序坞",
+            "zh-Hant": "顯示程式塢"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "AutoHideMenuBar",
+      "pluginID": "auto-hide-menu-bar",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "menu bar visibility",
+          "source": "Plugins/AutoHideMenuBar/Resources/Localizable.xcstrings#action.setMode.title",
+          "evidence": "Plugins/AutoHideMenuBar/Sources/AutoHideMenuBarPlugin.swift:153",
+          "queries": {
+            "ar": "ضبط إظهار شريط القوائم",
+            "de": "Sichtbarkeit der Menüleiste festlegen",
+            "en": "Set Menu Bar Visibility",
+            "es": "Configurar la visibilidad de la barra de menús",
+            "fr": "Définir la visibilité de la barre de menus",
+            "ja": "メニューバーの表示設定",
+            "ko": "메뉴 막대 표시 설정",
+            "pt": "Definir visibilidade da barra de menu",
+            "ru": "Настроить видимость строки меню",
+            "tr": "Menü Çubuğu Görünürlüğünü Ayarla",
+            "zh-Hans": "设置菜单栏显示方式",
+            "zh-Hant": "設定選單列顯示方式"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "show menu bar",
+          "source": "Plugins/AutoHideMenuBar/Resources/Localizable.xcstrings#action.show.title",
+          "evidence": "Plugins/AutoHideMenuBar/Sources/AutoHideMenuBarPlugin.swift:178",
+          "queries": {
+            "ar": "إظهار شريط القوائم",
+            "de": "Menüleiste einblenden",
+            "en": "Show Menu Bar",
+            "es": "Mostrar la barra de menús",
+            "fr": "Afficher la barre des menus",
+            "ja": "メニューバーを表示",
+            "ko": "메뉴 막대 보기",
+            "pt": "Mostrar barra de menus",
+            "ru": "Показать строку меню",
+            "tr": "Menü Çubuğunu Göster",
+            "zh-Hans": "显示菜单栏",
+            "zh-Hant": "顯示選單列"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "AutoInput",
+      "pluginID": "auto-input",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "input source HUD",
+          "source": "Plugins/AutoInput/Resources/Localizable.xcstrings#settings.hud.title",
+          "evidence": "Plugins/AutoInput/Sources/AutoInputSettingsView.swift:109",
+          "queries": {
+            "ar": "مؤشر مصدر الإدخال",
+            "de": "Eingabequellenanzeige",
+            "en": "Input Source HUD",
+            "es": "Indicador de fuente de entrada",
+            "fr": "Indicateur de source de saisie",
+            "ja": "入力ソース表示",
+            "ko": "입력 소스 표시",
+            "pt": "Indicador de fonte de entrada",
+            "ru": "Индикатор источника ввода",
+            "tr": "Giriş Kaynağı Göstergesi",
+            "zh-Hans": "输入法提示",
+            "zh-Hant": "輸入法提示"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "input source shortcuts",
+          "source": "Plugins/AutoInput/Resources/Localizable.xcstrings#settings.shortcuts.title",
+          "evidence": "Plugins/AutoInput/Sources/AutoInputPlugin.swift:155",
+          "queries": {
+            "ar": "اختصارات مصادر الإدخال",
+            "de": "Eingabequellen-Kurzbefehle",
+            "en": "Input Source Shortcuts",
+            "es": "Atajos de fuente de entrada",
+            "fr": "Raccourcis de source de saisie",
+            "ja": "入力ソースのショートカット",
+            "ko": "입력 소스 단축키",
+            "pt": "Atalhos de fonte de entrada",
+            "ru": "Сочетания клавиш источников ввода",
+            "tr": "Giriş Kaynağı Kısayolları",
+            "zh-Hans": "输入法快捷键",
+            "zh-Hant": "輸入法快速鍵"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "BatteryChargeLimit",
+      "pluginID": "battery-charge-limit",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "Calendar",
+      "pluginID": "calendar",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "lunar calendar",
+          "source": "Plugins/Calendar/Resources/Localizable.xcstrings#settings.alternateCalendar.chinese",
+          "evidence": "Plugins/Calendar/Sources/CalendarDisplayPolicy.swift:11",
+          "queries": {
+            "ar": "التقويم القمري الصيني",
+            "de": "Chinesischer Mondkalender",
+            "en": "Chinese lunar calendar",
+            "es": "Calendario lunar chino",
+            "fr": "Calendrier lunaire chinois",
+            "ja": "中国の旧暦",
+            "ko": "중국 음력",
+            "pt": "Calendário lunar chinês",
+            "ru": "Китайский лунный календарь",
+            "tr": "Çin ay takvimi",
+            "zh-Hans": "农历",
+            "zh-Hant": "農曆"
+          },
+          "beforeMatchedLocales": [
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "recent events",
+          "source": "Plugins/Calendar/Resources/Localizable.xcstrings#agenda.title",
+          "evidence": "Plugins/Calendar/Sources/CalendarPlugin.swift:206",
+          "queries": {
+            "ar": "الأحداث القريبة",
+            "de": "Aktuelle Termine",
+            "en": "Recent Events",
+            "es": "Eventos recientes",
+            "fr": "Événements récents",
+            "ja": "最近の予定",
+            "ko": "최근 일정",
+            "pt": "Eventos recentes",
+            "ru": "Ближайшие события",
+            "tr": "Yakın Etkinlikler",
+            "zh-Hans": "近期日程",
+            "zh-Hant": "近期行程"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "ClipboardClear",
+      "pluginID": "clipboard-clear",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "ClipboardHistory",
+      "pluginID": "clipboard",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "keyword expansion",
+          "source": "Plugins/ClipboardHistory/Resources/Localizable.xcstrings#settings.saved.expansion.title",
+          "evidence": "Plugins/ClipboardHistory/Sources/ClipboardSavedLibraryView.swift:33",
+          "queries": {
+            "ar": "توسيع كلمات المقتطفات",
+            "de": "Textbaustein-Kürzel erweitern",
+            "en": "Expand Snippet Keywords",
+            "es": "Expandir palabras clave de fragmentos",
+            "fr": "Développer les mots-clés d’extrait",
+            "ja": "スニペットキーワードを展開",
+            "ko": "스니펫 키워드 확장",
+            "pt": "Expandir palavras-chave de trechos",
+            "ru": "Раскрывать ключевые слова фрагментов",
+            "tr": "Parçacık Anahtar Sözcüklerini Genişlet",
+            "zh-Hans": "展开片段关键词",
+            "zh-Hant": "展開片段關鍵字"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "clipboard backup",
+          "source": "Plugins/ClipboardHistory/Resources/Localizable.xcstrings#backup.createTitle",
+          "evidence": "Plugins/ClipboardHistory/Sources/ClipboardBackupView.swift:123",
+          "queries": {
+            "ar": "نسخ بيانات الحافظة احتياطيًا",
+            "de": "Zwischenablagedaten sichern",
+            "en": "Back Up Clipboard Data",
+            "es": "Crear copia de los datos del portapapeles",
+            "fr": "Sauvegarder les données du presse-papiers",
+            "ja": "クリップボードデータをバックアップ",
+            "ko": "클립보드 데이터 백업",
+            "pt": "Fazer backup dos dados da área de transferência",
+            "ru": "Создать резервную копию буфера обмена",
+            "tr": "Pano Verilerini Yedekle",
+            "zh-Hans": "备份剪贴板数据",
+            "zh-Hant": "備份剪貼簿資料"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "paste",
+          "source": "Plugins/ClipboardHistory/Resources/Localizable.xcstrings#common.paste",
+          "evidence": "Plugins/ClipboardHistory/Sources/ClipboardHistoryPlugin.swift:173",
+          "queries": {
+            "ar": "لصق",
+            "de": "Einfügen",
+            "en": "Paste",
+            "es": "Pegar",
+            "fr": "Coller",
+            "ja": "ペースト",
+            "ko": "붙여넣기",
+            "pt": "Colar",
+            "ru": "Вставить",
+            "tr": "Yapıştır",
+            "zh-Hans": "粘贴",
+            "zh-Hant": "貼上"
+          },
+          "beforeMatchedLocales": [
+            "ar",
+            "en",
+            "es",
+            "fr",
+            "ja",
+            "ko",
+            "tr",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "export",
+          "source": "Plugins/ClipboardHistory/Resources/Localizable.xcstrings#panel.shortcuts.export",
+          "evidence": "Plugins/ClipboardHistory/Sources/ClipboardHistoryPlugin.swift:944",
+          "queries": {
+            "ar": "تصدير",
+            "de": "Exportieren",
+            "en": "Export",
+            "es": "Exportar",
+            "fr": "Exporter",
+            "ja": "書き出す",
+            "ko": "내보내기",
+            "pt": "Exportar",
+            "ru": "Экспорт",
+            "tr": "Dışa Aktar",
+            "zh-Hans": "导出",
+            "zh-Hant": "輸出"
+          },
+          "beforeMatchedLocales": [
+            "en"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "text expansion",
+          "source": "authored capability translation",
+          "evidence": "Plugins/ClipboardHistory/Sources/ClipboardSavedLibraryView.swift:146",
+          "queries": {
+            "ar": "توسيع النص",
+            "de": "Texterweiterung",
+            "en": "Text Expansion",
+            "es": "Expansión de texto",
+            "fr": "Expansion de texte",
+            "ja": "テキスト展開",
+            "ko": "텍스트 확장",
+            "pt": "Expansão de texto",
+            "ru": "Развёртывание текста",
+            "tr": "Metin genişletme",
+            "zh-Hans": "文本展开",
+            "zh-Hant": "文字展開"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "CloudflareR2",
+      "pluginID": "cloudflare-r2",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "public link",
+          "source": "Plugins/CloudflareR2/Resources/Localizable.xcstrings#settings.options.publicURL",
+          "evidence": "Plugins/CloudflareR2/Sources/R2SettingsView.swift:75",
+          "queries": {
+            "ar": "عنوان الوصول العام",
+            "de": "Öffentliche Zugriffs-URL",
+            "en": "Public Access URL",
+            "es": "URL de acceso público",
+            "fr": "URL d’accès public",
+            "ja": "公開アクセス URL",
+            "ko": "공개 접근 URL",
+            "pt": "URL de acesso público",
+            "ru": "URL публичного доступа",
+            "tr": "Genel Erişim Adresi",
+            "zh-Hans": "公开访问地址",
+            "zh-Hant": "公開存取網址"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "object storage",
+          "source": "authored capability translation",
+          "evidence": "Plugins/CloudflareR2/Sources/R2UploadService.swift:162",
+          "queries": {
+            "ar": "تخزين الكائنات",
+            "de": "Objektspeicher",
+            "en": "Object Storage",
+            "es": "Almacenamiento de objetos",
+            "fr": "Stockage d’objets",
+            "ja": "オブジェクトストレージ",
+            "ko": "객체 스토리지",
+            "pt": "Armazenamento de objetos",
+            "ru": "Объектное хранилище",
+            "tr": "Nesne depolama",
+            "zh-Hans": "对象存储",
+            "zh-Hant": "物件儲存"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "DeviceBattery",
+      "pluginID": "device-battery",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "low battery notifications",
+          "source": "Plugins/DeviceBattery/Resources/Localizable.xcstrings#settings.notification.title",
+          "evidence": "Plugins/DeviceBattery/Sources/DeviceBatteryPlugin.swift:213",
+          "queries": {
+            "ar": "إشعارات انخفاض مستوى البطارية",
+            "de": "Benachrichtigungen bei niedrigem Batteriestand",
+            "en": "Low Battery Notifications",
+            "es": "Notificaciones de batería baja",
+            "fr": "Notifications de batterie faible",
+            "ja": "バッテリー残量低下の通知",
+            "ko": "배터리 부족 알림",
+            "pt": "Notificações de bateria fraca",
+            "ru": "Уведомления о низком заряде батареи",
+            "tr": "Düşük Pil Bildirimleri",
+            "zh-Hans": "低电量通知",
+            "zh-Hant": "低電量通知"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "DiskClean",
+      "pluginID": "disk-clean",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "app caches",
+          "source": "Plugins/DiskClean/Resources/Localizable.xcstrings#category.appCaches.title",
+          "evidence": "Plugins/DiskClean/Sources/DiskCleanRuleModels.swift:115",
+          "queries": {
+            "ar": "ذاكرة التطبيقات المؤقتة",
+            "de": "App-Caches",
+            "en": "App caches",
+            "es": "Cachés de aplicaciones",
+            "fr": "Caches des apps",
+            "ja": "アプリキャッシュ",
+            "ko": "앱 캐시",
+            "pt": "Caches de aplicações",
+            "ru": "Кэши приложений",
+            "tr": "Uygulama önbellekleri",
+            "zh-Hans": "应用缓存",
+            "zh-Hant": "App 快取"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "browser caches",
+          "source": "Plugins/DiskClean/Resources/Localizable.xcstrings#category.browsers.title",
+          "evidence": "Plugins/DiskClean/Sources/DiskCleanRuleModels.swift:115",
+          "queries": {
+            "ar": "ذاكرة المتصفح المؤقتة",
+            "de": "Browser-Caches",
+            "en": "Browser caches",
+            "es": "Cachés del navegador",
+            "fr": "Caches de navigateur",
+            "ja": "ブラウザキャッシュ",
+            "ko": "브라우저 캐시",
+            "pt": "Caches do navegador",
+            "ru": "Кэши браузеров",
+            "tr": "Tarayıcı önbellekleri",
+            "zh-Hans": "浏览器缓存",
+            "zh-Hant": "瀏覽器快取"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "logs and diagnostic reports",
+          "source": "Plugins/DiskClean/Resources/Localizable.xcstrings#category.logs.title",
+          "evidence": "Plugins/DiskClean/Sources/DiskCleanRuleModels.swift:115",
+          "queries": {
+            "ar": "السجلات وتقارير التشخيص",
+            "de": "Protokolle und Diagnoseberichte",
+            "en": "Logs and diagnostic reports",
+            "es": "Registros e informes de diagnóstico",
+            "fr": "Journaux et rapports de diagnostic",
+            "ja": "ログと診断レポート",
+            "ko": "로그 및 진단 보고서",
+            "pt": "Registos e relatórios de diagnóstico",
+            "ru": "Журналы и отчёты диагностики",
+            "tr": "Günlükler ve tanılama raporları",
+            "zh-Hans": "日志与诊断报告",
+            "zh-Hant": "日誌與診斷報告"
+          },
+          "beforeMatchedLocales": [
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "DisplayBrightness",
+      "pluginID": "display-brightness",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "software brightness",
+          "source": "authored capability translation",
+          "evidence": "Plugins/DisplayBrightness/Sources/DisplayBrightnessBackends.swift:154",
+          "queries": {
+            "ar": "سطوع برمجي",
+            "de": "Software-Helligkeit",
+            "en": "Software Brightness",
+            "es": "Brillo por software",
+            "fr": "Luminosité logicielle",
+            "ja": "ソフトウェアによる明るさ調整",
+            "ko": "소프트웨어 밝기 조절",
+            "pt": "Brilho por software",
+            "ru": "Программная яркость",
+            "tr": "Yazılımla parlaklık",
+            "zh-Hans": "软件亮度",
+            "zh-Hant": "軟體亮度"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "DisplayResolution",
+      "pluginID": "display-resolution",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "DisplaySleep",
+      "pluginID": "display-sleep",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "turn off displays",
+          "source": "authored capability translation",
+          "evidence": "Plugins/DisplaySleep/Sources/DisplaySleepPlugin.swift:189",
+          "queries": {
+            "ar": "إطفاء الشاشات",
+            "de": "Bildschirme ausschalten",
+            "en": "Turn Off Displays",
+            "es": "Apagar pantallas",
+            "fr": "Éteindre les écrans",
+            "ja": "ディスプレイをオフにする",
+            "ko": "디스플레이 끄기",
+            "pt": "Desligar monitores",
+            "ru": "Выключить дисплеи",
+            "tr": "Ekranları kapat",
+            "zh-Hans": "关闭显示器",
+            "zh-Hant": "關閉顯示器"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "DisplayTrueColor",
+      "pluginID": "display-true-color",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "DisplayVolume",
+      "pluginID": "display-volume",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "volume shortcuts",
+          "source": "Plugins/DisplayVolume/Resources/Localizable.xcstrings#shortcut.settingsGroupTitle",
+          "evidence": "Plugins/DisplayVolume/Sources/DisplayVolumePlugin.swift:523",
+          "queries": {
+            "ar": "اختصارات الصوت",
+            "de": "Lautstärketastaturkürzel",
+            "en": "Volume Shortcuts",
+            "es": "Atajos de volumen",
+            "fr": "Raccourcis de volume",
+            "ja": "音量ショートカット",
+            "ko": "볼륨 단축키",
+            "pt": "Atalhos de volume",
+            "ru": "Горячие клавиши громкости",
+            "tr": "Ses Kısayolları",
+            "zh-Hans": "音量快捷键",
+            "zh-Hant": "音量快捷鍵"
+          },
+          "beforeMatchedLocales": [
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "follow mouse volume target",
+          "source": "Plugins/DisplayVolume/Resources/Localizable.xcstrings#settings.shortcutTarget.followsMouse",
+          "evidence": "Plugins/DisplayVolume/Sources/DisplayVolumeShortcutPreferences.swift:16",
+          "queries": {
+            "ar": "يتبع المؤشر",
+            "de": "Cursor folgen",
+            "en": "Follow Mouse",
+            "es": "Seguir el cursor",
+            "fr": "Suivre le curseur",
+            "ja": "カーソルに追従",
+            "ko": "마우스 추종",
+            "pt": "Seguir o cursor",
+            "ru": "Следовать за курсором",
+            "tr": "İmleci İzle",
+            "zh-Hans": "跟随鼠标",
+            "zh-Hant": "跟隨滑鼠"
+          },
+          "beforeMatchedLocales": [
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "DockClickMinimize",
+      "pluginID": "dock-click-minimize",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "DockLock",
+      "pluginID": "dock-lock",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "DuoStatus",
+      "pluginID": "duo-status",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "Wi-Fi signal",
+          "source": "Plugins/DuoStatus/Resources/Localizable.xcstrings#settings.indicatorWiFi",
+          "evidence": "Plugins/DuoStatus/Sources/DuoStatusPlugin.swift:336",
+          "queries": {
+            "ar": "إشارة Wi-Fi",
+            "de": "WLAN-Signal",
+            "en": "Wi-Fi Signal",
+            "es": "Señal Wi-Fi",
+            "fr": "Signal Wi-Fi",
+            "ja": "Wi-Fi 信号",
+            "ko": "Wi-Fi 신호",
+            "pt": "Sinal Wi-Fi",
+            "ru": "Сигнал Wi-Fi",
+            "tr": "Wi-Fi Sinyali",
+            "zh-Hans": "Wi-Fi 信号",
+            "zh-Hant": "Wi-Fi 訊號"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "ja",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "battery percentage",
+          "source": "Plugins/DuoStatus/Resources/Localizable.xcstrings#settings.showsPercentage",
+          "evidence": "Plugins/DuoStatus/Sources/DuoStatusPlugin.swift:194",
+          "queries": {
+            "ar": "إظهار نسبة البطارية",
+            "de": "Batterie in Prozent anzeigen",
+            "en": "Show Battery Percentage",
+            "es": "Mostrar porcentaje de batería",
+            "fr": "Afficher le pourcentage de batterie",
+            "ja": "バッテリー残量をパーセントで表示",
+            "ko": "배터리 퍼센트 표시",
+            "pt": "Mostrar percentagem da bateria",
+            "ru": "Показывать заряд в процентах",
+            "tr": "Pil Yüzdesini Göster",
+            "zh-Hans": "显示电量百分比",
+            "zh-Hant": "顯示電量百分比"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "Bluetooth audio status",
+          "source": "Plugins/DuoStatus/Resources/Localizable.xcstrings#settings.bluetoothGlyphDescription",
+          "evidence": "Plugins/DuoStatus/Sources/DuoStatusPlugin.swift:371",
+          "queries": {
+            "ar": "يعرض علامة Bluetooth أثناء استخدام جهاز صوت Bluetooth.",
+            "de": "Zeigt eine Bluetooth-Markierung, solange ein Bluetooth-Audiogerät verwendet wird.",
+            "en": "Shows a Bluetooth mark while a Bluetooth audio device is in use.",
+            "es": "Muestra una marca Bluetooth mientras se usa un dispositivo de audio Bluetooth.",
+            "fr": "Affiche une marque Bluetooth lorsqu’un appareil audio Bluetooth est utilisé.",
+            "ja": "Bluetooth オーディオ機器の使用中に Bluetooth マークを表示します。",
+            "ko": "블루투스 오디오 기기를 사용할 때 블루투스 표시를 보여줍니다.",
+            "pt": "Mostra uma marca Bluetooth enquanto um dispositivo de áudio Bluetooth está em uso.",
+            "ru": "Показывает значок Bluetooth, пока используется аудиоустройство Bluetooth.",
+            "tr": "Bir Bluetooth ses aygıtı kullanılırken Bluetooth işareti gösterir.",
+            "zh-Hans": "使用蓝牙音频设备时显示蓝牙标记。",
+            "zh-Hant": "使用藍牙音訊裝置時顯示藍牙標記。"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "EjectDisk",
+      "pluginID": "eject-disk",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "external drive",
+          "source": "authored capability translation",
+          "evidence": "Plugins/EjectDisk/Sources/EjectDiskService.swift:129",
+          "queries": {
+            "ar": "قرص خارجي",
+            "de": "Externes Laufwerk",
+            "en": "External Drive",
+            "es": "Unidad externa",
+            "fr": "Disque externe",
+            "ja": "外付けドライブ",
+            "ko": "외장 드라이브",
+            "pt": "Unidade externa",
+            "ru": "Внешний диск",
+            "tr": "Harici sürücü",
+            "zh-Hans": "外接磁盘",
+            "zh-Hant": "外接磁碟"
+          },
+          "beforeMatchedLocales": [
+            "en"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "EmptyTrash",
+      "pluginID": "empty-trash",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "FanControl",
+      "pluginID": "fan-control",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "full-speed fans",
+          "source": "Plugins/FanControl/Resources/Localizable.xcstrings#preset.fullSpeed.name",
+          "evidence": "Plugins/FanControl/Sources/FanControlModels.swift:25",
+          "queries": {
+            "ar": "السرعة الكاملة",
+            "de": "Volle Geschwindigkeit",
+            "en": "Full Speed",
+            "es": "Velocidad máxima",
+            "fr": "Pleine vitesse",
+            "ja": "フルスピード",
+            "ko": "최대 속도",
+            "pt": "Velocidade máxima",
+            "ru": "Полная скорость",
+            "tr": "Tam Hız",
+            "zh-Hans": "全速",
+            "zh-Hant": "全速"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "custom fan presets",
+          "source": "Plugins/FanControl/Resources/Localizable.xcstrings#settings.custom.title",
+          "evidence": "Plugins/FanControl/Sources/FanControlPlugin.swift:296",
+          "queries": {
+            "ar": "الإعدادات المسبقة المخصصة",
+            "de": "Benutzerdefinierte Voreinstellungen",
+            "en": "Custom Presets",
+            "es": "Preajustes personalizados",
+            "fr": "Préréglages personnalisés",
+            "ja": "カスタム プリセット",
+            "ko": "사용자 정의 사전 설정",
+            "pt": "Predefinições personalizadas",
+            "ru": "Пользовательские настройки",
+            "tr": "Özel Hazır Ayarlar",
+            "zh-Hans": "自定义预设",
+            "zh-Hant": "自定義預設"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "custom RPM target",
+          "source": "authored discovery translation; unsuitable native Plugins/FanControl/Resources/Localizable.xcstrings#panel.slider.targetRPM",
+          "evidence": "Plugins/FanControl/Sources/FanControlPlugin.swift:687",
+          "queries": {
+            "ar": "سرعة الدوران المستهدفة",
+            "de": "Ziel-RPM",
+            "en": "Target RPM",
+            "es": "RPM objetivo",
+            "fr": "RPM cible",
+            "ja": "目標 RPM",
+            "ko": "목표 RPM",
+            "pt": "RPM desejado",
+            "ru": "Целевые обороты в минуту",
+            "tr": "Hedef RPM",
+            "zh-Hans": "目标转速",
+            "zh-Hant": "目標轉速"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "FixDamagedApp",
+      "pluginID": "fix-damaged-app",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "HideNotch",
+      "pluginID": "hide-notch",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "Homebrew",
+      "pluginID": "homebrew",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "install packages",
+          "source": "Plugins/Homebrew/Resources/Localizable.xcstrings#detail.search.installAction",
+          "evidence": "Plugins/Homebrew/Sources/HomebrewDetailView.swift:1009",
+          "queries": {
+            "ar": "تثبيت",
+            "de": "Installieren",
+            "en": "Install",
+            "es": "Instalar",
+            "fr": "Installer",
+            "ja": "インストール",
+            "ko": "설치",
+            "pt": "Instalar",
+            "ru": "Установить",
+            "tr": "Yükle",
+            "zh-Hans": "安装",
+            "zh-Hant": "安裝"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "uninstall packages",
+          "source": "Plugins/Homebrew/Resources/Localizable.xcstrings#detail.detail.actionUninstall",
+          "evidence": "Plugins/Homebrew/Sources/HomebrewDetailView.swift:944",
+          "queries": {
+            "ar": "إزالة",
+            "de": "Deinstallieren",
+            "en": "Uninstall",
+            "es": "Desinstalar",
+            "fr": "Désinstaller",
+            "ja": "アンインストール",
+            "ko": "제거",
+            "pt": "Desinstalar",
+            "ru": "Удалить",
+            "tr": "Kaldır",
+            "zh-Hans": "卸载",
+            "zh-Hant": "解除安裝"
+          },
+          "beforeMatchedLocales": [
+            "ar",
+            "en",
+            "ko",
+            "tr",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "pin package version",
+          "source": "Plugins/Homebrew/Resources/Localizable.xcstrings#detail.detail.actionPin",
+          "evidence": "Plugins/Homebrew/Sources/HomebrewDetailView.swift:921",
+          "queries": {
+            "ar": "تثبيت الإصدار",
+            "de": "Version anheften",
+            "en": "Pin Version",
+            "es": "Fijar versión",
+            "fr": "Épingler la version",
+            "ja": "バージョンを固定",
+            "ko": "버전 고정",
+            "pt": "Fixar versão",
+            "ru": "Закрепить версию",
+            "tr": "Sürümü Sabitle",
+            "zh-Hans": "锁定版本",
+            "zh-Hant": "鎖定版本"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "IPOverview",
+      "pluginID": "ip-overview",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "DNS leak test",
+          "source": "Plugins/IPOverview/Resources/Localizable.xcstrings#dns.title",
+          "evidence": "Plugins/IPOverview/Sources/IPOverviewComponentView.swift:421",
+          "queries": {
+            "ar": "اختبار تسرب DNS",
+            "de": "DNS-Lecktest",
+            "en": "DNS Leak Test",
+            "es": "Prueba de fuga de DNS",
+            "fr": "Test de fuite DNS",
+            "ja": "DNS リークテスト",
+            "ko": "DNS 누출 테스트",
+            "pt": "Teste de vazamento de DNS",
+            "ru": "Тест на утечку DNS",
+            "tr": "DNS Sızıntı Testi",
+            "zh-Hans": "DNS 泄漏测试",
+            "zh-Hant": "DNS 泄漏測試"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "WebRTC leak test",
+          "source": "Plugins/IPOverview/Resources/Localizable.xcstrings#webrtc.title",
+          "evidence": "Plugins/IPOverview/Sources/IPOverviewComponentView.swift:409",
+          "queries": {
+            "ar": "اختبار تسرب WebRTC",
+            "de": "WebRTC-Lecktest",
+            "en": "WebRTC Leak Test",
+            "es": "Prueba de fuga WebRTC",
+            "fr": "Test de fuite WebRTC",
+            "ja": "WebRTC リークテスト",
+            "ko": "WebRTC 누출 테스트",
+            "pt": "Teste de vazamento WebRTC",
+            "ru": "Проверка утечки WebRTC",
+            "tr": "WebRTC Sızıntı Testi",
+            "zh-Hans": "WebRTC 泄露测试",
+            "zh-Hant": "WebRTC 泄露測試"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "network speed test",
+          "source": "Plugins/IPOverview/Resources/Localizable.xcstrings#speed.title",
+          "evidence": "Plugins/IPOverview/Sources/IPOverviewComponentView.swift:338",
+          "queries": {
+            "ar": "سرعة الشبكة",
+            "de": "Netzwerkgeschwindigkeit",
+            "en": "Network Speed",
+            "es": "Velocidad de red",
+            "fr": "Vitesse du réseau",
+            "ja": "ネットワーク速度",
+            "ko": "네트워크 속도",
+            "pt": "Velocidade da rede",
+            "ru": "Скорость сети",
+            "tr": "Ağ Hızı",
+            "zh-Hans": "网络测速",
+            "zh-Hant": "網絡測速"
+          },
+          "beforeMatchedLocales": [
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "InputRemapping",
+      "pluginID": "input-remapping",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "single key output",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#action.singleKey",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1219",
+          "queries": {
+            "ar": "مفتاح واحد",
+            "de": "Einzeltaste",
+            "en": "Single Key",
+            "es": "Tecla única",
+            "fr": "Touche unique",
+            "ja": "単一キー",
+            "ko": "단일 키",
+            "pt": "Tecla única",
+            "ru": "Одна клавиша",
+            "tr": "Tek Tuş",
+            "zh-Hans": "单键",
+            "zh-Hant": "單鍵"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "trackpad gestures",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.trackpadGesture",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:867",
+          "queries": {
+            "ar": "إيماءة لوحة التعقب",
+            "de": "Trackpad-Geste",
+            "en": "Trackpad Gesture",
+            "es": "Gesto del trackpad",
+            "fr": "Geste du trackpad",
+            "ja": "トラックパッドのジェスチャ",
+            "ko": "트랙패드 제스처",
+            "pt": "Gesto do trackpad",
+            "ru": "Жест трекпада",
+            "tr": "İzleme Dörtgeni Hareketi",
+            "zh-Hans": "触控板手势",
+            "zh-Hant": "觸控板手勢"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "mouse double-click trigger",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.mouseInteraction.doubleClick",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1415",
+          "queries": {
+            "ar": "نقرة مزدوجة",
+            "de": "Doppelklick",
+            "en": "Double-click",
+            "es": "Doble clic",
+            "fr": "Double-clic",
+            "ja": "ダブルクリック",
+            "ko": "이중 클릭",
+            "pt": "Clique duplo",
+            "ru": "Двойной щелчок",
+            "tr": "Çift Tıklama",
+            "zh-Hans": "双击",
+            "zh-Hant": "按兩下"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "fr",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "mouse long-press trigger",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.mouseInteraction.longPress",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1416",
+          "queries": {
+            "ar": "ضغط مطوّل",
+            "de": "Langes Drücken",
+            "en": "Long Press",
+            "es": "Pulsación larga",
+            "fr": "Appui long",
+            "ja": "長押し",
+            "ko": "길게 누르기",
+            "pt": "Pressão longa",
+            "ru": "Долгое нажатие",
+            "tr": "Uzun Basma",
+            "zh-Hans": "长按",
+            "zh-Hant": "長按"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "threeFingerTap",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.trackpadGesture.threeFingerTap",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1407",
+          "queries": {
+            "ar": "اضغط بثلاثة أصابع",
+            "de": "Drei-Finger-Tippen",
+            "en": "Three-finger tap",
+            "es": "Toque con tres dedos",
+            "fr": "Toucher à trois doigts",
+            "ja": "3本指タップ",
+            "ko": "세 손가락 탭",
+            "pt": "Toque com três dedos",
+            "ru": "Касание тремя пальцами",
+            "tr": "Üç parmakla dokunma",
+            "zh-Hans": "三指轻点",
+            "zh-Hant": "三指點擊"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "fourFingerTap",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.trackpadGesture.fourFingerTap",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1407",
+          "queries": {
+            "ar": "اضغط بأربعة أصابع",
+            "de": "Vier-Finger-Tippen",
+            "en": "Four-finger tap",
+            "es": "Toque con cuatro dedos",
+            "fr": "Toucher à quatre doigts",
+            "ja": "4本指タップ",
+            "ko": "네 손가락 탭",
+            "pt": "Toque com quatro dedos",
+            "ru": "Касание четырьмя пальцами",
+            "tr": "Dört parmakla dokunma",
+            "zh-Hans": "四指轻点",
+            "zh-Hant": "四指點擊"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "fiveFingerTap",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.trackpadGesture.fiveFingerTap",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1407",
+          "queries": {
+            "ar": "اضغط بخمسة أصابع",
+            "de": "Fünf-Finger-Tippen",
+            "en": "Five-finger tap",
+            "es": "Toque de cinco dedos",
+            "fr": "Toucher à cinq doigts",
+            "ja": "5本指タップ",
+            "ko": "다섯 손가락 탭",
+            "pt": "Toque com cinco dedos",
+            "ru": "Касание пятью пальцами",
+            "tr": "Beş parmakla dokunma",
+            "zh-Hans": "五指轻点",
+            "zh-Hant": "五指點擊"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "threeFingerDoubleTap",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.trackpadGesture.threeFingerDoubleTap",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1407",
+          "queries": {
+            "ar": "اضغط مرتين بثلاثة أصابع",
+            "de": "Doppeltippen mit drei Fingern",
+            "en": "Three-finger double tap",
+            "es": "Doble toque con tres dedos",
+            "fr": "Appuyez deux fois avec trois doigts",
+            "ja": "3本指のダブルタップ",
+            "ko": "세 손가락으로 두 번 탭하기",
+            "pt": "Toque duplo com três dedos",
+            "ru": "Двойное касание тремя пальцами",
+            "tr": "Üç parmakla çift dokunma",
+            "zh-Hans": "三指双击",
+            "zh-Hant": "三指雙擊"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "fourFingerDoubleTap",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.trackpadGesture.fourFingerDoubleTap",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1407",
+          "queries": {
+            "ar": "اضغط مرتين بأربعة أصابع",
+            "de": "Doppeltippen mit vier Fingern",
+            "en": "Four-finger double tap",
+            "es": "Doble toque con cuatro dedos",
+            "fr": "Appuyez deux fois avec quatre doigts",
+            "ja": "4本指のダブルタップ",
+            "ko": "네 손가락으로 두 번 탭하기",
+            "pt": "Toque duplo com quatro dedos",
+            "ru": "Двойное касание четырьмя пальцами",
+            "tr": "Dört parmakla çift dokunma",
+            "zh-Hans": "四指双击",
+            "zh-Hant": "四指雙擊"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "fiveFingerDoubleTap",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.trackpadGesture.fiveFingerDoubleTap",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1407",
+          "queries": {
+            "ar": "اضغط مرتين بخمسة أصابع",
+            "de": "Doppeltippen mit fünf Fingern",
+            "en": "Five-finger double tap",
+            "es": "Doble toque con cinco dedos",
+            "fr": "Appuyez deux fois avec cinq doigts",
+            "ja": "5本指のダブルタップ",
+            "ko": "다섯 손가락으로 두 번 탭하기",
+            "pt": "Toque duplo com cinco dedos",
+            "ru": "Двойное касание пятью пальцами",
+            "tr": "Beş parmakla çift dokunma",
+            "zh-Hans": "五指双击",
+            "zh-Hant": "五指雙擊"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "threeFingerLongTouch",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.trackpadGesture.threeFingerLongTouch",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1407",
+          "queries": {
+            "ar": "لمسة طويلة بثلاثة أصابع",
+            "de": "Lange Berührung mit drei Fingern",
+            "en": "Three-finger long touch",
+            "es": "Toque largo con tres dedos",
+            "fr": "Toucher long à trois doigts",
+            "ja": "3本指ロングタッチ",
+            "ko": "세 손가락 길게 터치",
+            "pt": "Toque longo com três dedos",
+            "ru": "Длинное касание тремя пальцами",
+            "tr": "Üç parmakla uzun dokunma",
+            "zh-Hans": "三指长按",
+            "zh-Hant": "三指長按"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "fourFingerLongTouch",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.trackpadGesture.fourFingerLongTouch",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1407",
+          "queries": {
+            "ar": "لمسة طويلة بأربعة أصابع",
+            "de": "Lange Berührung mit vier Fingern",
+            "en": "Four-finger long touch",
+            "es": "Toque largo con cuatro dedos",
+            "fr": "Toucher long à quatre doigts",
+            "ja": "4本指ロングタッチ",
+            "ko": "네 손가락 길게 터치",
+            "pt": "Toque longo com quatro dedos",
+            "ru": "Длинное касание четырьмя пальцами",
+            "tr": "Dört parmakla uzun dokunma",
+            "zh-Hans": "四指长按",
+            "zh-Hant": "四指長觸摸"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "fiveFingerLongTouch",
+          "source": "Plugins/InputRemapping/Resources/Localizable.xcstrings#settings.trackpadGesture.fiveFingerLongTouch",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:1407",
+          "queries": {
+            "ar": "لمسة طويلة بخمسة أصابع",
+            "de": "Lange Berührung mit fünf Fingern",
+            "en": "Five-finger long touch",
+            "es": "Toque largo de cinco dedos",
+            "fr": "Toucher long à cinq doigts",
+            "ja": "5本指ロングタッチ",
+            "ko": "다섯 손가락 길게 터치",
+            "pt": "Toque longo com cinco dedos",
+            "ru": "Длинное касание пятью пальцами",
+            "tr": "Beş parmakla uzun dokunma",
+            "zh-Hans": "五指长按",
+            "zh-Hant": "五指長觸摸"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "mouse side buttons",
+          "source": "authored capability translation",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:867",
+          "queries": {
+            "ar": "أزرار الماوس الجانبية",
+            "de": "Seitliche Maustasten",
+            "en": "Mouse Side Buttons",
+            "es": "Botones laterales del ratón",
+            "fr": "Boutons latéraux de la souris",
+            "ja": "マウスのサイドボタン",
+            "ko": "마우스 측면 버튼",
+            "pt": "Botões laterais do mouse",
+            "ru": "Боковые кнопки мыши",
+            "tr": "Fare yan düğmeleri",
+            "zh-Hans": "鼠标侧键",
+            "zh-Hant": "滑鼠側鍵"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "scroll wheel",
+          "source": "authored capability translation",
+          "evidence": "Plugins/InputRemapping/Sources/InputRemappingPlugin.swift:867",
+          "queries": {
+            "ar": "عجلة التمرير",
+            "de": "Mausrad",
+            "en": "Scroll Wheel",
+            "es": "Rueda de desplazamiento",
+            "fr": "Molette de défilement",
+            "ja": "スクロールホイール",
+            "ko": "스크롤 휠",
+            "pt": "Roda de rolagem",
+            "ru": "Колесо прокрутки",
+            "tr": "Kaydırma tekerleği",
+            "zh-Hans": "滚轮",
+            "zh-Hant": "滾輪"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "KeepAwake",
+      "pluginID": "keep-awake",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "closed-lid keep awake",
+          "source": "Plugins/KeepAwake/Resources/Localizable.xcstrings#settings.lidClose.keepAwake",
+          "evidence": "Plugins/KeepAwake/Sources/KeepAwakePlugin.swift:414",
+          "queries": {
+            "ar": "منع السكون عند إغلاق الغطاء",
+            "de": "Bei geschlossenem Deckel wach bleiben",
+            "en": "Keep awake with lid closed",
+            "es": "Mantener activo con la tapa cerrada",
+            "fr": "Rester éveillé avec le capot fermé",
+            "ja": "蓋を閉じてもスリープしない",
+            "ko": "덮개를 닫아도 깨어 있기",
+            "pt": "Manter acordado com a tampa fechada",
+            "ru": "Не засыпать при закрытой крышке",
+            "tr": "Kapak kapalıyken uyanık tut",
+            "zh-Hans": "合盖保持唤醒",
+            "zh-Hant": "闔蓋保持喚醒"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "keep screen tools awake",
+          "source": "Plugins/KeepAwake/Resources/Localizable.xcstrings#settings.mode.screenTools.description",
+          "evidence": "Plugins/KeepAwake/Sources/KeepAwakePlugin.swift:837",
+          "queries": {
+            "ar": "يمنع إيقاف الشاشة والقفل التلقائي. استخدمه فقط عندما تحتاج Codex Computer Use أو الأتمتة أو مشاركة الشاشة أو التحكم عن بُعد إلى شاشة نشطة.",
+            "de": "Verhindert den Ruhezustand des Displays und die automatische Sperre. Nur verwenden, wenn Codex Computer Use, Automatisierung, Bildschirmfreigabe oder Fernsteuerung einen aktiven Bildschirm benötigen.",
+            "en": "Prevents display sleep and automatic locking. Use only while Codex Computer Use, automation, screen sharing, or remote control needs an active screen.",
+            "es": "Evita el reposo de la pantalla y el bloqueo automático. Úsalo solo cuando Codex Computer Use, la automatización, la pantalla compartida o el control remoto necesiten una pantalla activa.",
+            "fr": "Empêche la mise en veille de l’écran et le verrouillage automatique. À utiliser seulement lorsque Codex Computer Use, l’automatisation, le partage d’écran ou le contrôle à distance nécessitent un écran actif.",
+            "ja": "画面のスリープと自動ロックを防ぎます。Codex Computer Use、オートメーション、画面共有、リモート操作で画面を有効に保つ必要がある場合にのみ使用してください。",
+            "ko": "화면 잠자기와 자동 잠금을 방지합니다. Codex Computer Use, 자동화, 화면 공유 또는 원격 제어에 활성 화면이 필요한 경우에만 사용하세요.",
+            "pt": "Impede o repouso da tela e o bloqueio automático. Use apenas quando Codex Computer Use, automação, compartilhamento de tela ou controle remoto precisarem de uma tela ativa.",
+            "ru": "Предотвращает переход дисплея в режим сна и автоблокировку. Используйте только когда Codex Computer Use, автоматизации, демонстрации экрана или удалённому управлению нужен активный экран.",
+            "tr": "Ekran uykusunu ve otomatik kilitlemeyi engeller. Yalnızca Codex Computer Use, otomasyon, ekran paylaşımı veya uzaktan kumandanın etkin bir ekrana gereksinim duyması sırasında kullanın.",
+            "zh-Hans": "阻止屏幕休眠和自动锁定。仅在 Codex Computer Use、桌面自动化、屏幕共享或远程控制需要保持屏幕可用时使用。",
+            "zh-Hant": "阻止螢幕休眠和自動鎖定。僅在 Codex Computer Use、桌面自動化、螢幕共享或遠端控制需要保持螢幕可用時使用。"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "prevent sleep",
+          "source": "authored capability translation",
+          "evidence": "Plugins/KeepAwake/Sources/KeepAwakePlugin.swift:837",
+          "queries": {
+            "ar": "منع السكون",
+            "de": "Ruhezustand verhindern",
+            "en": "Prevent Sleep",
+            "es": "Evitar reposo",
+            "fr": "Empêcher la veille",
+            "ja": "スリープを防止",
+            "ko": "잠자기 방지",
+            "pt": "Impedir repouso",
+            "ru": "Предотвращать сон",
+            "tr": "Uyku modunu önle",
+            "zh-Hans": "防止休眠",
+            "zh-Hant": "防止睡眠"
+          },
+          "beforeMatchedLocales": [
+            "ar",
+            "en",
+            "ja",
+            "ko",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "LaunchControl",
+      "pluginID": "launch-control",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "launch agents",
+          "source": "authored capability translation",
+          "evidence": "Plugins/LaunchControl/Sources/LaunchControlScanner.swift:221",
+          "queries": {
+            "ar": "وكلاء التشغيل",
+            "de": "Startagenten",
+            "en": "Launch Agents",
+            "es": "Agentes de inicio",
+            "fr": "Agents de lancement",
+            "ja": "起動エージェント",
+            "ko": "실행 에이전트",
+            "pt": "Agentes de inicialização",
+            "ru": "Агенты запуска",
+            "tr": "Başlatma aracıları",
+            "zh-Hans": "启动代理",
+            "zh-Hant": "啟動代理程式"
+          },
+          "beforeMatchedLocales": [
+            "en"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "launch daemons",
+          "source": "authored capability translation",
+          "evidence": "Plugins/LaunchControl/Sources/LaunchControlScanner.swift:221",
+          "queries": {
+            "ar": "خدمات التشغيل",
+            "de": "Startdienste",
+            "en": "Launch Daemons",
+            "es": "Servicios de inicio",
+            "fr": "Démons de lancement",
+            "ja": "起動デーモン",
+            "ko": "실행 데몬",
+            "pt": "Serviços de inicialização",
+            "ru": "Демоны запуска",
+            "tr": "Başlatma servisleri",
+            "zh-Hans": "启动守护进程",
+            "zh-Hant": "啟動守護程式"
+          },
+          "beforeMatchedLocales": [
+            "en"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "background services",
+          "source": "authored capability translation",
+          "evidence": "Plugins/LaunchControl/Sources/LaunchControlScanner.swift:221",
+          "queries": {
+            "ar": "خدمات الخلفية",
+            "de": "Hintergrunddienste",
+            "en": "Background Services",
+            "es": "Servicios en segundo plano",
+            "fr": "Services en arrière-plan",
+            "ja": "バックグラウンドサービス",
+            "ko": "백그라운드 서비스",
+            "pt": "Serviços em segundo plano",
+            "ru": "Фоновые службы",
+            "tr": "Arka plan hizmetleri",
+            "zh-Hans": "后台服务",
+            "zh-Hant": "背景服務"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "Launchpad",
+      "pluginID": "launchpad",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "hot corner",
+          "source": "Plugins/Launchpad/Resources/Localizable.xcstrings#settings.hotCorner.title",
+          "evidence": "Plugins/Launchpad/Sources/LaunchpadSettingsView.swift:146",
+          "queries": {
+            "ar": "زاوية فعّالة",
+            "de": "Aktive Ecke",
+            "en": "Hot Corner",
+            "es": "Esquina activa",
+            "fr": "Coin actif",
+            "ja": "ホットコーナー",
+            "ko": "핫 코너",
+            "pt": "Canto ativo",
+            "ru": "Активный угол",
+            "tr": "Etkin Köşe",
+            "zh-Hans": "热区唤起",
+            "zh-Hant": "熱區喚起"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "app launcher",
+          "source": "authored capability translation",
+          "evidence": "Plugins/Launchpad/Sources/LaunchpadGridView.swift:151",
+          "queries": {
+            "ar": "مشغّل التطبيقات",
+            "de": "App-Starter",
+            "en": "App Launcher",
+            "es": "Lanzador de aplicaciones",
+            "fr": "Lanceur d’applications",
+            "ja": "アプリランチャー",
+            "ko": "앱 실행기",
+            "pt": "Inicializador de aplicativos",
+            "ru": "Запуск приложений",
+            "tr": "Uygulama başlatıcı",
+            "zh-Hans": "应用启动器",
+            "zh-Hant": "應用程式啟動器"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "app folders",
+          "source": "authored capability translation",
+          "evidence": "Plugins/Launchpad/Sources/LaunchpadGridView.swift:151",
+          "queries": {
+            "ar": "مجلدات التطبيقات",
+            "de": "App-Ordner",
+            "en": "App Folders",
+            "es": "Carpetas de aplicaciones",
+            "fr": "Dossiers d’applications",
+            "ja": "アプリのフォルダ",
+            "ko": "앱 폴더",
+            "pt": "Pastas de aplicativos",
+            "ru": "Папки приложений",
+            "tr": "Uygulama klasörleri",
+            "zh-Hans": "应用文件夹",
+            "zh-Hant": "應用程式資料夾"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "fuzzy search",
+          "source": "authored capability translation",
+          "evidence": "Plugins/Launchpad/Sources/LaunchpadGridView.swift:151",
+          "queries": {
+            "ar": "بحث تقريبي",
+            "de": "Unscharfe Suche",
+            "en": "Fuzzy Search",
+            "es": "Búsqueda aproximada",
+            "fr": "Recherche approximative",
+            "ja": "あいまい検索",
+            "ko": "유사 검색",
+            "pt": "Busca aproximada",
+            "ru": "Нечёткий поиск",
+            "tr": "Yaklaşık arama",
+            "zh-Hans": "模糊搜索",
+            "zh-Hant": "模糊搜尋"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "LockScreen",
+      "pluginID": "lock-screen",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "MacSettings",
+      "pluginID": "mac-settings",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "system settings",
+          "source": "Plugins/MacSettings/Resources/MacSettings.xcstrings#Open System Settings",
+          "evidence": "Plugins/MacSettings/Sources/MacSettingsSettingRow.swift:241",
+          "queries": {
+            "ar": "افتح إعدادات النظام",
+            "de": "Systemeinstellungen öffnen",
+            "en": "Open System Settings",
+            "es": "Abrir Ajustes del Sistema",
+            "fr": "Ouvrir Réglages Système",
+            "ja": "システム設定を開く",
+            "ko": "시스템 설정 열기",
+            "pt": "Abrir Ajustes do Sistema",
+            "ru": "Открыть Системные настройки",
+            "tr": "Sistem Ayarları'nı Aç",
+            "zh-Hans": "打开系统设置",
+            "zh-Hant": "開啟系統設定"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "Finder settings",
+          "source": "Plugins/MacSettings/Resources/MacSettings.xcstrings#Finder",
+          "evidence": "Plugins/MacSettings/Sources/Catalog/SystemSettingModels.swift:35",
+          "queries": {
+            "ar": "Finder",
+            "de": "Finder",
+            "en": "Finder",
+            "es": "Finder",
+            "fr": "Finder",
+            "ja": "Finder",
+            "ko": "Finder",
+            "pt": "Finder",
+            "ru": "Finder",
+            "tr": "Finder",
+            "zh-Hans": "访达",
+            "zh-Hant": "Finder"
+          },
+          "beforeMatchedLocales": [
+            "ar",
+            "de",
+            "en",
+            "es",
+            "fr",
+            "ja",
+            "ko",
+            "pt",
+            "ru",
+            "tr",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "Dock settings",
+          "source": "Plugins/MacSettings/Resources/MacSettings.xcstrings#Desktop & Dock",
+          "evidence": "Plugins/MacSettings/Sources/Catalog/SystemSettingModels.swift:36",
+          "queries": {
+            "ar": "سطح المكتب وDock",
+            "de": "Schreibtisch & Dock",
+            "en": "Desktop & Dock",
+            "es": "Escritorio y Dock",
+            "fr": "Bureau et Dock",
+            "ja": "デスクトップ&Dock",
+            "ko": "데스크탑 및 Dock",
+            "pt": "Mesa e Dock",
+            "ru": "Рабочий стол и Dock",
+            "tr": "Masaüstü ve Dock",
+            "zh-Hans": "桌面与程序坞",
+            "zh-Hant": "桌面與 Dock"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "screenshot format",
+          "source": "Plugins/MacSettings/Resources/MacSettings.xcstrings#Screenshot Format",
+          "evidence": "Plugins/MacSettings/Sources/Catalog/SystemSettingCatalog.swift:624",
+          "queries": {
+            "ar": "تنسيق لقطة الشاشة",
+            "de": "Bildschirmfotoformat",
+            "en": "Screenshot Format",
+            "es": "Formato de captura de pantalla",
+            "fr": "Format de capture d'écran",
+            "ja": "スクリーンショットの形式",
+            "ko": "스크린샷 형식",
+            "pt": "Formato de captura de tela",
+            "ru": "Формат скриншота",
+            "tr": "Ekran Görüntüsü Biçimi",
+            "zh-Hans": "截屏格式",
+            "zh-Hant": "截圖格式"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "key repeat rate",
+          "source": "Plugins/MacSettings/Resources/MacSettings.xcstrings#Key Repeat Rate",
+          "evidence": "Plugins/MacSettings/Sources/Catalog/SystemSettingCatalog.swift:367",
+          "queries": {
+            "ar": "معدل تكرار المفتاح",
+            "de": "Tastenwiederholrate",
+            "en": "Key Repeat Rate",
+            "es": "Velocidad de repetición de teclas",
+            "fr": "Vitesse de répétition des touches",
+            "ja": "キーリピートレート",
+            "ko": "키 반복 속도",
+            "pt": "Taxa de repetição de teclas",
+            "ru": "Частота повторения клавиш",
+            "tr": "Tuş Yineleme Hızı",
+            "zh-Hans": "按键重复速度",
+            "zh-Hant": "按鍵重複速率"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "three-finger drag",
+          "source": "Plugins/MacSettings/Resources/MacSettings.xcstrings#Three-Finger Drag",
+          "evidence": "Plugins/MacSettings/Sources/Catalog/SystemSettingCatalog.swift:123",
+          "queries": {
+            "ar": "السحب بثلاثة أصابع",
+            "de": "Bewegen mit drei Fingern",
+            "en": "Three-Finger Drag",
+            "es": "Arrastre con tres dedos",
+            "fr": "Glissement à trois doigts",
+            "ja": "3 本指ドラッグ",
+            "ko": "세 손가락 드래그",
+            "pt": "Arrastar com três dedos",
+            "ru": "Перетаскивание тремя пальцами",
+            "tr": "Üç Parmakla Sürükleme",
+            "zh-Hans": "三指拖移",
+            "zh-Hant": "三指拖移"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "MenuBarHidden",
+      "pluginID": "menu-bar-hidden",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "always hidden icons",
+          "source": "Plugins/MenuBarHidden/Resources/Localizable.xcstrings#section.alwaysHidden",
+          "evidence": "Plugins/MenuBarHidden/Sources/MenuBarHiddenModels.swift:200",
+          "queries": {
+            "ar": "مخفي دائمًا",
+            "de": "Immer ausgeblendet",
+            "en": "Always Hidden",
+            "es": "Siempre oculto",
+            "fr": "Toujours masqué",
+            "ja": "常に非表示",
+            "ko": "항상 숨겨짐",
+            "pt": "Sempre oculto",
+            "ru": "Всегда скрыт",
+            "tr": "Her Zaman Gizli",
+            "zh-Hans": "永久隐藏",
+            "zh-Hant": "永久隱藏"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "menu bar layout",
+          "source": "Plugins/MenuBarHidden/Resources/Localizable.xcstrings#settings.layout.title",
+          "evidence": "Plugins/MenuBarHidden/Sources/MenuBarHiddenPlugin.swift:325",
+          "queries": {
+            "ar": "تخطيط شريط القوائم",
+            "de": "Menüleistenlayout",
+            "en": "Menu Bar Layout",
+            "es": "Diseño de la barra de menú",
+            "fr": "Disposition de la barre de menu",
+            "ja": "メニュー バーのレイアウト",
+            "ko": "메뉴바 레이아웃",
+            "pt": "Layout da barra de menu",
+            "ru": "Макет строки меню",
+            "tr": "Menü Çubuğu Düzeni",
+            "zh-Hans": "菜单栏布局",
+            "zh-Hant": "選單列佈局"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "MicrophoneMute",
+      "pluginID": "microphone-mute",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "unmute microphone",
+          "source": "Plugins/MicrophoneMute/Resources/Localizable.xcstrings#action.unmute.title",
+          "evidence": "Plugins/MicrophoneMute/Sources/MicrophoneMutePlugin.swift:236",
+          "queries": {
+            "ar": "إلغاء كتم الميكروفون",
+            "de": "Mikrofonstummschaltung aufheben",
+            "en": "Unmute Microphone",
+            "es": "Activar micrófono",
+            "fr": "Réactiver le microphone",
+            "ja": "マイクのミュートを解除",
+            "ko": "마이크 음소거 해제",
+            "pt": "Ativar som do microfone",
+            "ru": "Включить микрофон",
+            "tr": "Mikrofonun Sesini Aç",
+            "zh-Hans": "恢复麦克风",
+            "zh-Hant": "取消麥克風靜音"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "MiddleClick",
+      "pluginID": "middle-click",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "three-finger tap",
+          "source": "Plugins/TrackpadGestures/Resources/Localizable.xcstrings#gesture.threeFingerTap",
+          "evidence": "Plugins/MiddleClick/Sources/MiddleClickPlugin.swift:249",
+          "queries": {
+            "ar": "اضغط بثلاثة أصابع",
+            "de": "Drei-Finger-Tippen",
+            "en": "Three-Finger Tap",
+            "es": "Toque con tres dedos",
+            "fr": "Toucher à trois doigts",
+            "ja": "3本指タップ",
+            "ko": "세 손가락 탭",
+            "pt": "Toque com três dedos",
+            "ru": "Касание тремя пальцами",
+            "tr": "Üç Parmakla Dokunma",
+            "zh-Hans": "三指轻点",
+            "zh-Hant": "三指點擊"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "four-finger tap",
+          "source": "Plugins/TrackpadGestures/Resources/Localizable.xcstrings#gesture.fourFingerTap",
+          "evidence": "Plugins/MiddleClick/Sources/MiddleClickPlugin.swift:249",
+          "queries": {
+            "ar": "اضغط بأربعة أصابع",
+            "de": "Vier-Finger-Tippen",
+            "en": "Four-Finger Tap",
+            "es": "Toque con cuatro dedos",
+            "fr": "Toucher à quatre doigts",
+            "ja": "4本指タップ",
+            "ko": "네 손가락 탭",
+            "pt": "Toque com quatro dedos",
+            "ru": "Касание четырьмя пальцами",
+            "tr": "Dört Parmakla Dokunma",
+            "zh-Hans": "四指轻点",
+            "zh-Hant": "四指點擊"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "five-finger tap",
+          "source": "Plugins/TrackpadGestures/Resources/Localizable.xcstrings#gesture.fiveFingerTap",
+          "evidence": "Plugins/MiddleClick/Sources/MiddleClickPlugin.swift:249",
+          "queries": {
+            "ar": "اضغط بخمسة أصابع",
+            "de": "Fünf-Finger-Tippen",
+            "en": "Five-Finger Tap",
+            "es": "Toque con cinco dedos",
+            "fr": "Toucher à cinq doigts",
+            "ja": "5本指タップ",
+            "ko": "다섯 손가락 탭",
+            "pt": "Toque com cinco dedos",
+            "ru": "Касание пятью пальцами",
+            "tr": "Beş Parmakla Dokunma",
+            "zh-Hans": "五指轻点",
+            "zh-Hant": "五指點擊"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "MouseEnhancer",
+      "pluginID": "mouse-enhancer",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "smooth scrolling",
+          "source": "Plugins/MouseEnhancer/Resources/Localizable.xcstrings#settings.mouse.smooth.title",
+          "evidence": "Plugins/MouseEnhancer/Sources/MouseEnhancerPlugin.swift:387",
+          "queries": {
+            "ar": "التمرير السلس",
+            "de": "Sanftes Scrollen",
+            "en": "Smooth scrolling",
+            "es": "Desplazamiento suave",
+            "fr": "Défilement fluide",
+            "ja": "スムーズスクロール",
+            "ko": "부드러운 스크롤",
+            "pt": "Rolagem suave",
+            "ru": "Плавная прокрутка",
+            "tr": "Akıcı kaydırma",
+            "zh-Hans": "平滑滚动",
+            "zh-Hant": "平滑滾動"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "scroll speed",
+          "source": "Plugins/MouseEnhancer/Resources/Localizable.xcstrings#settings.mouse.scrollGain.title",
+          "evidence": "Plugins/MouseEnhancer/Sources/MouseEnhancerPlugin.swift:378",
+          "queries": {
+            "ar": "سرعة التمرير",
+            "de": "Scrollgeschwindigkeit",
+            "en": "Scroll Speed",
+            "es": "Velocidad de desplazamiento",
+            "fr": "Vitesse de défilement",
+            "ja": "スクロール速度",
+            "ko": "스크롤 속도",
+            "pt": "Velocidade de rolagem",
+            "ru": "Скорость прокрутки",
+            "tr": "Kaydırma Hızı",
+            "zh-Hans": "滚动速度",
+            "zh-Hant": "滾動速度"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "scroll step",
+          "source": "Plugins/MouseEnhancer/Resources/Localizable.xcstrings#settings.mouse.scrollStep.title",
+          "evidence": "Plugins/MouseEnhancer/Sources/MouseEnhancerPlugin.swift:369",
+          "queries": {
+            "ar": "خطوة التمرير",
+            "de": "Scrollschrittweite",
+            "en": "Scroll Step",
+            "es": "Paso de desplazamiento",
+            "fr": "Pas de défilement",
+            "ja": "スクロールステップ",
+            "ko": "스크롤 단계",
+            "pt": "Passo de rolagem",
+            "ru": "Шаг прокрутки",
+            "tr": "Kaydırma Adımı",
+            "zh-Hans": "滚动步长",
+            "zh-Hant": "滾動步長"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "reverse scrolling",
+          "source": "authored capability translation",
+          "evidence": "Plugins/MouseEnhancer/Sources/MouseEnhancerPlugin.swift:353",
+          "queries": {
+            "ar": "عكس التمرير",
+            "de": "Scrollrichtung umkehren",
+            "en": "Reverse Scrolling",
+            "es": "Invertir desplazamiento",
+            "fr": "Inverser le défilement",
+            "ja": "スクロール方向を反転",
+            "ko": "스크롤 방향 반전",
+            "pt": "Inverter rolagem",
+            "ru": "Обратная прокрутка",
+            "tr": "Kaydırma yönünü ters çevir",
+            "zh-Hans": "反转滚动",
+            "zh-Hant": "反轉捲動"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "NightShift",
+      "pluginID": "night-shift",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "PhysicalCleanMode",
+      "pluginID": "physical-clean-mode",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "QuitApps",
+      "pluginID": "quit-apps",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "quit all apps",
+          "source": "Plugins/QuitApps/Resources/Localizable.xcstrings#selection.confirm.quitAll",
+          "evidence": "Plugins/QuitApps/Sources/QuitAppsSelectionWindow.swift:39",
+          "queries": {
+            "ar": "قم بإنهاء كافة التطبيقات",
+            "de": "Alle Apps beenden",
+            "en": "Quit All Apps",
+            "es": "Salir de todas las aplicaciones",
+            "fr": "Quitter toutes les applications",
+            "ja": "すべてのアプリを終了",
+            "ko": "모든 앱 종료",
+            "pt": "Fechar todos os aplicativos",
+            "ru": "Закрыть все приложения",
+            "tr": "Tüm Uygulamalardan Çık",
+            "zh-Hans": "退出全部应用",
+            "zh-Hant": "退出全部應用"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "RightClick",
+      "pluginID": "right-click",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "new file",
+          "source": "Plugins/RightClick/Resources/Localizable.xcstrings#settings.newFile.title",
+          "evidence": "Plugins/RightClick/Sources/RightClickMenuSettingsView.swift:55",
+          "queries": {
+            "ar": "ملف جديد",
+            "de": "Neue Datei",
+            "en": "New File",
+            "es": "Nuevo archivo",
+            "fr": "Nouveau fichier",
+            "ja": "新しいファイル",
+            "ko": "새 파일",
+            "pt": "Novo arquivo",
+            "ru": "Новый файл",
+            "tr": "Yeni Dosya",
+            "zh-Hans": "新建文件",
+            "zh-Hant": "新建檔案"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "new folder",
+          "source": "Plugins/RightClick/Resources/Localizable.xcstrings#settings.newFolder.title",
+          "evidence": "Plugins/RightClick/Sources/RightClickMenuSettingsView.swift:52",
+          "queries": {
+            "ar": "مجلد جديد",
+            "de": "Neuer Ordner",
+            "en": "New Folder",
+            "es": "Nueva carpeta",
+            "fr": "Nouveau dossier",
+            "ja": "新しいフォルダー",
+            "ko": "새 폴더",
+            "pt": "Nova pasta",
+            "ru": "Новая папка",
+            "tr": "Yeni Klasör",
+            "zh-Hans": "新建文件夹",
+            "zh-Hant": "新建資料夾"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "open in terminal",
+          "source": "Plugins/RightClick/Resources/Localizable.xcstrings#settings.openTerminal.title",
+          "evidence": "Plugins/RightClick/Sources/RightClickMenuSettingsView.swift:63",
+          "queries": {
+            "ar": "فتح في الوحدة الطرفية",
+            "de": "Im Terminal öffnen",
+            "en": "Open in Terminal",
+            "es": "Abrir en la terminal",
+            "fr": "Ouvrir dans le terminal",
+            "ja": "ターミナルで開く",
+            "ko": "터미널에서 열기",
+            "pt": "Abrir no Terminal",
+            "ru": "Открыть в терминале",
+            "tr": "Terminal'de Aç",
+            "zh-Hans": "在终端打开",
+            "zh-Hant": "在終端打開"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "open with",
+          "source": "Plugins/RightClick/Resources/Localizable.xcstrings#settings.openWith.title",
+          "evidence": "Plugins/RightClick/Sources/RightClickPlugin.swift:135",
+          "queries": {
+            "ar": "فتح باستخدام",
+            "de": "Öffnen mit",
+            "en": "Open With",
+            "es": "Abrir con",
+            "fr": "Ouvrir avec",
+            "ja": "次で開く",
+            "ko": "다음으로 열기",
+            "pt": "Abrir com",
+            "ru": "Открыть с помощью",
+            "tr": "Birlikte Aç",
+            "zh-Hans": "用应用打开",
+            "zh-Hant": "用應用打開"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "copy absolute path",
+          "source": "Plugins/RightClick/Resources/Localizable.xcstrings#settings.copyAbsolutePath.title",
+          "evidence": "Plugins/RightClick/Sources/RightClickMenuSettingsView.swift:71",
+          "queries": {
+            "ar": "نسخ المسار المطلق",
+            "de": "Absoluten Pfad kopieren",
+            "en": "Copy Absolute Path",
+            "es": "Copiar ruta absoluta",
+            "fr": "Copier le chemin absolu",
+            "ja": "絶対パスをコピー",
+            "ko": "절대 경로 복사",
+            "pt": "Copiar caminho absoluto",
+            "ru": "Копировать абсолютный путь",
+            "tr": "Mutlak Yolu Kopyala",
+            "zh-Hans": "复制绝对路径",
+            "zh-Hant": "複製絕對路徑"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "copy relative path",
+          "source": "Plugins/RightClick/Resources/Localizable.xcstrings#settings.copyRelativePath.title",
+          "evidence": "Plugins/RightClick/Sources/RightClickMenuSettingsView.swift:73",
+          "queries": {
+            "ar": "نسخ المسار النسبي",
+            "de": "Relativen Pfad kopieren",
+            "en": "Copy Relative Path",
+            "es": "Copiar ruta relativa",
+            "fr": "Copier le chemin relatif",
+            "ja": "相対パスをコピー",
+            "ko": "상대 경로 복사",
+            "pt": "Copiar caminho relativo",
+            "ru": "Копировать относительный путь",
+            "tr": "Göreceli Yolu Kopyala",
+            "zh-Hans": "复制相对路径",
+            "zh-Hant": "複製相對路徑"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "copy file name",
+          "source": "Plugins/RightClick/Resources/Localizable.xcstrings#settings.copyFileName.title",
+          "evidence": "Plugins/RightClick/Sources/RightClickMenuSettingsView.swift:69",
+          "queries": {
+            "ar": "نسخ اسم الملف",
+            "de": "Dateinamen kopieren",
+            "en": "Copy File Name",
+            "es": "Copiar nombre de archivo",
+            "fr": "Copier le nom du fichier",
+            "ja": "ファイル名をコピー",
+            "ko": "파일 이름 복사",
+            "pt": "Copiar nome do arquivo",
+            "ru": "Копировать имя файла",
+            "tr": "Dosya Adını Kopyala",
+            "zh-Hans": "复制文件名",
+            "zh-Hant": "複製檔案名"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "SavedScripts",
+      "pluginID": "saved-scripts",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "script library",
+          "source": "Plugins/SavedScripts/Resources/Localizable.xcstrings#settings.library.title",
+          "evidence": "Plugins/SavedScripts/Sources/SavedScriptsSettingsView.swift:86",
+          "queries": {
+            "ar": "مكتبة البرامج النصية",
+            "de": "Skriptbibliothek",
+            "en": "Script Library",
+            "es": "Biblioteca de scripts",
+            "fr": "Bibliothèque de scripts",
+            "ja": "スクリプトライブラリ",
+            "ko": "스크립트 보관함",
+            "pt": "Biblioteca de scripts",
+            "ru": "Библиотека скриптов",
+            "tr": "Betik Kitaplığı",
+            "zh-Hans": "脚本库",
+            "zh-Hant": "腳本庫"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "Screenshot",
+      "pluginID": "screenshot",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "blur",
+          "source": "Plugins/Screenshot/Resources/Localizable.xcstrings#overlay.tool.blur",
+          "evidence": "Plugins/Screenshot/Sources/Overlay.swift:1206",
+          "queries": {
+            "ar": "طمس (B)",
+            "de": "Weichzeichnen (B)",
+            "en": "Blur (B)",
+            "es": "Desenfoque (B)",
+            "fr": "Flou (B)",
+            "ja": "ぼかし (B)",
+            "ko": "블러(B)",
+            "pt": "Desfoque (B)",
+            "ru": "Размытие (B)",
+            "tr": "Bulanıklaştır (B)",
+            "zh-Hans": "模糊 (B)",
+            "zh-Hant": "模糊 (B)"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "pixelate",
+          "source": "Plugins/Screenshot/Resources/Localizable.xcstrings#overlay.tool.mosaic",
+          "evidence": "Plugins/Screenshot/Sources/Overlay.swift:1205",
+          "queries": {
+            "ar": "فسيفساء (M)",
+            "de": "Mosaik (M)",
+            "en": "Pixelate (M)",
+            "es": "Mosaico (M)",
+            "fr": "Mosaïque (M)",
+            "ja": "モザイク(M)",
+            "ko": "모자이크(M)",
+            "pt": "Mosaico (M)",
+            "ru": "Мозаика (M)",
+            "tr": "Mozaik (M)",
+            "zh-Hans": "马赛克 (M)",
+            "zh-Hant": "馬賽克 (M)"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "scrolling screenshot",
+          "source": "Plugins/Screenshot/Resources/Localizable.xcstrings#overlay.mode.scroll",
+          "evidence": "Plugins/Screenshot/Sources/Overlay.swift:1005",
+          "queries": {
+            "ar": "لقطة شاشة بالتمرير",
+            "de": "Scroll-Screenshot",
+            "en": "Scrolling Screenshot",
+            "es": "Captura de pantalla con desplazamiento",
+            "fr": "Capture d'écran avec défilement",
+            "ja": "スクロールスクリーンショット",
+            "ko": "스크롤 스크린샷",
+            "pt": "Captura de tela de rolagem",
+            "ru": "Скриншот с прокруткой",
+            "tr": "Kaydırmalı Ekran Görüntüsü",
+            "zh-Hans": "滚动截图",
+            "zh-Hant": "捲動截圖"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "pin image",
+          "source": "Plugins/Screenshot/Resources/Localizable.xcstrings#overlay.action.pin",
+          "evidence": "Plugins/Screenshot/Sources/Overlay.swift:1216",
+          "queries": {
+            "ar": "تثبيت الصورة على الشاشة",
+            "de": "Bild auf dem Bildschirm fixieren",
+            "en": "Pin image on screen",
+            "es": "Fijar imagen en pantalla",
+            "fr": "Épingler l'image à l'écran",
+            "ja": "画像を画面に固定",
+            "ko": "화면에 이미지 고정하기",
+            "pt": "Fixar imagem na tela",
+            "ru": "Закрепить изображение на экране",
+            "tr": "Görseli ekrana sabitle",
+            "zh-Hans": "贴图：钉在屏幕上",
+            "zh-Hant": "將圖片釘選在螢幕上"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "OCR/text extraction",
+          "source": "Plugins/Screenshot/Resources/Localizable.xcstrings#overlay.recognition.text",
+          "evidence": "Plugins/Screenshot/Sources/Overlay.swift:1214",
+          "queries": {
+            "ar": "استخراج النص",
+            "de": "Text extrahieren",
+            "en": "Extract Text",
+            "es": "Extraer texto",
+            "fr": "Extraire le texte",
+            "ja": "テキストを抽出",
+            "ko": "텍스트 추출",
+            "pt": "Extrair texto",
+            "ru": "Извлечь текст",
+            "tr": "Metni Çıkar",
+            "zh-Hans": "提取文字",
+            "zh-Hant": "擷取文字"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "QR recognition",
+          "source": "authored discovery translation; unsuitable native Plugins/Screenshot/Resources/Localizable.xcstrings#overlay.recognition.barcode",
+          "evidence": "Plugins/Screenshot/Sources/Overlay.swift:1215",
+          "queries": {
+            "ar": "التعرّف على رموز QR والرموز الشريطية",
+            "de": "QR-Codes und Barcodes erkennen",
+            "en": "Recognize QR Codes and Barcodes",
+            "es": "Reconocer códigos QR y de barras",
+            "fr": "Reconnaître les codes QR et les codes-barres",
+            "ja": "QR コードとバーコードを認識",
+            "ko": "QR 코드 및 바코드 인식",
+            "pt": "Reconhecer códigos QR e de barras",
+            "ru": "Распознать QR-коды и штрихкоды",
+            "tr": "QR kodlarını ve barkodları tanı",
+            "zh-Hans": "识别二维码与条形码",
+            "zh-Hant": "辨識 QR 碼與條碼"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "annotation",
+          "source": "authored capability translation",
+          "evidence": "Plugins/Screenshot/Sources/Overlay.swift:1205",
+          "queries": {
+            "ar": "تعليقات توضيحية",
+            "de": "Anmerkungen",
+            "en": "Annotation",
+            "es": "Anotaciones",
+            "fr": "Annotations",
+            "ja": "注釈",
+            "ko": "주석",
+            "pt": "Anotações",
+            "ru": "Аннотации",
+            "tr": "Açıklama ekleme",
+            "zh-Hans": "标注",
+            "zh-Hant": "標註"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "ja",
+            "ko",
+            "tr",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "screen recording",
+          "source": "authored capability translation",
+          "evidence": "Plugins/Screenshot/Sources/Overlay.swift:1205",
+          "queries": {
+            "ar": "تسجيل الشاشة",
+            "de": "Bildschirmaufnahme",
+            "en": "Screen Recording",
+            "es": "Grabación de pantalla",
+            "fr": "Enregistrement d’écran",
+            "ja": "画面収録",
+            "ko": "화면 기록",
+            "pt": "Gravação de tela",
+            "ru": "Запись экрана",
+            "tr": "Ekran kaydı",
+            "zh-Hans": "录屏",
+            "zh-Hant": "螢幕錄製"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "ja",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "Sidecar",
+      "pluginID": "sidecar",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "wired",
+          "source": "Plugins/Sidecar/Resources/Localizable.xcstrings#settings.transport.wiredOnly",
+          "evidence": "Plugins/Sidecar/Sources/SidecarSettingsView.swift:736",
+          "queries": {
+            "ar": "سلكي فقط",
+            "de": "Nur Kabel",
+            "en": "Wired Only",
+            "es": "Solo por cable",
+            "fr": "Câble uniquement",
+            "ja": "有線のみ",
+            "ko": "유선 전용",
+            "pt": "Só por cabo",
+            "ru": "Только проводное",
+            "tr": "Yalnızca Kablolu",
+            "zh-Hans": "仅有线",
+            "zh-Hant": "僅有線"
+          },
+          "beforeMatchedLocales": [
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "cable",
+          "source": "Plugins/Sidecar/Resources/Localizable.xcstrings#panel.action.wiredConnect",
+          "evidence": "Plugins/Sidecar/Sources/SidecarPlugin.swift:927",
+          "queries": {
+            "ar": "اتصال بالكابل فقط",
+            "de": "Nur per Kabel verbinden",
+            "en": "Connect via cable only",
+            "es": "Conectar solo por cable",
+            "fr": "Connecter par câble uniquement",
+            "ja": "ケーブルのみで接続",
+            "ko": "케이블로만 연결",
+            "pt": "Ligar apenas por cabo",
+            "ru": "Только по кабелю",
+            "tr": "Yalnızca kabloyla bağlan",
+            "zh-Hans": "仅通过有线连接",
+            "zh-Hant": "僅透過有線連接"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "Siri",
+      "pluginID": "siri",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "StageManager",
+      "pluginID": "stage-manager",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "StorageExplorer",
+      "pluginID": "com.mactools.plugin.storage-explorer",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "treemap",
+          "source": "authored capability translation",
+          "evidence": "Plugins/StorageExplorer/Sources/StorageExplorerWorkspaceView.swift:129",
+          "queries": {
+            "ar": "خريطة شجرية مساحية",
+            "de": "Baumkarte",
+            "en": "Treemap",
+            "es": "Mapa de árbol",
+            "fr": "Carte arborescente",
+            "ja": "ツリーマップ",
+            "ko": "트리맵",
+            "pt": "Mapa em árvore",
+            "ru": "Древовидная карта",
+            "tr": "Ağaç haritası",
+            "zh-Hans": "矩形树图",
+            "zh-Hant": "矩形樹圖"
+          },
+          "beforeMatchedLocales": [
+            "en"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "space map",
+          "source": "authored capability translation",
+          "evidence": "Plugins/StorageExplorer/Sources/StorageExplorerWorkspaceView.swift:129",
+          "queries": {
+            "ar": "خريطة مساحة التخزين",
+            "de": "Speicherplatzkarte",
+            "en": "Space Map",
+            "es": "Mapa de espacio de almacenamiento",
+            "fr": "Carte de l’espace de stockage",
+            "ja": "ストレージ使用量マップ",
+            "ko": "저장 공간 지도",
+            "pt": "Mapa do espaço de armazenamento",
+            "ru": "Карта дискового пространства",
+            "tr": "Depolama alanı haritası",
+            "zh-Hans": "空间图",
+            "zh-Hant": "空間圖"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "SystemData",
+      "pluginID": "system-data",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "AI models",
+          "source": "Plugins/SystemData/Resources/Localizable.xcstrings#group.ai",
+          "evidence": "Plugins/SystemData/Sources/SystemDataCatalog.swift:244",
+          "queries": {
+            "ar": "نماذج الذكاء الاصطناعي",
+            "de": "KI-Modelle",
+            "en": "AI Models",
+            "es": "Modelos de IA",
+            "fr": "Modèles d'IA",
+            "ja": "AI モデル",
+            "ko": "AI 모델",
+            "pt": "Modelos de IA",
+            "ru": "Модели ИИ",
+            "tr": "Yapay Zekâ Modelleri",
+            "zh-Hans": "AI 模型",
+            "zh-Hant": "AI 模型"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "iOS backups",
+          "source": "Plugins/SystemData/Resources/Localizable.xcstrings#group.backups",
+          "evidence": "Plugins/SystemData/Sources/SystemDataCatalog.swift:307",
+          "queries": {
+            "ar": "نسخ iOS الاحتياطية",
+            "de": "iOS-Backups",
+            "en": "iOS Backups",
+            "es": "Copias de seguridad de iOS",
+            "fr": "Sauvegardes iOS",
+            "ja": "iOS バックアップ",
+            "ko": "iOS 백업",
+            "pt": "Backups do iOS",
+            "ru": "Резервные копии iOS",
+            "tr": "iOS Yedekleri",
+            "zh-Hans": "iOS 设备备份",
+            "zh-Hant": "iOS 備份"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "app data",
+          "source": "Plugins/SystemData/Resources/Localizable.xcstrings#group.appdata",
+          "evidence": "Plugins/SystemData/Sources/SystemDataCatalog.swift:321",
+          "queries": {
+            "ar": "بيانات التطبيقات",
+            "de": "App-Daten",
+            "en": "App Data",
+            "es": "Datos de aplicaciones",
+            "fr": "Données des applications",
+            "ja": "アプリケーションデータ",
+            "ko": "앱 데이터",
+            "pt": "Dados de apps",
+            "ru": "Данные приложений",
+            "tr": "Uygulama Verileri",
+            "zh-Hans": "应用数据",
+            "zh-Hant": "應用程式資料"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "containers and VMs",
+          "source": "Plugins/SystemData/Resources/Localizable.xcstrings#group.docker",
+          "evidence": "Plugins/SystemData/Sources/SystemDataCatalog.swift:279",
+          "queries": {
+            "ar": "الحاويات والآلات الافتراضية",
+            "de": "Container & VMs",
+            "en": "Containers & VMs",
+            "es": "Contenedores y máquinas virtuales",
+            "fr": "Conteneurs et machines virtuelles",
+            "ja": "コンテナと仮想マシン",
+            "ko": "컨테이너 및 가상 머신",
+            "pt": "Contêineres e máquinas virtuais",
+            "ru": "Контейнеры и виртуальные машины",
+            "tr": "Konteynerler ve Sanal Makineler",
+            "zh-Hans": "容器与虚拟机",
+            "zh-Hant": "容器與虛擬機"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "logs and diagnostics",
+          "source": "Plugins/SystemData/Resources/Localizable.xcstrings#group.logs",
+          "evidence": "Plugins/SystemData/Sources/SystemDataCatalog.swift:81",
+          "queries": {
+            "ar": "السجلات والتشخيص",
+            "de": "Protokolle & Diagnose",
+            "en": "Logs & Diagnostics",
+            "es": "Registros y diagnóstico",
+            "fr": "Journaux et diagnostics",
+            "ja": "ログと診断",
+            "ko": "로그 및 진단",
+            "pt": "Logs e diagnóstico",
+            "ru": "Журналы и диагностика",
+            "tr": "Günlükler ve Tanılama",
+            "zh-Hans": "日志与诊断",
+            "zh-Hant": "日誌與診斷"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "developer tool data",
+          "source": "Plugins/SystemData/Resources/Localizable.xcstrings#group.developer",
+          "evidence": "Plugins/SystemData/Sources/SystemDataCatalog.swift:144",
+          "queries": {
+            "ar": "بيانات أدوات المطوّرين",
+            "de": "Entwicklertools-Daten",
+            "en": "Developer Tool Data",
+            "es": "Datos de herramientas de desarrollo",
+            "fr": "Données des outils de développement",
+            "ja": "開発ツールのデータ",
+            "ko": "개발 도구 데이터",
+            "pt": "Dados de ferramentas de desenvolvimento",
+            "ru": "Данные инструментов разработки",
+            "tr": "Geliştirici Aracı Verileri",
+            "zh-Hans": "开发工具数据",
+            "zh-Hant": "開發工具資料"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "virtual machines",
+          "source": "authored capability translation",
+          "evidence": "Plugins/SystemData/Sources/SystemDataCatalog.swift:80",
+          "queries": {
+            "ar": "أجهزة افتراضية",
+            "de": "Virtuelle Maschinen",
+            "en": "Virtual Machines",
+            "es": "Máquinas virtuales",
+            "fr": "Machines virtuelles",
+            "ja": "仮想マシン",
+            "ko": "가상 머신",
+            "pt": "Máquinas virtuais",
+            "ru": "Виртуальные машины",
+            "tr": "Sanal makineler",
+            "zh-Hans": "虚拟机",
+            "zh-Hant": "虛擬機器"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "SystemMute",
+      "pluginID": "system-mute",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "SystemPower",
+      "pluginID": "system-power",
+      "disposition": "covered by all-locale name/summary/static action metadata or invariant keywords",
+      "labels": []
+    },
+    {
+      "directory": "SystemSoftRestart",
+      "pluginID": "system-soft-restart",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "reopen apps",
+          "source": "Plugins/SystemSoftRestart/Resources/<locale>.lproj/Localizable.strings#settings.reopenApps.title",
+          "evidence": "Plugins/SystemSoftRestart/Sources/SystemSoftRestartPlugin.swift:200",
+          "queries": {
+            "ar": "إعادة فتح التطبيقات",
+            "de": "Apps erneut öffnen",
+            "en": "Reopen Apps",
+            "es": "Volver a abrir las apps",
+            "fr": "Rouvrir les apps",
+            "ja": "アプリを再度開く",
+            "ko": "앱 다시 열기",
+            "pt": "Reabrir os apps",
+            "ru": "Повторно открывать приложения",
+            "tr": "Uygulamaları Yeniden Aç",
+            "zh-Hans": "重新打开应用",
+            "zh-Hant": "重新開啟 App"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "preserve Dock layout",
+          "source": "Plugins/SystemSoftRestart/Resources/<locale>.lproj/Localizable.strings#settings.preserveDock.title",
+          "evidence": "Plugins/SystemSoftRestart/Sources/SystemSoftRestartPlugin.swift:200",
+          "queries": {
+            "ar": "الحفاظ على تخطيط Dock",
+            "de": "Dock-Layout beibehalten",
+            "en": "Preserve Dock Layout",
+            "es": "Conservar la disposición del Dock",
+            "fr": "Conserver la disposition du Dock",
+            "ja": "Dockレイアウトを保持",
+            "ko": "Dock 레이아웃 유지",
+            "pt": "Preservar o layout do Dock",
+            "ru": "Сохранить расположение Dock",
+            "tr": "Dock Düzenini Koru",
+            "zh-Hans": "保留 Dock 布局",
+            "zh-Hant": "保留 Dock 佈局"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "restart user services",
+          "source": "authored capability translation",
+          "evidence": "Plugins/SystemSoftRestart/Sources/SystemSoftRestartPlugin.swift:200",
+          "queries": {
+            "ar": "إعادة تشغيل خدمات المستخدم",
+            "de": "Benutzerdienste neu starten",
+            "en": "Restart User Services",
+            "es": "Reiniciar servicios del usuario",
+            "fr": "Redémarrer les services utilisateur",
+            "ja": "ユーザーサービスを再起動",
+            "ko": "사용자 서비스 다시 시작",
+            "pt": "Reiniciar serviços do usuário",
+            "ru": "Перезапустить службы пользователя",
+            "tr": "Kullanıcı hizmetlerini yeniden başlat",
+            "zh-Hans": "重启用户服务",
+            "zh-Hant": "重新啟動使用者服務"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "ja",
+            "tr",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "SystemStatus",
+      "pluginID": "system-status",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "memory",
+          "source": "Plugins/SystemStatus/Resources/Localizable.xcstrings#metric.memory",
+          "evidence": "Plugins/SystemStatus/Sources/SystemStatusModels.swift:22",
+          "queries": {
+            "ar": "الذاكرة",
+            "de": "Speicher",
+            "en": "Memory",
+            "es": "Memoria",
+            "fr": "Mémoire",
+            "ja": "メモリ",
+            "ko": "메모리",
+            "pt": "Memória",
+            "ru": "Память",
+            "tr": "Bellek",
+            "zh-Hans": "内存",
+            "zh-Hant": "內存"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "disk",
+          "source": "Plugins/SystemStatus/Resources/Localizable.xcstrings#metric.disk",
+          "evidence": "Plugins/SystemStatus/Sources/SystemStatusModels.swift:24",
+          "queries": {
+            "ar": "القرص",
+            "de": "Datenträger",
+            "en": "Disk",
+            "es": "Disco",
+            "fr": "Disque",
+            "ja": "ディスク",
+            "ko": "디스크",
+            "pt": "Disco",
+            "ru": "Диск",
+            "tr": "Disk",
+            "zh-Hans": "磁盘",
+            "zh-Hant": "磁盤"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "tr",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "battery",
+          "source": "Plugins/SystemStatus/Resources/Localizable.xcstrings#metric.battery",
+          "evidence": "Plugins/SystemStatus/Sources/SystemStatusModels.swift:26",
+          "queries": {
+            "ar": "البطارية",
+            "de": "Batterie",
+            "en": "Battery",
+            "es": "Batería",
+            "fr": "Batterie",
+            "ja": "バッテリー",
+            "ko": "배터리",
+            "pt": "Bateria",
+            "ru": "Батарея",
+            "tr": "Pil",
+            "zh-Hans": "电量",
+            "zh-Hant": "電量"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "network",
+          "source": "Plugins/SystemStatus/Resources/Localizable.xcstrings#metric.network",
+          "evidence": "Plugins/SystemStatus/Sources/SystemStatusModels.swift:28",
+          "queries": {
+            "ar": "الشبكة",
+            "de": "Netzwerk",
+            "en": "Network",
+            "es": "Red",
+            "fr": "Réseau",
+            "ja": "ネットワーク",
+            "ko": "네트워크",
+            "pt": "Rede",
+            "ru": "Сеть",
+            "tr": "Ağ",
+            "zh-Hans": "网络",
+            "zh-Hant": "網絡"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "processes",
+          "source": "Plugins/SystemStatus/Resources/Localizable.xcstrings#metric.topProcesses",
+          "evidence": "Plugins/SystemStatus/Sources/SystemStatusModels.swift:30",
+          "queries": {
+            "ar": "العمليات",
+            "de": "Prozesse",
+            "en": "Processes",
+            "es": "Procesos",
+            "fr": "Processus",
+            "ja": "プロセス",
+            "ko": "프로세스",
+            "pt": "Processos",
+            "ru": "Процессы",
+            "tr": "İşlemler",
+            "zh-Hans": "进程",
+            "zh-Hant": "進程"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "temperature",
+          "source": "Plugins/SystemStatus/Resources/Localizable.xcstrings#settings.menuBarValue.temperature",
+          "evidence": "Plugins/SystemStatus/Sources/SystemStatusModels.swift:115",
+          "queries": {
+            "ar": "درجة الحرارة",
+            "de": "Temperatur",
+            "en": "Temperature",
+            "es": "Temperatura",
+            "fr": "Température",
+            "ja": "温度",
+            "ko": "온도",
+            "pt": "Temperatura",
+            "ru": "Температура",
+            "tr": "Sıcaklık",
+            "zh-Hans": "温度",
+            "zh-Hant": "溫度"
+          },
+          "beforeMatchedLocales": [
+            "de",
+            "en",
+            "ja",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "battery health",
+          "source": "authored capability translation",
+          "evidence": "Plugins/SystemStatus/Sources/SystemStatusModels.swift:4",
+          "queries": {
+            "ar": "صحة البطارية",
+            "de": "Batteriezustand",
+            "en": "Battery Health",
+            "es": "Salud de la batería",
+            "fr": "État de la batterie",
+            "ja": "バッテリーの状態",
+            "ko": "배터리 성능 상태",
+            "pt": "Saúde da bateria",
+            "ru": "Состояние аккумулятора",
+            "tr": "Pil sağlığı",
+            "zh-Hans": "电池健康",
+            "zh-Hant": "電池健康狀態"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "memory pressure",
+          "source": "authored capability translation",
+          "evidence": "Plugins/SystemStatus/Sources/SystemStatusModels.swift:4",
+          "queries": {
+            "ar": "ضغط الذاكرة",
+            "de": "Speicherdruck",
+            "en": "Memory Pressure",
+            "es": "Presión de memoria",
+            "fr": "Pression sur la mémoire",
+            "ja": "メモリプレッシャー",
+            "ko": "메모리 압력",
+            "pt": "Pressão de memória",
+            "ru": "Нагрузка на память",
+            "tr": "Bellek baskısı",
+            "zh-Hans": "内存压力",
+            "zh-Hant": "記憶體壓力"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "TrackpadGestures",
+      "pluginID": "trackpad-gestures",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "three-finger tap",
+          "source": "Plugins/TrackpadGestures/Resources/Localizable.xcstrings#gesture.threeFingerTap",
+          "evidence": "Plugins/TrackpadGestures/Sources/TrackpadGesturesSettingsView.swift:2066",
+          "queries": {
+            "ar": "اضغط بثلاثة أصابع",
+            "de": "Drei-Finger-Tippen",
+            "en": "Three-Finger Tap",
+            "es": "Toque con tres dedos",
+            "fr": "Toucher à trois doigts",
+            "ja": "3本指タップ",
+            "ko": "세 손가락 탭",
+            "pt": "Toque com três dedos",
+            "ru": "Касание тремя пальцами",
+            "tr": "Üç Parmakla Dokunma",
+            "zh-Hans": "三指轻点",
+            "zh-Hant": "三指點擊"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "double tap",
+          "source": "Plugins/TrackpadGestures/Resources/Localizable.xcstrings#gesture.category.doubleTap",
+          "evidence": "Plugins/TrackpadGestures/Sources/TrackpadGesturesSettingsView.swift:1274",
+          "queries": {
+            "ar": "نقرة مزدوجة",
+            "de": "Doppeltippen",
+            "en": "Double Tap",
+            "es": "Doble toque",
+            "fr": "Double toucher",
+            "ja": "ダブルタップ",
+            "ko": "이중 탭",
+            "pt": "Toque duplo",
+            "ru": "Двойное касание",
+            "tr": "Çift Dokunma",
+            "zh-Hans": "双击",
+            "zh-Hant": "雙擊"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "touch and hold",
+          "source": "Plugins/TrackpadGestures/Resources/Localizable.xcstrings#gesture.category.longTouch",
+          "evidence": "Plugins/TrackpadGestures/Sources/TrackpadGesturesSettingsView.swift:1278",
+          "queries": {
+            "ar": "لمس مطول",
+            "de": "Langes Berühren",
+            "en": "Touch and Hold",
+            "es": "Mantener pulsado",
+            "fr": "Toucher prolongé",
+            "ja": "長押し",
+            "ko": "길게 터치",
+            "pt": "Toque prolongado",
+            "ru": "Долгое касание",
+            "tr": "Basılı Tutma",
+            "zh-Hans": "长触",
+            "zh-Hant": "長觸"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "physical click",
+          "source": "Plugins/TrackpadGestures/Resources/Localizable.xcstrings#gesture.category.click",
+          "evidence": "Plugins/TrackpadGestures/Sources/TrackpadGesturesSettingsView.swift:1276",
+          "queries": {
+            "ar": "نقرة فعلية",
+            "de": "Physischer Klick",
+            "en": "Physical Click",
+            "es": "Clic físico",
+            "fr": "Clic physique",
+            "ja": "物理クリック",
+            "ko": "물리적 클릭",
+            "pt": "Clique físico",
+            "ru": "Физический щелчок",
+            "tr": "Fiziksel Tıklama",
+            "zh-Hans": "按下点击",
+            "zh-Hant": "按下點按"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "Translator",
+      "pluginID": "translator",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "speak translation",
+          "source": "authored discovery translation; unsuitable native Plugins/Translator/Resources/Localizable.xcstrings#panel.result.speakHelp",
+          "evidence": "Plugins/Translator/Sources/Panel/TranslatorPanelView.swift:212",
+          "queries": {
+            "ar": "تحدث الترجمة",
+            "de": "Übersetzung sprechen",
+            "en": "Speak translation",
+            "es": "Hablar traducción",
+            "fr": "Lire la traduction",
+            "ja": "翻訳を話す",
+            "ko": "번역 말하기",
+            "pt": "Falar tradução",
+            "ru": "Произнесите перевод",
+            "tr": "Çeviriyi seslendir",
+            "zh-Hans": "朗读译文",
+            "zh-Hant": "朗讀譯文"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "OpenAI translation",
+          "source": "Plugins/Translator/Resources/Localizable.xcstrings#openAIClient.providerTitle",
+          "evidence": "Plugins/Translator/Sources/TranslatorModels.swift:180",
+          "queries": {
+            "ar": "ترجمة OpenAI",
+            "de": "OpenAI-Übersetzung",
+            "en": "OpenAI Translation",
+            "es": "Traducción de OpenAI",
+            "fr": "Traduction OpenAI",
+            "ja": "OpenAI 翻訳",
+            "ko": "OpenAI 번역",
+            "pt": "Tradução OpenAI",
+            "ru": "Перевод OpenAI",
+            "tr": "OpenAI Çevirisi",
+            "zh-Hans": "OpenAI 翻译",
+            "zh-Hant": "OpenAI 翻譯"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "selection translation",
+          "source": "Plugins/Translator/Resources/Localizable.xcstrings#shortcut.selectTranslation.title",
+          "evidence": "Plugins/Translator/Sources/TranslatorPlugin.swift:191",
+          "queries": {
+            "ar": "ترجمة التحديد",
+            "de": "Auswahl übersetzen",
+            "en": "Translate Selection",
+            "es": "Traducir selección",
+            "fr": "Traduire la sélection",
+            "ja": "選択範囲を翻訳",
+            "ko": "선택 항목 번역",
+            "pt": "Traduzir seleção",
+            "ru": "Перевести выделенное",
+            "tr": "Seçimi Çevir",
+            "zh-Hans": "划词翻译",
+            "zh-Hant": "劃詞翻譯"
+          },
+          "beforeMatchedLocales": [
+            "ar",
+            "de",
+            "en",
+            "es",
+            "fr",
+            "ja",
+            "ko",
+            "pt",
+            "ru",
+            "tr",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "screenshot translation",
+          "source": "Plugins/Translator/Resources/Localizable.xcstrings#shortcut.screenshotTranslation.title",
+          "evidence": "Plugins/Translator/Sources/TranslatorPlugin.swift:200",
+          "queries": {
+            "ar": "ترجمة لقطة الشاشة",
+            "de": "Screenshot übersetzen",
+            "en": "Translate Screenshot",
+            "es": "Traducir captura de pantalla",
+            "fr": "Traduire la capture d'écran",
+            "ja": "スクリーンショットを翻訳",
+            "ko": "스크린샷 번역",
+            "pt": "Traduzir captura de tela",
+            "ru": "Перевести скриншот",
+            "tr": "Ekran Görüntüsünü Çevir",
+            "zh-Hans": "截图翻译",
+            "zh-Hant": "截圖翻譯"
+          },
+          "beforeMatchedLocales": [
+            "ar",
+            "de",
+            "en",
+            "es",
+            "fr",
+            "ja",
+            "ko",
+            "pt",
+            "ru",
+            "tr",
+            "zh-Hans",
+            "zh-Hant"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "WindowLayouts",
+      "pluginID": "window-layouts",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "custom layouts",
+          "source": "Plugins/WindowLayouts/Resources/Localizable.xcstrings#settings.custom.title",
+          "evidence": "Plugins/WindowLayouts/Sources/WindowLayoutsPlugin.swift:750",
+          "queries": {
+            "ar": "التخطيطات المخصصة",
+            "de": "Benutzerdefinierte Layouts",
+            "en": "Custom Layouts",
+            "es": "Diseños personalizados",
+            "fr": "Dispositions personnalisées",
+            "ja": "カスタムレイアウト",
+            "ko": "맞춤 레이아웃",
+            "pt": "Layouts personalizados",
+            "ru": "Пользовательские макеты",
+            "tr": "Özel Düzenler",
+            "zh-Hans": "自定义布局",
+            "zh-Hant": "自訂佈局"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "modifier drag",
+          "source": "Plugins/WindowLayouts/Resources/Localizable.xcstrings#settings.modifierDrag.sectionTitle",
+          "evidence": "Plugins/WindowLayouts/Sources/WindowLayoutsPlugin.swift:512",
+          "queries": {
+            "ar": "السحب باستخدام مفاتيح التعديل",
+            "de": "Ziehen mit Sondertasten",
+            "en": "Modifier Drag",
+            "es": "Arrastrar con teclas modificadoras",
+            "fr": "Glisser avec des touches de modification",
+            "ja": "修飾キーでドラッグ",
+            "ko": "보조 키로 드래그",
+            "pt": "Arrastar com teclas modificadoras",
+            "ru": "Перетаскивание с клавишами-модификаторами",
+            "tr": "Değiştirici Tuşla Sürükleme",
+            "zh-Hans": "修饰键拖移",
+            "zh-Hant": "修飾鍵拖移"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "centered window guides",
+          "source": "Plugins/WindowLayouts/Resources/Localizable.xcstrings#settings.centeredGuides.title",
+          "evidence": "Plugins/WindowLayouts/Sources/WindowLayoutsPlugin.swift:706",
+          "queries": {
+            "ar": "خطوط إرشاد توسيط النوافذ",
+            "de": "Zentrierte Fensterhilfslinien",
+            "en": "Centered window guides",
+            "es": "Guías de ventana centradas",
+            "fr": "Guides de fenêtre centrés",
+            "ja": "ウィンドウの中央配置ガイド",
+            "ko": "윈도우 가운데 정렬 안내선",
+            "pt": "Guias de janela centralizadas",
+            "ru": "Направляющие для центрирования окон",
+            "tr": "Pencere Ortalama Kılavuzları",
+            "zh-Hans": "窗口居中参考线",
+            "zh-Hant": "視窗置中參考線"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "WindowSwitcher",
+      "pluginID": "window-switcher",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "search windows",
+          "source": "Plugins/WindowSwitcher/Resources/Localizable.xcstrings#chooser.search",
+          "evidence": "Plugins/WindowSwitcher/Sources/WindowSwitcherOverlayController.swift:492",
+          "queries": {
+            "ar": "البحث في عناوين النوافذ أو التطبيقات",
+            "de": "Fenstertitel oder Apps suchen",
+            "en": "Search window titles or apps",
+            "es": "Buscar títulos de ventanas o apps",
+            "fr": "Rechercher des titres de fenêtres ou des applications",
+            "ja": "ウインドウのタイトルやアプリを検索",
+            "ko": "윈도우 제목 또는 앱 검색",
+            "pt": "Buscar títulos de janelas ou aplicativos",
+            "ru": "Поиск по заголовкам окон или приложениям",
+            "tr": "Pencere başlıklarında veya uygulamalarda arayın",
+            "zh-Hans": "搜索窗口标题或应用",
+            "zh-Hant": "搜尋視窗標題或 App"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "window preview",
+          "source": "Plugins/WindowSwitcher/Resources/Localizable.xcstrings#settings.preview.title",
+          "evidence": "Plugins/WindowSwitcher/Sources/WindowSwitcherPlugin.swift:373",
+          "queries": {
+            "ar": "معاينة النافذة المحددة",
+            "de": "Vorschau des ausgewählten Fensters",
+            "en": "Selected Window Preview",
+            "es": "Vista previa de la ventana seleccionada",
+            "fr": "Aperçu de la fenêtre sélectionnée",
+            "ja": "選択したウィンドウのプレビュー",
+            "ko": "선택한 창 미리보기",
+            "pt": "Visualização da janela selecionada",
+            "ru": "Предварительный просмотр выбранного окна",
+            "tr": "Seçili Pencere Önizlemesi",
+            "zh-Hans": "选中窗口预览",
+            "zh-Hant": "所選視窗預覽"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "cycle windows",
+          "source": "Plugins/WindowSwitcher/Resources/Localizable.xcstrings#chooser.modeCycle",
+          "evidence": "Plugins/WindowSwitcher/Sources/WindowSwitcherOverlayController.swift:1313",
+          "queries": {
+            "ar": "التنقل بين النوافذ",
+            "de": "Fenster durchwechseln",
+            "en": "Cycling",
+            "es": "Alternar ventanas",
+            "fr": "Parcourir les fenêtres",
+            "ja": "順に切り替え",
+            "ko": "순서대로 전환",
+            "pt": "Alternar janelas",
+            "ru": "Переключение по кругу",
+            "tr": "Sıralı Geçiş",
+            "zh-Hans": "循环切换",
+            "zh-Hant": "循環切換"
+          },
+          "beforeMatchedLocales": [
+            "pt"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "minimized windows",
+          "source": "Plugins/WindowSwitcher/Resources/Localizable.xcstrings#settings.minimized.title",
+          "evidence": "Plugins/WindowSwitcher/Sources/WindowSwitcherPlugin.swift:387",
+          "queries": {
+            "ar": "تضمين النوافذ المصغرة",
+            "de": "Minimierte Fenster einbeziehen",
+            "en": "Include Minimized Windows",
+            "es": "Incluir ventanas minimizadas",
+            "fr": "Inclure les fenêtres réduites",
+            "ja": "最小化されたウィンドウを含める",
+            "ko": "최소화된 창 포함",
+            "pt": "Incluir janelas minimizadas",
+            "ru": "Включить свернутые окна",
+            "tr": "Küçültülmüş Pencereleri Dahil Et",
+            "zh-Hans": "包含最小化窗口",
+            "zh-Hant": "包含已縮小的視窗"
+          },
+          "beforeMatchedLocales": [],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "XcodeClean",
+      "pluginID": "xcode-clean",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "simulator caches",
+          "source": "Plugins/XcodeClean/Resources/Localizable.xcstrings#category.simulatorCaches.title",
+          "evidence": "Plugins/XcodeClean/Sources/XcodeCleanModels.swift:27",
+          "queries": {
+            "ar": "ذاكرات المحاكي المؤقتة",
+            "de": "Simulator-Caches",
+            "en": "Simulator Caches",
+            "es": "Cachés del simulador",
+            "fr": "Caches du simulateur",
+            "ja": "シミュレータキャッシュ",
+            "ko": "시뮬레이터 캐시",
+            "pt": "Caches do simulador",
+            "ru": "Кэши симулятора",
+            "tr": "Simulator Önbellekleri",
+            "zh-Hans": "模拟器缓存",
+            "zh-Hant": "模擬器快取"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "preview caches",
+          "source": "Plugins/XcodeClean/Resources/Localizable.xcstrings#category.previews.title",
+          "evidence": "Plugins/XcodeClean/Sources/XcodeCleanModels.swift:29",
+          "queries": {
+            "ar": "ذاكرات المعاينة المؤقتة",
+            "de": "Vorschau-Caches",
+            "en": "Preview Caches",
+            "es": "Cachés de previsualización",
+            "fr": "Caches d’aperçu",
+            "ja": "プレビューキャッシュ",
+            "ko": "미리보기 캐시",
+            "pt": "Caches de pré-visualização",
+            "ru": "Кэши предпросмотра",
+            "tr": "Önizleme Önbellekleri",
+            "zh-Hans": "预览缓存",
+            "zh-Hant": "預覽快取"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    },
+    {
+      "directory": "ZshConfig",
+      "pluginID": "zsh-config",
+      "disposition": "extend active capability labels",
+      "labels": [
+        {
+          "concept": "alias",
+          "source": "Plugins/ZshConfig/Resources/Localizable.xcstrings#snippet.alias.title",
+          "evidence": "Plugins/ZshConfig/Sources/ZshConfigModels.swift:150",
+          "queries": {
+            "ar": "اسم مستعار",
+            "de": "Alias",
+            "en": "Alias",
+            "es": "Alias",
+            "fr": "Alias",
+            "ja": "エイリアス",
+            "ko": "alias",
+            "pt": "Alias",
+            "ru": "Алиас",
+            "tr": "Takma Ad",
+            "zh-Hans": "别名",
+            "zh-Hant": "別名"
+          },
+          "beforeMatchedLocales": [
+            "de",
+            "en",
+            "es",
+            "fr",
+            "ko",
+            "pt",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "environment variable",
+          "source": "Plugins/ZshConfig/Resources/Localizable.xcstrings#snippet.export.title",
+          "evidence": "Plugins/ZshConfig/Sources/ZshConfigModels.swift:165",
+          "queries": {
+            "ar": "متغير بيئة",
+            "de": "Umgebungsvariable",
+            "en": "Environment Variable",
+            "es": "Variable de entorno",
+            "fr": "Variable d’environnement",
+            "ja": "環境変数",
+            "ko": "환경 변수",
+            "pt": "Variável de ambiente",
+            "ru": "Переменная среды",
+            "tr": "Ortam Değişkeni",
+            "zh-Hans": "环境变量",
+            "zh-Hant": "環境變數"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        },
+        {
+          "concept": "PATH directory",
+          "source": "Plugins/ZshConfig/Resources/Localizable.xcstrings#snippet.path.title",
+          "evidence": "Plugins/ZshConfig/Sources/ZshConfigModels.swift:180",
+          "queries": {
+            "ar": "دليل PATH",
+            "de": "PATH-Verzeichnis",
+            "en": "PATH Directory",
+            "es": "Directorio PATH",
+            "fr": "Dossier PATH",
+            "ja": "PATH ディレクトリ",
+            "ko": "PATH 디렉터리",
+            "pt": "Diretório PATH",
+            "ru": "Каталог PATH",
+            "tr": "PATH Dizini",
+            "zh-Hans": "PATH 路径",
+            "zh-Hant": "PATH 路徑"
+          },
+          "beforeMatchedLocales": [
+            "en",
+            "zh-Hans"
+          ],
+          "afterAllQueriesMatch": true
+        }
+      ]
+    }
+  ],
+  "translationCorrections": [
+    {
+      "id": "LS-R1-A1",
+      "directory": "ActivityBar",
+      "concept": "screen time",
+      "nativeKey": "component.metric.screenTime",
+      "correctedValues": {
+        "ja": "スクリーンタイム"
+      },
+      "sourceEvidence": "Plugins/ActivityBar/Sources/ActivityBarComponentView.swift:350"
+    },
+    {
+      "id": "LS-R1-A1",
+      "directory": "ActivityBar",
+      "concept": "scrolls",
+      "nativeKey": "component.metric.scrolls",
+      "correctedValues": {
+        "ar": "التمرير",
+        "de": "Scrollen",
+        "es": "Desplazamiento",
+        "fr": "Défilement",
+        "ja": "スクロール",
+        "pt": "Rolagem",
+        "ru": "Прокрутка"
+      },
+      "sourceEvidence": "Plugins/ActivityBar/Sources/ActivityBarComponentView.swift:345"
+    },
+    {
+      "id": "LS-R1-A2",
+      "directory": "FanControl",
+      "concept": "custom RPM target",
+      "nativeKey": "panel.slider.targetRPM",
+      "correctedValues": {
+        "ar": "سرعة الدوران المستهدفة",
+        "ru": "Целевые обороты в минуту"
+      },
+      "sourceEvidence": "Plugins/FanControl/Sources/FanControlPlugin.swift:687"
+    },
+    {
+      "id": "TERM-TTS-001",
+      "directory": "Translator",
+      "concept": "speak translation",
+      "nativeKey": "panel.result.speakHelp",
+      "correctedValues": {
+        "fr": "Lire la traduction"
+      },
+      "sourceEvidence": "Plugins/Translator/Sources/Panel/TranslatorPanelView.swift:212"
+    },
+    {
+      "id": "TERM-BARCODE-001",
+      "directory": "Screenshot",
+      "concept": "QR recognition",
+      "nativeKey": "overlay.recognition.barcode",
+      "correctedValues": {
+        "tr": "QR kodlarını ve barkodları tanı"
+      },
+      "sourceEvidence": "Plugins/Screenshot/Sources/Overlay.swift:1215"
+    }
+  ],
+  "caseVariantValidation": {
+    "kind": "locale-specific lowercase forms of every declared capability/name/summary query evaluated by website matcher",
+    "queries": 3408,
+    "passed": 3408,
+    "localeCount": 12,
+    "turkishBrowserOwnerQueries": [
+      "iç içe klasörler",
+      "istem şablonu",
+      "imleci izle",
+      "izleme dörtgeni hareketi",
+      "işlemler"
+    ],
+    "syntheticCoverage": "Turkish dotted/dotless-I sentence, mixed, lower/upper forms; German sharp-S/SS/capital sharp-S in metadata/action matching; canonical Unicode with ordinary accents preserved"
+  },
+  "caseFoldingFollowUp": {
+    "baselineCommit": "a7d4fe3f28ee135c86b04b63391df2b0ce390872",
+    "websitePairs": [
+      {
+        "owner": "night-shift",
+        "workingBefore": "ışığı azaltın",
+        "missingBefore": "Işığı azaltın"
+      },
+      {
+        "owner": "display-true-color",
+        "workingBefore": "ortam ışığına",
+        "missingBefore": "Ortam Işığına"
+      },
+      {
+        "owner": "launchpad",
+        "action": "launchpad/toggleLaunchpad",
+        "workingBefore": "uygulama ızgarasını",
+        "missingBefore": "Uygulama Izgarasını"
+      },
+      {
+        "owner": "window-layouts",
+        "action": "window-layouts/increase-height",
+        "workingBefore": "Fensterhöhe vergrößern",
+        "missingBefore": "FENSTERHÖHE VERGRÖSSERN"
+      },
+      {
+        "owner": "window-layouts",
+        "action": "window-layouts/reasonable-size",
+        "workingBefore": "Angemessene Größe",
+        "missingBefore": "ANGEMESSENE GRÖSSE"
+      }
+    ],
+    "nativeAliases": [
+      {
+        "owner": "action-grid",
+        "declaredAlias": "İç içe klasörler",
+        "query": "iç içe klasörler"
+      },
+      {
+        "owner": "ai-assistant",
+        "declaredAlias": "İstem Şablonu",
+        "query": "istem şablonu"
+      },
+      {
+        "owner": "display-volume",
+        "declaredAlias": "İmleci İzle",
+        "query": "imleci izle"
+      },
+      {
+        "owner": "input-remapping",
+        "declaredAlias": "İzleme Dörtgeni Hareketi",
+        "query": "izleme dörtgeni hareketi"
+      }
+    ],
+    "normalization": "NFC, trim, lowercase, i plus combining dot to i, dotless i to i, sharp-S to ss; other accents preserved",
+    "nativeScope": "Existing marketplace haystacks and query matching only; active-language prose selection remains unchanged"
+  }
+}

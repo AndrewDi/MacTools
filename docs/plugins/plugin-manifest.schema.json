@@ -84,6 +84,12 @@
       "properties": {
         "keywords": {"$ref": "#/$defs/uniqueStrings"},
         "localizedSynonyms": {"$ref": "#/$defs/completeLocalizedStringArrays"},
+        "localizedSynonymRefs": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/localizedText"},
+          "uniqueItems": true,
+          "description": "Source-only product-string references merged into each locale's synonyms before projection."
+        },
         "useCases": {
           "type": "array",
           "items": {

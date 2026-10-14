@@ -54,7 +54,27 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "discovery.ai-models": "@localizable.group.ai",
+    "discovery.ios-backups": "@localizable.group.backups",
+    "discovery.app-data": "@localizable.group.appdata",
+    "discovery.containers-and-vms": "@localizable.group.docker",
+    "discovery.logs-and-diagnostics": "@localizable.group.logs",
+    "discovery.developer-tool-data": "@localizable.group.developer",
+    "discovery.virtual-machines": {
+      "ar": "أجهزة افتراضية",
+      "de": "Virtuelle Maschinen",
+      "en": "Virtual Machines",
+      "es": "Máquinas virtuales",
+      "fr": "Machines virtuelles",
+      "ja": "仮想マシン",
+      "ko": "가상 머신",
+      "pt": "Máquinas virtuais",
+      "ru": "Виртуальные машины",
+      "tr": "Sanal makineler",
+      "zh-Hans": "虚拟机",
+      "zh-Hant": "虛擬機器"
+    }
   },
   "version": "1.0.0",
   "minHostVersion": "2.0.1",
@@ -66,7 +86,10 @@
     "scheme": "SystemDataPlugin"
   },
   "capabilities": {
-    "panelItems": ["row", "widget"],
+    "panelItems": [
+      "row",
+      "widget"
+    ],
     "settings": "workspace"
   },
   "permissions": [
@@ -88,20 +111,67 @@
     "license": "GPL-3.0-only"
   },
   "discovery": {
-    "keywords": ["system data", "storage", "disk usage", "cache", "inventory"],
+    "keywords": [
+      "system data",
+      "storage",
+      "disk usage",
+      "cache",
+      "inventory",
+      "AI models",
+      "iOS backups",
+      "app data",
+      "containers & VMs",
+      "virtual machines",
+      "logs & diagnostics",
+      "developer tool data"
+    ],
     "localizedSynonyms": {
-      "ar": ["بيانات النظام"],
-      "de": ["Systemdaten", "Festplattenbelegung"],
-      "en": ["System Data", "Storage Breakdown"],
-      "es": ["Datos del sistema"],
-      "fr": ["Données système"],
-      "ja": ["システムデータ"],
-      "ko": ["시스템 데이터"],
-      "pt": ["Dados do sistema"],
-      "ru": ["Системные данные"],
-      "tr": ["Sistem Verileri"],
-      "zh-Hans": ["系统数据", "空间占用"],
-      "zh-Hant": ["系統資料", "空間佔用"]
+      "ar": [
+        "بيانات النظام"
+      ],
+      "de": [
+        "Systemdaten",
+        "Festplattenbelegung"
+      ],
+      "en": [
+        "System Data",
+        "Storage Breakdown"
+      ],
+      "es": [
+        "Datos del sistema"
+      ],
+      "fr": [
+        "Données système"
+      ],
+      "ja": [
+        "システムデータ"
+      ],
+      "ko": [
+        "시스템 데이터"
+      ],
+      "pt": [
+        "Dados do sistema"
+      ],
+      "ru": [
+        "Системные данные"
+      ],
+      "tr": [
+        "Sistem Verileri"
+      ],
+      "zh-Hans": [
+        "系统数据",
+        "空间占用",
+        "AI 模型",
+        "iOS 设备备份",
+        "应用数据",
+        "容器与虚拟机",
+        "日志与诊断",
+        "开发工具数据"
+      ],
+      "zh-Hant": [
+        "系統資料",
+        "空間佔用"
+      ]
     },
     "useCases": [
       {
@@ -109,13 +179,30 @@
         "title": "@productStrings.display-name"
       }
     ],
-    "goalCategories": ["storage"],
-    "relatedPluginIDs": ["disk-clean", "com.mactools.plugin.storage-explorer"],
-    "alternativePluginIDs": []
+    "goalCategories": [
+      "storage"
+    ],
+    "relatedPluginIDs": [
+      "disk-clean",
+      "com.mactools.plugin.storage-explorer"
+    ],
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.ai-models",
+      "@productStrings.discovery.ios-backups",
+      "@productStrings.discovery.app-data",
+      "@productStrings.discovery.containers-and-vms",
+      "@productStrings.discovery.logs-and-diagnostics",
+      "@productStrings.discovery.developer-tool-data",
+      "@productStrings.discovery.virtual-machines"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",
-    "architectures": ["arm64", "x86_64"],
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
     "hardware": [],
     "applications": [],
     "executables": [],
@@ -124,7 +211,10 @@
     "requiresRelaunch": false
   },
   "privacy": {
-    "dataObserved": ["filesystem-paths", "file-sizes"],
+    "dataObserved": [
+      "filesystem-paths",
+      "file-sizes"
+    ],
     "dataPersisted": [],
     "retention": {
       "policy": "none"
@@ -141,7 +231,10 @@
     "optionalSurfaces": []
   },
   "relationships": {
-    "relatedPluginIDs": ["disk-clean", "com.mactools.plugin.storage-explorer"],
+    "relatedPluginIDs": [
+      "disk-clean",
+      "com.mactools.plugin.storage-explorer"
+    ],
     "includedPackIDs": [],
     "suggestedRecipeIDs": [],
     "supersedesPluginIDs": []

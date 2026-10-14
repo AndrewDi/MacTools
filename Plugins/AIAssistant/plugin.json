@@ -140,6 +140,25 @@
       "tr": "Geçerli seçimi \"İyileştir\" ile işle.",
       "zh-Hans": "用「润色」处理当前选中文本。",
       "zh-Hant": "用「潤飾」處理目前選取的文字。"
+    },
+    "discovery.translate": "@localizable.prompt.default.translate.name",
+    "discovery.summarize": "@localizable.prompt.default.summarize.name",
+    "discovery.polish": "@localizable.prompt.default.polish.name",
+    "discovery.prompt-template": "@localizable.settings.prompt.template.title",
+    "discovery.clipboard-text": "@localizable.settings.shortcutInput.clipboard.title",
+    "discovery.custom-prompts": {
+      "ar": "مطالبات مخصصة",
+      "de": "Eigene Prompts",
+      "en": "Custom Prompts",
+      "es": "Indicaciones personalizadas",
+      "fr": "Prompts personnalisés",
+      "ja": "カスタムプロンプト",
+      "ko": "사용자 지정 프롬프트",
+      "pt": "Prompts personalizados",
+      "ru": "Пользовательские запросы",
+      "tr": "Özel istemler",
+      "zh-Hans": "自定义提示词",
+      "zh-Hant": "自訂提示詞"
     }
   },
   "version": "0.1.0",
@@ -183,7 +202,10 @@
       "productivity",
       "translate",
       "summarize",
-      "polish"
+      "polish",
+      "prompt template",
+      "custom prompts",
+      "clipboard text"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -217,7 +239,10 @@
         "Yapay Zekâ Asistanı"
       ],
       "zh-Hans": [
-        "AI 助手"
+        "AI 助手",
+        "提示词模板",
+        "自定义模板",
+        "剪贴板文本"
       ],
       "zh-Hant": [
         "AI 助手"
@@ -233,7 +258,15 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.translate",
+      "@productStrings.discovery.summarize",
+      "@productStrings.discovery.polish",
+      "@productStrings.discovery.prompt-template",
+      "@productStrings.discovery.clipboard-text",
+      "@productStrings.discovery.custom-prompts"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

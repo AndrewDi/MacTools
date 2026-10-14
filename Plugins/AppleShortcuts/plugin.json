@@ -70,6 +70,34 @@
       "tr": "Bu Mac'te depolanan, çalıştırılacak Apple kısayolunu seçin.",
       "zh-Hans": "选择存储在此 Mac 上、要运行的 Apple 快捷指令。",
       "zh-Hant": "選擇儲存在此 Mac 上、要執行的 Apple 捷徑。"
+    },
+    "discovery.run-shortcuts": {
+      "ar": "تشغيل الاختصارات",
+      "de": "Kurzbefehle ausführen",
+      "en": "Run Shortcuts",
+      "es": "Ejecutar atajos",
+      "fr": "Exécuter des raccourcis",
+      "ja": "ショートカットを実行",
+      "ko": "단축어 실행",
+      "pt": "Executar atalhos",
+      "ru": "Запуск команд",
+      "tr": "Kestirmeleri çalıştır",
+      "zh-Hans": "运行快捷指令",
+      "zh-Hant": "執行捷徑"
+    },
+    "discovery.shortcut-folders": {
+      "ar": "مجلدات الاختصارات",
+      "de": "Kurzbefehlordner",
+      "en": "Shortcut Folders",
+      "es": "Carpetas de atajos",
+      "fr": "Dossiers de raccourcis",
+      "ja": "ショートカットのフォルダ",
+      "ko": "단축어 폴더",
+      "pt": "Pastas de atalhos",
+      "ru": "Папки команд",
+      "tr": "Kestirme klasörleri",
+      "zh-Hans": "快捷指令文件夹",
+      "zh-Hant": "捷徑資料夾"
     }
   },
   "version": "2.0.1",
@@ -107,7 +135,9 @@
     "keywords": [
       "apple",
       "shortcuts",
-      "productivity"
+      "productivity",
+      "run shortcuts",
+      "shortcut folders"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -141,7 +171,9 @@
         "Apple Shortcuts"
       ],
       "zh-Hans": [
-        "Apple 快捷指令"
+        "Apple 快捷指令",
+        "运行快捷指令",
+        "快捷指令文件夹"
       ],
       "zh-Hant": [
         "Apple 捷徑"
@@ -157,7 +189,11 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.run-shortcuts",
+      "@productStrings.discovery.shortcut-folders"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

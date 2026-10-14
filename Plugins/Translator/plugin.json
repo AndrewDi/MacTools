@@ -60,7 +60,24 @@
     "action.select-translation.title": "@localizable.shortcut.selectTranslation.title",
     "action.select-translation.description": "@localizable.shortcut.selectTranslation.description",
     "action.screenshot-translation.title": "@localizable.shortcut.screenshotTranslation.title",
-    "action.screenshot-translation.description": "@localizable.shortcut.screenshotTranslation.description"
+    "action.screenshot-translation.description": "@localizable.shortcut.screenshotTranslation.description",
+    "discovery.speak-translation": {
+      "ar": "تحدث الترجمة",
+      "de": "Übersetzung sprechen",
+      "en": "Speak translation",
+      "es": "Hablar traducción",
+      "fr": "Lire la traduction",
+      "ja": "翻訳を話す",
+      "ko": "번역 말하기",
+      "pt": "Falar tradução",
+      "ru": "Произнесите перевод",
+      "tr": "Çeviriyi seslendir",
+      "zh-Hans": "朗读译文",
+      "zh-Hant": "朗讀譯文"
+    },
+    "discovery.openai-translation": "@localizable.openAIClient.providerTitle",
+    "discovery.selection-translation": "@localizable.shortcut.selectTranslation.title",
+    "discovery.screenshot-translation": "@localizable.shortcut.screenshotTranslation.title"
   },
   "version": "1.0.1",
   "minHostVersion": "2.0.1",
@@ -101,7 +118,9 @@
   "discovery": {
     "keywords": [
       "translator",
-      "productivity"
+      "productivity",
+      "speak translation",
+      "OpenAI translation"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -135,7 +154,9 @@
         "Çevirmen"
       ],
       "zh-Hans": [
-        "翻译"
+        "翻译",
+        "朗读译文",
+        "OpenAI 翻译"
       ],
       "zh-Hant": [
         "翻譯"
@@ -151,7 +172,13 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.speak-translation",
+      "@productStrings.discovery.openai-translation",
+      "@productStrings.discovery.selection-translation",
+      "@productStrings.discovery.screenshot-translation"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

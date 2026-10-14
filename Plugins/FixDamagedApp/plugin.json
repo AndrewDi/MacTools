@@ -94,7 +94,8 @@
       "damaged",
       "app",
       "apps",
-      "productivity"
+      "productivity",
+      "repair apps"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -128,7 +129,8 @@
         "Hasarlı Uygulamaları Onarma"
       ],
       "zh-Hans": [
-        "修复损坏应用"
+        "修复损坏应用",
+        "修复应用"
       ],
       "zh-Hant": [
         "修復損壞的 App"

@@ -141,6 +141,48 @@
       "tr": "Bu Mac'te depolanan, yeniden başlatılacak favori başlatma öğesini seçin.",
       "zh-Hans": "选择存储在此 Mac 上、要重新启动的收藏启动项。",
       "zh-Hant": "選擇儲存在此 Mac 上、要重新啟動的收藏啟動項目。"
+    },
+    "discovery.launch-agents": {
+      "ar": "وكلاء التشغيل",
+      "de": "Startagenten",
+      "en": "Launch Agents",
+      "es": "Agentes de inicio",
+      "fr": "Agents de lancement",
+      "ja": "起動エージェント",
+      "ko": "실행 에이전트",
+      "pt": "Agentes de inicialização",
+      "ru": "Агенты запуска",
+      "tr": "Başlatma aracıları",
+      "zh-Hans": "启动代理",
+      "zh-Hant": "啟動代理程式"
+    },
+    "discovery.launch-daemons": {
+      "ar": "خدمات التشغيل",
+      "de": "Startdienste",
+      "en": "Launch Daemons",
+      "es": "Servicios de inicio",
+      "fr": "Démons de lancement",
+      "ja": "起動デーモン",
+      "ko": "실행 데몬",
+      "pt": "Serviços de inicialização",
+      "ru": "Демоны запуска",
+      "tr": "Başlatma servisleri",
+      "zh-Hans": "启动守护进程",
+      "zh-Hant": "啟動守護程式"
+    },
+    "discovery.background-services": {
+      "ar": "خدمات الخلفية",
+      "de": "Hintergrunddienste",
+      "en": "Background Services",
+      "es": "Servicios en segundo plano",
+      "fr": "Services en arrière-plan",
+      "ja": "バックグラウンドサービス",
+      "ko": "백그라운드 서비스",
+      "pt": "Serviços em segundo plano",
+      "ru": "Фоновые службы",
+      "tr": "Arka plan hizmetleri",
+      "zh-Hans": "后台服务",
+      "zh-Hant": "背景服務"
     }
   },
   "version": "2.0.1",
@@ -179,7 +221,12 @@
       "launch",
       "control",
       "items",
-      "productivity"
+      "productivity",
+      "launch agents",
+      "LaunchAgents",
+      "launch daemons",
+      "LaunchDaemons",
+      "background services"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -213,7 +260,8 @@
         "Başlangıç Öğeleri"
       ],
       "zh-Hans": [
-        "启动项"
+        "启动项",
+        "后台服务"
       ],
       "zh-Hant": [
         "啟動項目"
@@ -229,7 +277,12 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.launch-agents",
+      "@productStrings.discovery.launch-daemons",
+      "@productStrings.discovery.background-services"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

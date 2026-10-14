@@ -54,7 +54,49 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "discovery.reopen-apps": {
+      "ar": "إعادة فتح التطبيقات",
+      "de": "Apps erneut öffnen",
+      "en": "Reopen Apps",
+      "es": "Volver a abrir las apps",
+      "fr": "Rouvrir les apps",
+      "ja": "アプリを再度開く",
+      "ko": "앱 다시 열기",
+      "pt": "Reabrir os apps",
+      "ru": "Повторно открывать приложения",
+      "tr": "Uygulamaları Yeniden Aç",
+      "zh-Hans": "重新打开应用",
+      "zh-Hant": "重新開啟 App"
+    },
+    "discovery.preserve-dock-layout": {
+      "ar": "الحفاظ على تخطيط Dock",
+      "de": "Dock-Layout beibehalten",
+      "en": "Preserve Dock Layout",
+      "es": "Conservar la disposición del Dock",
+      "fr": "Conserver la disposition du Dock",
+      "ja": "Dockレイアウトを保持",
+      "ko": "Dock 레이아웃 유지",
+      "pt": "Preservar o layout do Dock",
+      "ru": "Сохранить расположение Dock",
+      "tr": "Dock Düzenini Koru",
+      "zh-Hans": "保留 Dock 布局",
+      "zh-Hant": "保留 Dock 佈局"
+    },
+    "discovery.restart-user-services": {
+      "ar": "إعادة تشغيل خدمات المستخدم",
+      "de": "Benutzerdienste neu starten",
+      "en": "Restart User Services",
+      "es": "Reiniciar servicios del usuario",
+      "fr": "Redémarrer les services utilisateur",
+      "ja": "ユーザーサービスを再起動",
+      "ko": "사용자 서비스 다시 시작",
+      "pt": "Reiniciar serviços do usuário",
+      "ru": "Перезапустить службы пользователя",
+      "tr": "Kullanıcı hizmetlerini yeniden başlat",
+      "zh-Hans": "重启用户服务",
+      "zh-Hant": "重新啟動使用者服務"
+    }
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -97,7 +139,9 @@
     "keywords": [
       "system",
       "soft",
-      "restart"
+      "restart",
+      "reopen apps",
+      "preserve Dock layout"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -131,7 +175,10 @@
         "Sistem Yumuşak Yeniden Başlatma"
       ],
       "zh-Hans": [
-        "系统软重启"
+        "系统软重启",
+        "重启用户服务",
+        "重新打开应用",
+        "保留 Dock 布局"
       ],
       "zh-Hant": [
         "系統軟重啟"
@@ -147,7 +194,12 @@
       "system"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.reopen-apps",
+      "@productStrings.discovery.preserve-dock-layout",
+      "@productStrings.discovery.restart-user-services"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

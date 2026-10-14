@@ -56,7 +56,9 @@
     "display-name": "@displayName",
     "summary": "@summary",
     "setup.requirements.title": "@standardSetup.requirements.title",
-    "setup.requirements.description": "@standardSetup.requirements.description"
+    "setup.requirements.description": "@standardSetup.requirements.description",
+    "discovery.lunar-calendar": "@localizable.settings.alternateCalendar.chinese",
+    "discovery.recent-events": "@localizable.agenda.title"
   },
   "version": "2.0.1",
   "minHostVersion": "2.0.1",
@@ -95,7 +97,9 @@
   "discovery": {
     "keywords": [
       "calendar",
-      "productivity"
+      "productivity",
+      "lunar calendar",
+      "recent events"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -129,7 +133,9 @@
         "Takvim"
       ],
       "zh-Hans": [
-        "日历"
+        "日历",
+        "农历",
+        "近期日程"
       ],
       "zh-Hant": [
         "行事曆"
@@ -145,7 +151,11 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.lunar-calendar",
+      "@productStrings.discovery.recent-events"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

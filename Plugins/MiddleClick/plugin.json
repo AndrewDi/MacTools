@@ -56,7 +56,49 @@
     "display-name": "@displayName",
     "summary": "@summary",
     "setup.requirements.title": "@standardSetup.requirements.title",
-    "setup.requirements.description": "@standardSetup.requirements.description"
+    "setup.requirements.description": "@standardSetup.requirements.description",
+    "discovery.three-finger-tap": {
+      "ar": "اضغط بثلاثة أصابع",
+      "de": "Drei-Finger-Tippen",
+      "en": "Three-Finger Tap",
+      "es": "Toque con tres dedos",
+      "fr": "Toucher à trois doigts",
+      "ja": "3本指タップ",
+      "ko": "세 손가락 탭",
+      "pt": "Toque com três dedos",
+      "ru": "Касание тремя пальцами",
+      "tr": "Üç Parmakla Dokunma",
+      "zh-Hans": "三指轻点",
+      "zh-Hant": "三指點擊"
+    },
+    "discovery.four-finger-tap": {
+      "ar": "اضغط بأربعة أصابع",
+      "de": "Vier-Finger-Tippen",
+      "en": "Four-Finger Tap",
+      "es": "Toque con cuatro dedos",
+      "fr": "Toucher à quatre doigts",
+      "ja": "4本指タップ",
+      "ko": "네 손가락 탭",
+      "pt": "Toque com quatro dedos",
+      "ru": "Касание четырьмя пальцами",
+      "tr": "Dört Parmakla Dokunma",
+      "zh-Hans": "四指轻点",
+      "zh-Hant": "四指點擊"
+    },
+    "discovery.five-finger-tap": {
+      "ar": "اضغط بخمسة أصابع",
+      "de": "Fünf-Finger-Tippen",
+      "en": "Five-Finger Tap",
+      "es": "Toque con cinco dedos",
+      "fr": "Toucher à cinq doigts",
+      "ja": "5本指タップ",
+      "ko": "다섯 손가락 탭",
+      "pt": "Toque com cinco dedos",
+      "ru": "Касание пятью пальцами",
+      "tr": "Beş Parmakla Dokunma",
+      "zh-Hans": "五指轻点",
+      "zh-Hant": "五指點擊"
+    }
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -93,7 +135,10 @@
     "keywords": [
       "middle",
       "click",
-      "productivity"
+      "productivity",
+      "three-finger tap",
+      "four-finger tap",
+      "five-finger tap"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -127,7 +172,11 @@
         "Orta Tıklama"
       ],
       "zh-Hans": [
-        "模拟鼠标中键"
+        "模拟鼠标中键",
+        "中键点击",
+        "三指轻点",
+        "四指轻点",
+        "五指轻点"
       ],
       "zh-Hant": [
         "模擬滑鼠中鍵"
@@ -143,7 +192,12 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.three-finger-tap",
+      "@productStrings.discovery.four-finger-tap",
+      "@productStrings.discovery.five-finger-tap"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

@@ -192,7 +192,11 @@
       "tr": "Etkin uygulamanın bir penceresini bulun ve seçin.",
       "zh-Hans": "搜索和选择当前应用的窗口。",
       "zh-Hant": "搜尋並選取目前 App 的視窗。"
-    }
+    },
+    "discovery.search-windows": "@localizable.chooser.search",
+    "discovery.window-preview": "@localizable.settings.preview.title",
+    "discovery.cycle-windows": "@localizable.chooser.modeCycle",
+    "discovery.minimized-windows": "@localizable.settings.minimized.title"
   },
   "version": "2.0.1",
   "minHostVersion": "2.0.1",
@@ -230,7 +234,11 @@
       "window switcher",
       "application switcher",
       "keyboard",
-      "shortcut"
+      "shortcut",
+      "search windows",
+      "window preview",
+      "cycle windows",
+      "minimized windows"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -274,7 +282,11 @@
       ],
       "zh-Hans": [
         "窗口切换",
-        "窗口快捷键"
+        "窗口快捷键",
+        "搜索窗口",
+        "窗口预览",
+        "连续切换",
+        "最小化窗口"
       ],
       "zh-Hant": [
         "視窗切換",
@@ -294,7 +306,13 @@
     "relatedPluginIDs": [
       "app-hotkey"
     ],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.search-windows",
+      "@productStrings.discovery.window-preview",
+      "@productStrings.discovery.cycle-windows",
+      "@productStrings.discovery.minimized-windows"
+    ]
   },
   "requirements": {
     "architectures": [

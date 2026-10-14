@@ -68,6 +68,34 @@
       "tr": "Ayarlar, eklenti verileri kaldırılana kadar saklanır. Son tarama önizlemeleri yerel olarak önbelleğe alınır ve otomatik olarak değiştirilir ya da kaldırılır.",
       "zh-Hans": "设置会保留到插件数据被移除。最近的扫描预览会在本地缓存，并自动替换或删除。",
       "zh-Hant": "設定會保留到外掛資料被移除。最近的掃描預覽會在本機快取，並自動取代或刪除。"
+    },
+    "discovery.treemap": {
+      "ar": "خريطة شجرية مساحية",
+      "de": "Baumkarte",
+      "en": "Treemap",
+      "es": "Mapa de árbol",
+      "fr": "Carte arborescente",
+      "ja": "ツリーマップ",
+      "ko": "트리맵",
+      "pt": "Mapa em árvore",
+      "ru": "Древовидная карта",
+      "tr": "Ağaç haritası",
+      "zh-Hans": "矩形树图",
+      "zh-Hant": "矩形樹圖"
+    },
+    "discovery.space-map": {
+      "ar": "خريطة مساحة التخزين",
+      "de": "Speicherplatzkarte",
+      "en": "Space Map",
+      "es": "Mapa de espacio de almacenamiento",
+      "fr": "Carte de l’espace de stockage",
+      "ja": "ストレージ使用量マップ",
+      "ko": "저장 공간 지도",
+      "pt": "Mapa do espaço de armazenamento",
+      "ru": "Карта дискового пространства",
+      "tr": "Depolama alanı haritası",
+      "zh-Hans": "空间图",
+      "zh-Hant": "空間圖"
     }
   },
   "version": "1.0.1",
@@ -106,7 +134,9 @@
       "disk",
       "usage",
       "analyzer",
-      "space"
+      "space",
+      "treemap",
+      "space map"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -152,7 +182,8 @@
       "zh-Hans": [
         "存储空间分析",
         "磁盘分析",
-        "空间占用"
+        "空间占用",
+        "空间图"
       ],
       "zh-Hant": [
         "儲存空間分析",
@@ -172,7 +203,11 @@
     "relatedPluginIDs": [
       "disk-clean"
     ],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.treemap",
+      "@productStrings.discovery.space-map"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

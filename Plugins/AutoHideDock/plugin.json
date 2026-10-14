@@ -59,7 +59,8 @@
     "action.toggle.description": "@standardAction.toggle.description",
     "action.set-enabled.title": "@standardAction.set-enabled.title",
     "action.set-enabled.description": "@standardAction.set-enabled.description",
-    "action.set-enabled.parameter-summary": "@standardAction.set-enabled.description"
+    "action.set-enabled.parameter-summary": "@standardAction.set-enabled.description",
+    "discovery.show-dock": "@localizable.action.show.title"
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -100,7 +101,8 @@
       "auto",
       "hide",
       "dock",
-      "display"
+      "display",
+      "show dock"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -134,7 +136,8 @@
         "Dock'u Otomatik Gizleme"
       ],
       "zh-Hans": [
-        "自动隐藏程序坞"
+        "自动隐藏程序坞",
+        "显示程序坞"
       ],
       "zh-Hant": [
         "自動隱藏 Dock"
@@ -150,7 +153,10 @@
       "display"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.show-dock"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

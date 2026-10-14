@@ -68,7 +68,10 @@
       "tr": "Shell dosya içerikleri ve düzenlenen her shell dosyası için bir .bak yedeği saklanır. Bu dosyanın bir sonraki kaydı yedeğini değiştirir; bunun dışında yedekler siz kaldırana kadar kalır.",
       "zh-Hans": "会保存 Shell 文件内容，并为每个编辑过的 Shell 文件保留一个 .bak 备份。再次保存该文件时会替换它的备份；这些备份会保留到你手动删除为止。",
       "zh-Hant": "會儲存 Shell 檔案內容，並為每個編輯過的 Shell 檔案保留一個 .bak 備份。再次儲存該檔案時會取代它的備份；這些備份會保留到你手動刪除為止。"
-    }
+    },
+    "discovery.alias": "@localizable.snippet.alias.title",
+    "discovery.environment-variable": "@localizable.snippet.export.title",
+    "discovery.path-directory": "@localizable.snippet.path.title"
   },
   "version": "2.0.1",
   "minHostVersion": "2.0.1",
@@ -108,7 +111,12 @@
     "keywords": [
       "zsh",
       "config",
-      "productivity"
+      "productivity",
+      "alias",
+      "environment variable",
+      "PATH directory",
+      ".zprofile",
+      ".zshenv"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -142,7 +150,10 @@
         "zsh Yapılandırması"
       ],
       "zh-Hans": [
-        "zsh 配置"
+        "zsh 配置",
+        "别名",
+        "环境变量",
+        "PATH 路径"
       ],
       "zh-Hant": [
         "zsh 設定"
@@ -158,7 +169,12 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.alias",
+      "@productStrings.discovery.environment-variable",
+      "@productStrings.discovery.path-directory"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

@@ -37,6 +37,10 @@ class InteractiveReleasePlanningTests(unittest.TestCase):
                 source = root / "Plugins"
                 manifest_path = source / "AutoHideDock/plugin.json"
                 manifest_path.parent.mkdir(parents=True)
+                shutil.copytree(
+                    SCRIPTS_DIR.parent / "Plugins/AutoHideDock/Resources",
+                    manifest_path.parent / "Resources",
+                )
                 manifest = json.loads(
                     (SCRIPTS_DIR.parent / "Plugins/AutoHideDock/plugin.json").read_text()
                 )

@@ -56,7 +56,48 @@
     "display-name": "@displayName",
     "summary": "@summary",
     "setup.requirements.title": "@standardSetup.requirements.title",
-    "setup.requirements.description": "@standardSetup.requirements.description"
+    "setup.requirements.description": "@standardSetup.requirements.description",
+    "discovery.single-key-output": "@localizable.action.singleKey",
+    "discovery.trackpad-gestures": "@localizable.settings.trackpadGesture",
+    "discovery.mouse-double-click-trigger": "@localizable.settings.mouseInteraction.doubleClick",
+    "discovery.mouse-long-press-trigger": "@localizable.settings.mouseInteraction.longPress",
+    "discovery.threefingertap": "@localizable.settings.trackpadGesture.threeFingerTap",
+    "discovery.fourfingertap": "@localizable.settings.trackpadGesture.fourFingerTap",
+    "discovery.fivefingertap": "@localizable.settings.trackpadGesture.fiveFingerTap",
+    "discovery.threefingerdoubletap": "@localizable.settings.trackpadGesture.threeFingerDoubleTap",
+    "discovery.fourfingerdoubletap": "@localizable.settings.trackpadGesture.fourFingerDoubleTap",
+    "discovery.fivefingerdoubletap": "@localizable.settings.trackpadGesture.fiveFingerDoubleTap",
+    "discovery.threefingerlongtouch": "@localizable.settings.trackpadGesture.threeFingerLongTouch",
+    "discovery.fourfingerlongtouch": "@localizable.settings.trackpadGesture.fourFingerLongTouch",
+    "discovery.fivefingerlongtouch": "@localizable.settings.trackpadGesture.fiveFingerLongTouch",
+    "discovery.mouse-side-buttons": {
+      "ar": "أزرار الماوس الجانبية",
+      "de": "Seitliche Maustasten",
+      "en": "Mouse Side Buttons",
+      "es": "Botones laterales del ratón",
+      "fr": "Boutons latéraux de la souris",
+      "ja": "マウスのサイドボタン",
+      "ko": "마우스 측면 버튼",
+      "pt": "Botões laterais do mouse",
+      "ru": "Боковые кнопки мыши",
+      "tr": "Fare yan düğmeleri",
+      "zh-Hans": "鼠标侧键",
+      "zh-Hant": "滑鼠側鍵"
+    },
+    "discovery.scroll-wheel": {
+      "ar": "عجلة التمرير",
+      "de": "Mausrad",
+      "en": "Scroll Wheel",
+      "es": "Rueda de desplazamiento",
+      "fr": "Molette de défilement",
+      "ja": "スクロールホイール",
+      "ko": "스크롤 휠",
+      "pt": "Roda de rolagem",
+      "ru": "Колесо прокрутки",
+      "tr": "Kaydırma tekerleği",
+      "zh-Hans": "滚轮",
+      "zh-Hant": "滾輪"
+    }
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -102,7 +143,15 @@
       "keyboard",
       "trackpad",
       "mouse",
-      "productivity"
+      "productivity",
+      "TipTap",
+      "tip tap",
+      "trackpad gestures",
+      "scroll wheel",
+      "mouse side buttons",
+      "double-click",
+      "long press",
+      "single key"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -136,7 +185,13 @@
         "Özel Kısayollar: Klavye, Trackpad, Fare"
       ],
       "zh-Hans": [
-        "自定义快捷操作：键盘、触控板、鼠标"
+        "自定义快捷操作：键盘、触控板、鼠标",
+        "触控板手势",
+        "鼠标侧键",
+        "滚轮",
+        "双击",
+        "长按",
+        "单键"
       ],
       "zh-Hant": [
         "自訂快速操作：鍵盤、觸控板、滑鼠"
@@ -152,7 +207,24 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.single-key-output",
+      "@productStrings.discovery.trackpad-gestures",
+      "@productStrings.discovery.mouse-double-click-trigger",
+      "@productStrings.discovery.mouse-long-press-trigger",
+      "@productStrings.discovery.threefingertap",
+      "@productStrings.discovery.fourfingertap",
+      "@productStrings.discovery.fivefingertap",
+      "@productStrings.discovery.threefingerdoubletap",
+      "@productStrings.discovery.fourfingerdoubletap",
+      "@productStrings.discovery.fivefingerdoubletap",
+      "@productStrings.discovery.threefingerlongtouch",
+      "@productStrings.discovery.fourfingerlongtouch",
+      "@productStrings.discovery.fivefingerlongtouch",
+      "@productStrings.discovery.mouse-side-buttons",
+      "@productStrings.discovery.scroll-wheel"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

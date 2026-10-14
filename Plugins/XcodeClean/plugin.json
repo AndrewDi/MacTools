@@ -54,7 +54,9 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "discovery.simulator-caches": "@localizable.category.simulatorCaches.title",
+    "discovery.preview-caches": "@localizable.category.previews.title"
   },
   "version": "2.0.1",
   "minHostVersion": "2.0.1",
@@ -92,7 +94,10 @@
       "xcode",
       "clean",
       "cleanup",
-      "storage"
+      "storage",
+      "simulator caches",
+      "preview caches",
+      "dSYM"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -126,7 +131,9 @@
         "Xcode Temizliği"
       ],
       "zh-Hans": [
-        "Xcode 清理"
+        "Xcode 清理",
+        "模拟器缓存",
+        "预览缓存"
       ],
       "zh-Hant": [
         "Xcode 清理"
@@ -142,7 +149,11 @@
       "storage"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.simulator-caches",
+      "@productStrings.discovery.preview-caches"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

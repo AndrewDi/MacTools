@@ -57,7 +57,21 @@
     "summary": "@summary",
     "action.launch.title": "@localizable.action.launch.title",
     "action.launch.description": "@localizable.action.launch.description",
-    "action.launch.parameter-summary": "@localizable.action.launch.app"
+    "action.launch.parameter-summary": "@localizable.action.launch.app",
+    "discovery.hide-app": {
+      "ar": "إخفاء التطبيق",
+      "de": "App ausblenden",
+      "en": "Hide App",
+      "es": "Ocultar aplicación",
+      "fr": "Masquer l’application",
+      "ja": "アプリを隠す",
+      "ko": "앱 숨기기",
+      "pt": "Ocultar aplicativo",
+      "ru": "Скрыть приложение",
+      "tr": "Uygulamayı gizle",
+      "zh-Hans": "隐藏应用",
+      "zh-Hant": "隱藏應用程式"
+    }
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -96,7 +110,8 @@
       "app",
       "hotkey",
       "hotkeys",
-      "productivity"
+      "productivity",
+      "hide app"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -130,7 +145,8 @@
         "Uygulama Kısayolları"
       ],
       "zh-Hans": [
-        "应用快捷键"
+        "应用快捷键",
+        "隐藏应用"
       ],
       "zh-Hant": [
         "應用程式快速鍵"
@@ -146,7 +162,10 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.hide-app"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

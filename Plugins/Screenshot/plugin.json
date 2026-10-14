@@ -106,7 +106,54 @@
       "zh-Hant": "匯出的檔案和剪貼簿內容由你管理。解除安裝會清除外掛程式私有資料與設定，保留你匯出的檔案。"
     },
     "setup.requirements.title": "@standardSetup.requirements.title",
-    "setup.requirements.description": "@standardSetup.requirements.description"
+    "setup.requirements.description": "@standardSetup.requirements.description",
+    "discovery.blur": "@localizable.overlay.tool.blur",
+    "discovery.pixelate": "@localizable.overlay.tool.mosaic",
+    "discovery.scrolling-screenshot": "@localizable.overlay.mode.scroll",
+    "discovery.pin-image": "@localizable.overlay.action.pin",
+    "discovery.ocr-text-extraction": "@localizable.overlay.recognition.text",
+    "discovery.qr-recognition": {
+      "ar": "التعرّف على رموز QR والرموز الشريطية",
+      "de": "QR-Codes und Barcodes erkennen",
+      "en": "Recognize QR Codes and Barcodes",
+      "es": "Reconocer códigos QR y de barras",
+      "fr": "Reconnaître les codes QR et les codes-barres",
+      "ja": "QR コードとバーコードを認識",
+      "ko": "QR 코드 및 바코드 인식",
+      "pt": "Reconhecer códigos QR e de barras",
+      "ru": "Распознать QR-коды и штрихкоды",
+      "tr": "QR kodlarını ve barkodları tanı",
+      "zh-Hans": "识别二维码与条形码",
+      "zh-Hant": "辨識 QR 碼與條碼"
+    },
+    "discovery.annotation": {
+      "ar": "تعليقات توضيحية",
+      "de": "Anmerkungen",
+      "en": "Annotation",
+      "es": "Anotaciones",
+      "fr": "Annotations",
+      "ja": "注釈",
+      "ko": "주석",
+      "pt": "Anotações",
+      "ru": "Аннотации",
+      "tr": "Açıklama ekleme",
+      "zh-Hans": "标注",
+      "zh-Hant": "標註"
+    },
+    "discovery.screen-recording": {
+      "ar": "تسجيل الشاشة",
+      "de": "Bildschirmaufnahme",
+      "en": "Screen Recording",
+      "es": "Grabación de pantalla",
+      "fr": "Enregistrement d’écran",
+      "ja": "画面収録",
+      "ko": "화면 기록",
+      "pt": "Gravação de tela",
+      "ru": "Запись экрана",
+      "tr": "Ekran kaydı",
+      "zh-Hans": "录屏",
+      "zh-Hant": "螢幕錄製"
+    }
   },
   "presentation": {
     "longDescription": "@productStrings.long-description",
@@ -135,7 +182,9 @@
       "QR",
       "scrolling screenshot",
       "screen recording",
-      "pin"
+      "pin",
+      "blur",
+      "pixelate"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -179,7 +228,9 @@
       ],
       "zh-Hans": [
         "截图",
-        "快速截图"
+        "快速截图",
+        "模糊",
+        "马赛克"
       ],
       "zh-Hant": [
         "截圖",
@@ -200,7 +251,17 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.blur",
+      "@productStrings.discovery.pixelate",
+      "@productStrings.discovery.scrolling-screenshot",
+      "@productStrings.discovery.pin-image",
+      "@productStrings.discovery.ocr-text-extraction",
+      "@productStrings.discovery.qr-recognition",
+      "@productStrings.discovery.annotation",
+      "@productStrings.discovery.screen-recording"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

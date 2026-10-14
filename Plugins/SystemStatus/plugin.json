@@ -96,6 +96,40 @@
       "tr": "Ayarlar, eklenti verileri kaldırılana kadar saklanır. Performans geçmişi 24 saat ve 8.640 örnekle sınırlıdır.",
       "zh-Hans": "设置会保留到插件数据被移除。性能历史仅保留 24 小时，最多 8,640 个样本。",
       "zh-Hant": "設定會保留到外掛資料被移除。效能歷史僅保留 24 小時，最多 8,640 個樣本。"
+    },
+    "discovery.memory": "@localizable.metric.memory",
+    "discovery.disk": "@localizable.metric.disk",
+    "discovery.battery": "@localizable.metric.battery",
+    "discovery.network": "@localizable.metric.network",
+    "discovery.processes": "@localizable.metric.topProcesses",
+    "discovery.temperature": "@localizable.settings.menuBarValue.temperature",
+    "discovery.battery-health": {
+      "ar": "صحة البطارية",
+      "de": "Batteriezustand",
+      "en": "Battery Health",
+      "es": "Salud de la batería",
+      "fr": "État de la batterie",
+      "ja": "バッテリーの状態",
+      "ko": "배터리 성능 상태",
+      "pt": "Saúde da bateria",
+      "ru": "Состояние аккумулятора",
+      "tr": "Pil sağlığı",
+      "zh-Hans": "电池健康",
+      "zh-Hant": "電池健康狀態"
+    },
+    "discovery.memory-pressure": {
+      "ar": "ضغط الذاكرة",
+      "de": "Speicherdruck",
+      "en": "Memory Pressure",
+      "es": "Presión de memoria",
+      "fr": "Pression sur la mémoire",
+      "ja": "メモリプレッシャー",
+      "ko": "메모리 압력",
+      "pt": "Pressão de memória",
+      "ru": "Нагрузка на память",
+      "tr": "Bellek baskısı",
+      "zh-Hans": "内存压力",
+      "zh-Hant": "記憶體壓力"
     }
   },
   "version": "2.0.1",
@@ -133,7 +167,18 @@
     "keywords": [
       "system",
       "status",
-      "monitoring"
+      "monitoring",
+      "CPU",
+      "GPU",
+      "memory",
+      "RAM",
+      "disk",
+      "battery",
+      "network",
+      "processes",
+      "temperature",
+      "battery health",
+      "memory pressure"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -167,7 +212,15 @@
         "Sistem Durumu"
       ],
       "zh-Hans": [
-        "系统状态"
+        "系统状态",
+        "内存",
+        "磁盘",
+        "电量",
+        "网络",
+        "进程",
+        "温度",
+        "电池健康",
+        "内存压力"
       ],
       "zh-Hant": [
         "系統狀態"
@@ -183,7 +236,17 @@
       "monitoring"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.memory",
+      "@productStrings.discovery.disk",
+      "@productStrings.discovery.battery",
+      "@productStrings.discovery.network",
+      "@productStrings.discovery.processes",
+      "@productStrings.discovery.temperature",
+      "@productStrings.discovery.battery-health",
+      "@productStrings.discovery.memory-pressure"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

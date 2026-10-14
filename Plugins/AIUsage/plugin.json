@@ -54,7 +54,22 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "discovery.remaining-quota": "@localizable.window.primary",
+    "discovery.quota-pace": {
+      "ar": "معدل استهلاك الحصة",
+      "de": "Kontingentverbrauchsrate",
+      "en": "Quota Consumption Rate",
+      "es": "Ritmo de consumo de la cuota",
+      "fr": "Rythme de consommation du quota",
+      "ja": "クォータ消費速度",
+      "ko": "할당량 소모 속도",
+      "pt": "Ritmo de consumo da quota",
+      "ru": "Скорость расходования квоты",
+      "tr": "Kota tüketim hızı",
+      "zh-Hans": "额度消耗速率",
+      "zh-Hant": "額度消耗速率"
+    }
   },
   "version": "1.0.1",
   "minHostVersion": "2.0.1",
@@ -94,7 +109,9 @@
       "quota",
       "codex",
       "claude",
-      "subscription"
+      "subscription",
+      "remaining quota",
+      "quota pace"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -128,7 +145,9 @@
         "Yapay Zekâ Kullanımı"
       ],
       "zh-Hans": [
-        "AI 用量"
+        "AI 用量",
+        "剩余额度",
+        "额度消耗"
       ],
       "zh-Hant": [
         "AI 用量"
@@ -144,7 +163,11 @@
       "monitoring"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.remaining-quota",
+      "@productStrings.discovery.quota-pace"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

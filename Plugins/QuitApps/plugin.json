@@ -54,7 +54,8 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "discovery.quit-all-apps": "@localizable.selection.confirm.quitAll"
   },
   "version": "2.0.1",
   "minHostVersion": "2.0.1",
@@ -92,7 +93,8 @@
     "keywords": [
       "quit",
       "apps",
-      "productivity"
+      "productivity",
+      "quit all apps"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -126,7 +128,8 @@
         "Uygulamalardan Çıkma"
       ],
       "zh-Hans": [
-        "退出应用"
+        "退出应用",
+        "退出全部应用"
       ],
       "zh-Hant": [
         "結束 App"
@@ -142,7 +145,10 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.quit-all-apps"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

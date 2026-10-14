@@ -86,6 +86,45 @@ class PluginSourceManifestTests(unittest.TestCase):
         self.assertIn("Full Calendar Access", step["description"]["en"])
         self.assertIn("Automation permission", step["description"]["en"])
 
+    def test_discovery_references_merge_native_translations_before_projection(self) -> None:
+        path = PLUGINS_ROOT / "MouseEnhancer" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["productStrings"]["discovery-smooth"] = "@localizable.settings.mouse.smooth.title"
+        manifest["productStrings"]["discovery-smooth-alias"] = "@localizable.settings.mouse.smooth.title"
+        manifest["discovery"].setdefault("localizedSynonymRefs", []).extend([
+            "@productStrings.discovery-smooth", "@productStrings.discovery-smooth-alias"
+        ])
+        manifest["discovery"]["localizedSynonyms"]["en"].append("Smooth scrolling")
+        projected, _ = validate_and_project_manifest(manifest, path, load_known_plugin_ids(PLUGINS_ROOT))
+        synonyms = projected["discovery"]["localizedSynonyms"]
+        self.assertEqual(synonyms["en"].count("Smooth scrolling"), 1)
+        self.assertIn("平滑滾動", synonyms["zh-Hant"])
+        self.assertIn("Défilement fluide", synonyms["fr"])
+        self.assertIn("スムーズスクロール", synonyms["ja"])
+        self.assertNotIn("localizedSynonymRefs", projected["discovery"])
+        self.assertNotIn("productStrings", projected)
+        self.assertEqual(manifest["discovery"]["localizedSynonyms"]["fr"], ["Amélioration de la souris"])
+
+    def test_discovery_reference_errors_reject_invalid_authoring(self) -> None:
+        path = PLUGINS_ROOT / "Appearance" / "plugin.json"
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        known_ids = load_known_plugin_ids(PLUGINS_ROOT)
+        for refs, error in [
+            ("@productStrings.summary", "must be an array"),
+            (["@productStrings.missing"], "references missing productStrings entry"),
+            (["@summary"], "must reference"),
+        ]:
+            with self.subTest(refs=refs):
+                invalid = copy.deepcopy(manifest)
+                invalid["discovery"]["localizedSynonymRefs"] = refs
+                with self.assertRaisesRegex(ManifestValidationError, error):
+                    validate_and_project_manifest(invalid, path, known_ids)
+        incomplete = copy.deepcopy(manifest)
+        incomplete["productStrings"]["discovery-label"] = {"en": "Capability"}
+        incomplete["discovery"]["localizedSynonymRefs"] = ["@productStrings.discovery-label"]
+        with self.assertRaisesRegex(ManifestValidationError, "missing locale fallback values"):
+            validate_and_project_manifest(incomplete, path, known_ids)
+
     def test_repository_product_text_uses_only_declared_product_string_references(self) -> None:
         known_ids = load_known_plugin_ids(PLUGINS_ROOT)
         for path in sorted(PLUGINS_ROOT.glob("*/plugin.json")):
@@ -882,6 +921,45 @@ class PluginSourceManifestTests(unittest.TestCase):
             manifest = manifest_for("MarketplaceAssets/oversized.webp")
             with self.assertRaisesRegex(ManifestValidationError, "dimensions must not exceed"):
                 validate_and_project_manifest(manifest, path, {"asset-demo"})
+
+    def test_catalog_rejects_discovery_authoring_references_without_source(self) -> None:
+        source = PLUGINS_ROOT / "AutoHideDock" / "plugin.json"
+        projected, _ = validate_and_project_manifest(
+            json.loads(source.read_text(encoding="utf-8")),
+            source,
+            load_known_plugin_ids(PLUGINS_ROOT),
+        )
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = pathlib.Path(temporary_directory)
+            package = root / "auto-hide-dock.mactoolsplugin"
+            package.mkdir()
+            catalog = root / "catalog.json"
+            website = root / "website" / "plugins.json"
+            for refs in (["@productStrings.missing"], {"en": "not-an-array"}):
+                with self.subTest(refs=refs):
+                    invalid = copy.deepcopy(projected)
+                    invalid["discovery"]["localizedSynonymRefs"] = refs
+                    package.joinpath("plugin.json").write_text(
+                        json.dumps(invalid), encoding="utf-8"
+                    )
+                    result = subprocess.run(
+                        [
+                            sys.executable,
+                            str(SCRIPTS_ROOT / "generate-plugin-catalog.py"),
+                            "--mode", "debug",
+                            "--package", str(package),
+                            "--plugins-root", str(root / "missing-sources"),
+                            "--output", str(catalog),
+                            "--website-output", str(website),
+                        ],
+                        check=False,
+                        capture_output=True,
+                        text=True,
+                    )
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("discovery.localizedSynonymRefs", result.stderr)
+                    self.assertFalse(catalog.exists())
+                    self.assertFalse(website.exists())
 
     def test_catalog_and_website_generation_are_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
