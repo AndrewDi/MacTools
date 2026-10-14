@@ -48,6 +48,8 @@ enum PowerStatusSampler {
             ?? extractInt(from: props, key: "AvgTimeToEmpty")
         let avgTimeToFull = batteryData.flatMap { extractInt(from: $0, key: "AvgTimeToFull") }
             ?? extractInt(from: props, key: "AvgTimeToFull")
+        let remainingCapacity = batteryData.flatMap { extractInt(from: $0, key: "RemainingCapacity") }
+            ?? extractInt(from: props, key: "RemainingCapacity")
 
         // Power telemetry
         let telemetry = extractDict(from: props, key: "PowerTelemetryData")
@@ -81,6 +83,7 @@ enum PowerStatusSampler {
             chargingCurrentMA: chargingCurrent,
             avgTimeToEmptyMinutes: avgTimeToEmpty,
             avgTimeToFullMinutes: avgTimeToFull,
+            remainingCapacityMAH: remainingCapacity,
             flowState: flowState,
             isDataAvailable: true
         )

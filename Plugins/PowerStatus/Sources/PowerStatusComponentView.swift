@@ -231,7 +231,13 @@ struct PowerStatusComponentView: View {
                         icon: "clock",
                         iconTint: theme.status.informational,
                         title: viewModel.snapshot.estimatedTimeLabel,
-                        value: timeText
+                        value: timeText,
+                        help: viewModel.snapshot.estimatedTimeIsComputed
+                            ? localization.string(
+                                "metric.timeEstimate.help",
+                                defaultValue: "基于剩余电量与近期平均功耗估算"
+                            )
+                            : nil
                     )
                 }
             }
@@ -421,6 +427,7 @@ private struct PowerStatusMiniMetric: View {
     let iconTint: Color
     let title: String
     let value: String
+    var help: String? = nil
 
     var body: some View {
         HStack(spacing: 6) {
@@ -445,6 +452,7 @@ private struct PowerStatusMiniMetric: View {
 
             Spacer(minLength: 0)
         }
+        .help(help ?? "")
     }
 
     @Environment(\.pluginComponentTheme) private var theme

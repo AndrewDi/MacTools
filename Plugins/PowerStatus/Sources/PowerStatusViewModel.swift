@@ -16,6 +16,11 @@ final class PowerStatusViewModel: ObservableObject {
     private nonisolated(unsafe) var iopsRetainedContext: UnsafeMutableRawPointer?
     private let updateInterval: TimeInterval = 2.0
 
+    /// ~60 s effective window at 2 s sampling, matching PowerTop's estimator
+    /// so the locally computed remaining time does not jump between samples.
+    private static let emaAlpha = 0.065
+    private var dischargeEMA: Double?
+
     // MARK: - Panel visibility
 
     func setPanelVisible(_ visible: Bool) {
@@ -96,10 +101,38 @@ final class PowerStatusViewModel: ObservableObject {
     // MARK: - Data update
 
     private func updateData() {
-        let newSnapshot = PowerStatusSampler.readSnapshot()
+        var newSnapshot = PowerStatusSampler.readSnapshot()
+        newSnapshot.smoothedDischargePowerW = updateSmoothedDischargePower(from: newSnapshot)
         guard newSnapshot != snapshot else { return }
         snapshot = newSnapshot
         onSnapshotChange?()
+    }
+
+    /// Smooths instantaneous discharge power for time estimates; resets when
+    /// the machine stops running on battery so stale values are not reused.
+    private func updateSmoothedDischargePower(from data: PowerStatusSnapshot) -> Double? {
+        switch data.flowState {
+        case .discharging, .supplementalDischarge:
+            break
+        default:
+            dischargeEMA = nil
+            return nil
+        }
+
+        let instant: Double
+        if case .supplementalDischarge = data.flowState {
+            instant = data.batteryDischargeRateW
+        } else {
+            instant = max(data.systemPowerW, data.batteryDischargeRateW)
+        }
+        guard instant >= 0.2 else { return dischargeEMA }
+
+        if let previous = dischargeEMA {
+            dischargeEMA = previous + Self.emaAlpha * (instant - previous)
+        } else {
+            dischargeEMA = instant
+        }
+        return dischargeEMA
     }
 
     deinit {

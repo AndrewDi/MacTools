@@ -51,10 +51,14 @@ struct PowerStatusSnapshot: Equatable {
     // Time estimates
     let avgTimeToEmptyMinutes: Int?
     let avgTimeToFullMinutes: Int?
+    let remainingCapacityMAH: Int?
 
     // Derived
     let flowState: PowerFlowState
     let isDataAvailable: Bool
+
+    /// EMA-smoothed discharge power set by the view model for stable time estimates.
+    var smoothedDischargePowerW: Double?
 
     static let empty = PowerStatusSnapshot(
         timestamp: Date(),
@@ -77,8 +81,10 @@ struct PowerStatusSnapshot: Equatable {
         chargingCurrentMA: nil,
         avgTimeToEmptyMinutes: nil,
         avgTimeToFullMinutes: nil,
+        remainingCapacityMAH: nil,
         flowState: .idle,
-        isDataAvailable: false
+        isDataAvailable: false,
+        smoothedDischargePowerW: nil
     )
 
     // MARK: - Computed properties
@@ -123,9 +129,59 @@ struct PowerStatusSnapshot: Equatable {
         case .charging:
             return validAvgTimeToFullMinutes
         case .discharging, .supplementalDischarge:
-            return validAvgTimeToEmptyMinutes
+            return validAvgTimeToEmptyMinutes ?? computedTimeToEmptyMinutes
         default:
             return nil
+        }
+    }
+
+    /// Whether the displayed remaining time was computed locally because
+    /// macOS no longer reports a valid AvgTimeToEmpty.
+    var estimatedTimeIsComputed: Bool {
+        guard estimatedTimeRemainingMinutes != nil else { return false }
+        switch flowState {
+        case .discharging, .supplementalDischarge:
+            return validAvgTimeToEmptyMinutes == nil
+        default:
+            return false
+        }
+    }
+
+    /// Remaining stored energy (Wh) from coulomb count × pack voltage,
+    /// falling back to full-charge capacity scaled by the state of charge.
+    var remainingEnergyWh: Double? {
+        if let remaining = remainingCapacityMAH, let voltage = batteryVoltageMV,
+           remaining > 0, voltage > 0 {
+            return Double(remaining) * Double(voltage) / 1_000_000.0
+        }
+        guard let capacity = fullChargeCapacityMAH, capacity > 0,
+              let voltage = batteryVoltageMV, voltage > 0,
+              batteryPercent > 0 else { return nil }
+        return Double(capacity) * Double(batteryPercent) / 100.0 * Double(voltage) / 1_000_000.0
+    }
+
+    /// Battery-only discharge power used for the local time estimate.
+    private var dischargePowerForEstimateW: Double? {
+        if let smoothed = smoothedDischargePowerW, smoothed >= 0.2 { return smoothed }
+        let rate = batteryDischargeRateW
+        if rate >= 0.2 { return rate }
+        if case .discharging = flowState, systemPowerW >= 0.2 { return systemPowerW }
+        return nil
+    }
+
+    /// Local fallback when macOS does not report AvgTimeToEmpty:
+    /// remaining energy divided by smoothed discharge power.
+    private var computedTimeToEmptyMinutes: Int? {
+        guard isBatteryDischargingFlow,
+              let energyWh = remainingEnergyWh,
+              let powerW = dischargePowerForEstimateW else { return nil }
+        return Self.minutesFromEnergy(energyWh: energyWh, powerW: powerW)
+    }
+
+    private var isBatteryDischargingFlow: Bool {
+        switch flowState {
+        case .discharging, .supplementalDischarge: return true
+        default: return false
         }
     }
 
@@ -139,7 +195,7 @@ struct PowerStatusSnapshot: Equatable {
         case .charging:
             return "预计充满时间"
         case .discharging, .supplementalDischarge:
-            return "预计剩余时间"
+            return estimatedTimeIsComputed ? "预计可用时间" : "预计剩余时间"
         default:
             return ""
         }
@@ -182,5 +238,16 @@ struct PowerStatusSnapshot: Equatable {
         let mins = minutes % 60
         if hours > 0 { return "\(hours)h \(mins)m" }
         return "\(mins)m"
+    }
+
+    private static func minutesFromEnergy(energyWh: Double, powerW: Double) -> Int? {
+        guard powerW >= 0.2, energyWh > 0 else { return nil }
+        return cappedMinutes(Int((energyWh / powerW) * 60.0))
+    }
+
+    /// Keeps estimates within a sane range instead of showing absurd values
+    /// when power momentarily drops near zero.
+    private static func cappedMinutes(_ minutes: Int) -> Int {
+        min(max(0, minutes), 99 * 60 + 59)
     }
 }

@@ -2,4 +2,4 @@
 release: plugin
 type: added
 ---
-新增电源状态插件，在面板中实时显示系统功耗、交流输入、电池充放电功率、电池电量、健康度、温度和循环次数。
+New Power Status plugin shows live system wattage, AC input, battery charge and discharge power, level, health, temperature, and cycle count, with an estimated time remaining while on battery.

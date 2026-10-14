@@ -103,6 +103,78 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(batterySnapshot.powerSourceDescription, "电池供电")
     }
 
+    func testComputedTimeToEmptyFallsBackWhenMacOSSilent() {
+        // macOS reports no AvgTimeToEmpty; estimate from remaining energy.
+        let snapshot = makeSnapshot(
+            batteryPercent: 50,
+            batteryVoltageMV: 12_000,
+            fullChargeCapacityMAH: 4_000,
+            avgTimeToEmptyMinutes: nil,
+            remainingCapacityMAH: 2_000,
+            flowState: .discharging(rateW: 20.0)
+        )
+
+        // 2000 mAh × 12 V = 24 Wh; 24 Wh / 20 W = 1.2 h = 72 min.
+        XCTAssertEqual(snapshot.remainingEnergyWh ?? 0, 24.0, accuracy: 0.01)
+        XCTAssertNotNil(snapshot.estimatedTimeRemainingMinutes)
+        XCTAssertEqual(snapshot.estimatedTimeRemainingMinutes ?? 0, 72, accuracy: 1)
+        XCTAssertEqual(snapshot.estimatedTimeRemainingText, "1h 12m")
+        XCTAssertTrue(snapshot.estimatedTimeIsComputed)
+        XCTAssertEqual(snapshot.estimatedTimeLabel, "预计可用时间")
+    }
+
+    func testEstimatedTimeUsesMacOSValueWhenAvailable() {
+        let snapshot = makeSnapshot(
+            batteryPercent: 50,
+            batteryVoltageMV: 12_000,
+            avgTimeToEmptyMinutes: 90,
+            remainingCapacityMAH: 2_000,
+            flowState: .discharging(rateW: 20.0)
+        )
+
+        XCTAssertEqual(snapshot.estimatedTimeRemainingMinutes, 90)
+        XCTAssertFalse(snapshot.estimatedTimeIsComputed)
+        XCTAssertEqual(snapshot.estimatedTimeLabel, "预计剩余时间")
+    }
+
+    func testNoTimeEstimateWhileOnAC() {
+        let snapshot = makeSnapshot(
+            isOnAC: true,
+            batteryVoltageMV: 12_000,
+            avgTimeToEmptyMinutes: nil,
+            remainingCapacityMAH: 2_000,
+            flowState: .onAC
+        )
+
+        XCTAssertNil(snapshot.estimatedTimeRemainingMinutes)
+        XCTAssertFalse(snapshot.estimatedTimeIsComputed)
+    }
+
+    func testRemainingEnergyFallsBackToCapacityScaledByPercent() {
+        let snapshot = makeSnapshot(
+            batteryPercent: 40,
+            batteryVoltageMV: 11_000,
+            fullChargeCapacityMAH: 5_000,
+            flowState: .discharging(rateW: 10.0)
+        )
+
+        // 5000 mAh × 40% × 11 V = 22 Wh
+        XCTAssertEqual(snapshot.remainingEnergyWh ?? 0, 22.0, accuracy: 0.01)
+    }
+
+    func testSmoothedDischargePowersLocalEstimate() {
+        let snapshot = makeSnapshot(
+            batteryVoltageMV: 12_000,
+            remainingCapacityMAH: 3_000,
+            flowState: .discharging(rateW: 20.0)
+        )
+        var smoothed = snapshot
+        smoothed.smoothedDischargePowerW = 15.0
+
+        // 36 Wh / 15 W = 2.4 h = 144 min — the smoothed value drives the estimate.
+        XCTAssertEqual(smoothed.estimatedTimeRemainingMinutes ?? 0, 144, accuracy: 1)
+    }
+
     // MARK: - Helpers
 
     private func makeSnapshot(
@@ -125,6 +197,7 @@ final class PowerStatusPluginTests: XCTestCase {
         chargingCurrentMA: Int? = nil,
         avgTimeToEmptyMinutes: Int? = nil,
         avgTimeToFullMinutes: Int? = nil,
+        remainingCapacityMAH: Int? = nil,
         flowState: PowerFlowState = .idle,
         isDataAvailable: Bool = true
     ) -> PowerStatusSnapshot {
@@ -149,8 +222,10 @@ final class PowerStatusPluginTests: XCTestCase {
             chargingCurrentMA: chargingCurrentMA,
             avgTimeToEmptyMinutes: avgTimeToEmptyMinutes,
             avgTimeToFullMinutes: avgTimeToFullMinutes,
+            remainingCapacityMAH: remainingCapacityMAH,
             flowState: flowState,
-            isDataAvailable: isDataAvailable
+            isDataAvailable: isDataAvailable,
+            smoothedDischargePowerW: nil
         )
     }
 }
