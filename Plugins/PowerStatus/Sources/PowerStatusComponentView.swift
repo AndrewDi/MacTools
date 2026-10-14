@@ -162,13 +162,15 @@ struct PowerStatusComponentView: View {
                 valueTint: theme.text.primary
             )
 
-            PowerStatusMetricRow(
-                icon: "powerplug.fill",
-                iconTint: theme.status.informational,
-                title: localization.string("metric.acInput", defaultValue: "交流输入"),
-                value: String(format: "%.1f W", viewModel.snapshot.acInputW),
-                valueTint: viewModel.snapshot.acInputW > 0 ? theme.text.primary : theme.text.tertiary
-            )
+            if viewModel.snapshot.isOnAC {
+                PowerStatusMetricRow(
+                    icon: "powerplug.fill",
+                    iconTint: theme.status.informational,
+                    title: localization.string("metric.acInput", defaultValue: "交流输入"),
+                    value: String(format: "%.1f W", viewModel.snapshot.acInputW),
+                    valueTint: viewModel.snapshot.acInputW > 0 ? theme.text.primary : theme.text.tertiary
+                )
+            }
 
             if viewModel.snapshot.batteryChargeRateW > 0 {
                 PowerStatusMetricRow(
