@@ -345,6 +345,7 @@ final class PluginHost: ObservableObject {
 
     private var shortcutDefinitionRevision: UInt64 = 0
     private var shortcutResolutionSnapshot: ShortcutResolutionSnapshot?
+    private let derivedStateReadCache = PluginDerivedStateReadCache()
 
     /// Immutable inputs shared by one synchronous update. Plugin declarations
     /// are read again on the next update, including dynamic defaults and titles.
@@ -718,13 +719,15 @@ final class PluginHost: ObservableObject {
             if menuBarPanelStore.migrateLegacyHiddenPlugins(legacyHiddenPluginIDs) {
                 dynamicPluginManager.clearLegacyHiddenPluginIDs()
             }
+            let installedMetadata: InstalledPluginMetadata
             if loadDynamicPluginsOnInit {
-                self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+                let loaded = dynamicPluginManager.loadInstalledPluginsAndMetadata()
+                self.dynamicPlugins = loaded.plugins
                 self.didLoadDynamicPlugins = true
+                installedMetadata = loaded.metadata
             } else {
-                dynamicPluginManager.prepareInstalledPluginsWithoutLoading()
+                installedMetadata = dynamicPluginManager.prepareInstalledPluginsWithoutLoading()
             }
-            let installedMetadata = dynamicPluginManager.installedMetadata()
             self.dynamicPluginCapabilitiesByID = installedMetadata.capabilitiesByID
             self.dynamicPluginCategoriesByID = installedMetadata.categoriesByID
             self.dynamicPluginReleaseChannelsByID = installedMetadata.releaseChannelsByID
@@ -2430,10 +2433,11 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+        let loaded = dynamicPluginManager.loadInstalledPluginsAndMetadata()
+        dynamicPlugins = loaded.plugins
         didLoadDynamicPlugins = true
         configureCallbacks(for: dynamicPlugins)
-        syncPluginManagementState()
+        syncPluginManagementState(installedMetadata: loaded.metadata)
         refreshAll()
         startCloudPreferencesSyncIfReady()
     }
@@ -2445,11 +2449,7 @@ final class PluginHost: ObservableObject {
     }
 
     var hasInstalledDynamicPlugins: Bool {
-        guard let dynamicPluginManager else {
-            return false
-        }
-
-        return !dynamicPluginManager.installedPackageVersionsByID().isEmpty
+        !dynamicPluginManifestsByID.isEmpty
     }
 
     var hasPendingDynamicPluginExtractionMigration: Bool {
@@ -3457,6 +3457,8 @@ final class PluginHost: ObservableObject {
         let descriptors = pluginDescriptorSnapshot()
         let isolatedPluginCountAtStart = isolatedPluginFailures.count
         let orderedDescriptors = descriptors.ordered
+        derivedStateReadCache.beginUpdate(plugins: orderedDescriptors.map(\.plugin), dirtyPluginIDs: dirtyPluginIDs)
+        defer { derivedStateReadCache.endUpdate() }
         for descriptor in orderedDescriptors {
             let id = descriptor.metadata.id
             guard dirtyPluginIDs == nil || dirtyPluginIDs!.contains(id) ||
@@ -3572,11 +3574,9 @@ final class PluginHost: ObservableObject {
                 return []
             }
 
-            let entries = guardedValue(
-                for: plugin,
-                operation: "read settings search entries",
-                provider.settingsSearchEntries
-            ) ?? []
+            let entries = derivedStateReadCache.value(for: plugin, projection: .settingsSearch) {
+                guardedValue(for: plugin, operation: "read settings search entries", provider.settingsSearchEntries)
+            } ?? []
             return entries.map {
                 PluginProvidedSettingsSearchItem(pluginID: plugin.metadata.id, entry: $0)
             }
@@ -3588,11 +3588,9 @@ final class PluginHost: ObservableObject {
                 return []
             }
 
-            let definitions = guardedValue(
-                for: plugin,
-                operation: "read command definitions",
-                provider.commandDefinitions
-            ) ?? []
+            let definitions = derivedStateReadCache.value(for: plugin, projection: .commands) {
+                guardedValue(for: plugin, operation: "read command definitions", provider.commandDefinitions)
+            } ?? []
             return definitions.map {
                 PluginCommandItem(
                     pluginID: plugin.metadata.id,
@@ -3666,6 +3664,8 @@ final class PluginHost: ObservableObject {
                 continue
             }
             let externalClaims = claims.filter { $0.ownerPluginID != plugin.metadata.id }
+            // Host-delivered conflicts may update declarations without a plugin state callback.
+            derivedStateReadCache.invalidate(pluginID: plugin.metadata.id)
             guardPluginCall(plugin, operation: "update input gesture conflicts") {
                 consumer.inputGestureConflictsDidChange(externalClaims)
             }
@@ -3689,6 +3689,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func rebuildDerivedStateAfterPluginChange(pluginID: String) {
+        derivedStateReadCache.invalidate(pluginID: pluginID)
         shortcutDefinitionRevision &+= 1
         guard !isHandlingPluginAction else {
             return
@@ -3699,6 +3700,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func rebuildDerivedStateAfterActionSafetyChange(pluginID: String) {
+        derivedStateReadCache.invalidate(pluginID: pluginID)
         dirtyPluginIDs.remove(pluginID)
         if dirtyPluginIDs.isEmpty {
             pluginStateChangeRebuildTask?.cancel()
@@ -3759,16 +3761,12 @@ final class PluginHost: ObservableObject {
         for descriptor in descriptors where !isPluginIsolated(descriptor.plugin) {
             let plugin = descriptor.plugin
             if let provider = plugin as? any PluginActionProviding {
-                let definitions = guardedValue(
-                    for: plugin,
-                    operation: "read action definitions",
-                    provider.actionDefinitions
-                ) ?? []
-                let catalogEntries = guardedValue(
-                    for: plugin,
-                    operation: "read action catalog entries",
-                    provider.actionCatalogEntries
-                ) ?? []
+                let definitions = derivedStateReadCache.value(for: plugin, projection: .actionDefinitions) {
+                    guardedValue(for: plugin, operation: "read action definitions", provider.actionDefinitions)
+                } ?? []
+                let catalogEntries = derivedStateReadCache.value(for: plugin, projection: .actionCatalog) {
+                    guardedValue(for: plugin, operation: "read action catalog entries", provider.actionCatalogEntries)
+                } ?? []
                 registrations.append(
                     actionRegistration(
                         for: plugin,
@@ -3777,11 +3775,9 @@ final class PluginHost: ObservableObject {
                     )
                 )
             } else if let commandProvider = plugin as? any PluginCommandProviding {
-                let definitions = guardedValue(
-                    for: plugin,
-                    operation: "read legacy command definitions for actions",
-                    commandProvider.commandDefinitions
-                ) ?? []
+                let definitions = derivedStateReadCache.value(for: plugin, projection: .commands) {
+                    guardedValue(for: plugin, operation: "read legacy command definitions for actions", commandProvider.commandDefinitions)
+                } ?? []
                 registrations.append(
                     legacyCommandActionRegistration(
                         for: plugin,
@@ -3830,6 +3826,11 @@ final class PluginHost: ObservableObject {
             actionCatalogEntries = actionRegistry.catalogEntries
         }
         for plugin in activePlugins {
+            if plugin is any ActionGridHostContextConsuming
+                || plugin is any TrackpadActionHostContextConsuming
+                || plugin is any PluginActionExecutionHostContextConsuming {
+                derivedStateReadCache.invalidate(pluginID: plugin.metadata.id)
+            }
             (plugin as? any ActionGridHostContextConsuming)?.actionSurfaceCatalogDidChange()
             (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionCatalogDidChange()
             (plugin as? any PluginActionExecutionHostContextConsuming)?.actionExecutionCatalogDidChange()
@@ -4631,11 +4632,9 @@ final class PluginHost: ObservableObject {
             let shortcutSettingsGroups: [PluginShortcutSettingsGroupConfiguration]
             if descriptor.hasSettings,
                let provider = descriptor.plugin as? any PluginGroupedShortcutSettingsProviding,
-               let configurations = guardedValue(
-                   for: descriptor.plugin,
-                   operation: "read grouped shortcut settings configuration",
-                   provider.shortcutSettingsGroups
-               ) {
+               let configurations = derivedStateReadCache.value(for: descriptor.plugin, projection: .shortcutSettingsGroups, read: {
+                   guardedValue(for: descriptor.plugin, operation: "read grouped shortcut settings configuration", provider.shortcutSettingsGroups)
+               }) {
                 var seenIDs: Set<String> = []
                 shortcutSettingsGroups = configurations.filter { configuration in
                     let id = configuration.id.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4658,11 +4657,9 @@ final class PluginHost: ObservableObject {
             }
             let rawPage: PluginSettingsPage?
             if descriptor.hasSettings {
-                rawPage = guardedOptionalValue(
-                    for: descriptor.plugin,
-                    operation: "read plugin settings page",
-                    descriptor.plugin.settingsPage
-                )
+                rawPage = derivedStateReadCache.value(for: descriptor.plugin, projection: .settingsPage) {
+                    guardedOptionalValue(for: descriptor.plugin, operation: "read plugin settings page", descriptor.plugin.settingsPage)
+                }
             } else {
                 rawPage = nil
             }
@@ -4695,11 +4692,9 @@ final class PluginHost: ObservableObject {
             let actionShortcutSettingsConfiguration: PluginActionShortcutSettingsConfiguration?
             if descriptor.hasSettings,
                let provider = descriptor.plugin as? any PluginActionShortcutSettingsProviding,
-               let configuration = guardedValue(
-                   for: descriptor.plugin,
-                   operation: "read action shortcut settings configuration",
-                   provider.actionShortcutSettingsConfiguration
-               ) {
+               let configuration = derivedStateReadCache.value(for: descriptor.plugin, projection: .actionShortcutSettings, read: {
+                   guardedValue(for: descriptor.plugin, operation: "read action shortcut settings configuration", provider.actionShortcutSettingsConfiguration)
+               }) {
                 let title = configuration.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 let systemImage = configuration.systemImage.trimmingCharacters(in: .whitespacesAndNewlines)
                 if title.isEmpty || systemImage.isEmpty || configuration.actionIDs.isEmpty {
