@@ -629,60 +629,64 @@ private struct PowerFlowLine: View {
     let powerW: Double
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var dashPhase: CGFloat = 0
 
     private static let dashPattern: [CGFloat] = [3, 5]
     private static let dashPeriod: CGFloat = 8
+    private static let dashDuration: TimeInterval = 0.9
 
     var body: some View {
-        Canvas { context, size in
-            let midY = size.height / 2
-            let endX = max(6, size.width - 9)
-            var path = Path()
-            path.move(to: CGPoint(x: 1, y: midY))
-            path.addLine(to: CGPoint(x: endX, y: midY))
+        // Canvas closures are not re-evaluated per animation frame, so the
+        // dash phase is derived from the timeline instead of animated state.
+        // One dash period per cycle loops seamlessly; reduced motion pauses.
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+            Canvas { context, size in
+                let midY = size.height / 2
+                let endX = max(6, size.width - 9)
+                var path = Path()
+                path.move(to: CGPoint(x: 1, y: midY))
+                path.addLine(to: CGPoint(x: endX, y: midY))
 
-            let lineWidth = 2.5 + min(max(powerW, 0) / 60, 1) * 2
+                let lineWidth = 2.5 + min(max(powerW, 0) / 60, 1) * 2
 
-            // Base track.
-            context.stroke(
-                path,
-                with: .color(color.opacity(0.22)),
-                style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
-            )
-
-            // Animated flow dashes.
-            context.stroke(
-                path,
-                with: .color(color.opacity(0.9)),
-                style: StrokeStyle(
-                    lineWidth: lineWidth,
-                    lineCap: .round,
-                    dash: Self.dashPattern,
-                    dashPhase: dashPhase
+                // Base track.
+                context.stroke(
+                    path,
+                    with: .color(color.opacity(0.22)),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
                 )
-            )
 
-            // Arrow head pointing at the destination.
-            var arrow = Path()
-            arrow.move(to: CGPoint(x: endX - 6, y: midY - 4.5))
-            arrow.addLine(to: CGPoint(x: endX + 1, y: midY))
-            arrow.addLine(to: CGPoint(x: endX - 6, y: midY + 4.5))
-            context.stroke(
-                arrow,
-                with: .color(color),
-                style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
-            )
-        }
-        .onAppear {
-            guard !reduceMotion else { return }
-            dashPhase = 0
-            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
-                // Decreasing the phase moves dashes toward the destination.
-                dashPhase = -Self.dashPeriod
+                // Animated flow dashes.
+                context.stroke(
+                    path,
+                    with: .color(color.opacity(0.9)),
+                    style: StrokeStyle(
+                        lineWidth: lineWidth,
+                        lineCap: .round,
+                        dash: Self.dashPattern,
+                        dashPhase: Self.dashPhase(at: timeline.date)
+                    )
+                )
+
+                // Arrow head pointing at the destination.
+                var arrow = Path()
+                arrow.move(to: CGPoint(x: endX - 6, y: midY - 4.5))
+                arrow.addLine(to: CGPoint(x: endX + 1, y: midY))
+                arrow.addLine(to: CGPoint(x: endX - 6, y: midY + 4.5))
+                context.stroke(
+                    arrow,
+                    with: .color(color),
+                    style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
+                )
             }
         }
         .accessibilityHidden(true)
+    }
+
+    /// Phase for the given time; decreasing the phase moves dashes toward
+    /// the destination, and one full period per cycle loops seamlessly.
+    private static func dashPhase(at date: Date) -> CGFloat {
+        let cycle = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: dashDuration)
+        return -dashPeriod * CGFloat(cycle / dashDuration)
     }
 }
 
@@ -706,69 +710,74 @@ private struct PowerFlowJunctionLine: View {
     let bottomPowerW: Double
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var dashPhase: CGFloat = 0
 
     private static let dashPattern: [CGFloat] = [3, 5]
     private static let dashPeriod: CGFloat = 8
+    private static let dashDuration: TimeInterval = 0.9
     private static let cornerRadius: CGFloat = 6
 
     var body: some View {
-        Canvas { context, size in
-            let trunkY = size.height / 2
-            let topY = PowerStatusLayout.flowRowHeight / 2
-            let bottomY = size.height - PowerStatusLayout.flowRowHeight / 2
-            let endX = max(8, size.width - 9)
-            let splitX: CGFloat
-            switch mode {
-            case .fork:
-                splitX = min(max(10, size.width * 0.35), max(10, endX - 16))
-            case .merge:
-                splitX = min(max(16, size.width * 0.55), max(16, endX))
-            }
-            let r = Self.cornerRadius
+        // Canvas closures are not re-evaluated per animation frame, so the
+        // dash phase is derived from the timeline instead of animated state.
+        // One dash period per cycle loops seamlessly; reduced motion pauses.
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
+            Canvas { context, size in
+                let dashPhase = Self.dashPhase(at: timeline.date)
+                let trunkY = size.height / 2
+                let topY = PowerStatusLayout.flowRowHeight / 2
+                let bottomY = size.height - PowerStatusLayout.flowRowHeight / 2
+                let endX = max(8, size.width - 9)
+                let splitX: CGFloat
+                switch mode {
+                case .fork:
+                    splitX = min(max(10, size.width * 0.35), max(10, endX - 16))
+                case .merge:
+                    splitX = min(max(16, size.width * 0.55), max(16, endX))
+                }
+                let r = Self.cornerRadius
 
-            switch mode {
-            case .fork:
-                var trunk = Path()
-                trunk.move(to: CGPoint(x: 1, y: trunkY))
-                trunk.addLine(to: CGPoint(x: splitX, y: trunkY))
-                stroke(context, path: trunk, color: trunkColor, powerW: trunkPowerW)
+                switch mode {
+                case .fork:
+                    var trunk = Path()
+                    trunk.move(to: CGPoint(x: 1, y: trunkY))
+                    trunk.addLine(to: CGPoint(x: splitX, y: trunkY))
+                    stroke(context, path: trunk, color: trunkColor, powerW: trunkPowerW, dashPhase: dashPhase)
 
-                stroke(context, path: branch(from: .init(x: splitX, y: trunkY),
-                                             to: topY, exitingRight: true, splitX: splitX, endX: endX, r: r),
-                       color: topColor, powerW: topPowerW)
-                stroke(context, path: branch(from: .init(x: splitX, y: trunkY),
-                                             to: bottomY, exitingRight: true, splitX: splitX, endX: endX, r: r),
-                       color: bottomColor, powerW: bottomPowerW)
+                    stroke(context, path: branch(from: .init(x: splitX, y: trunkY),
+                                                 to: topY, exitingRight: true, splitX: splitX, endX: endX, r: r),
+                           color: topColor, powerW: topPowerW, dashPhase: dashPhase)
+                    stroke(context, path: branch(from: .init(x: splitX, y: trunkY),
+                                                 to: bottomY, exitingRight: true, splitX: splitX, endX: endX, r: r),
+                           color: bottomColor, powerW: bottomPowerW, dashPhase: dashPhase)
 
-                drawArrow(context, at: CGPoint(x: endX, y: topY), color: topColor)
-                drawArrow(context, at: CGPoint(x: endX, y: bottomY), color: bottomColor)
+                    drawArrow(context, at: CGPoint(x: endX, y: topY), color: topColor)
+                    drawArrow(context, at: CGPoint(x: endX, y: bottomY), color: bottomColor)
 
-            case .merge:
-                stroke(context, path: branch(from: CGPoint(x: 1, y: topY),
-                                             to: trunkY, exitingRight: false, splitX: splitX, endX: endX, r: r),
-                       color: topColor, powerW: topPowerW)
-                stroke(context, path: branch(from: CGPoint(x: 1, y: bottomY),
-                                             to: trunkY, exitingRight: false, splitX: splitX, endX: endX, r: r),
-                       color: bottomColor, powerW: bottomPowerW)
+                case .merge:
+                    stroke(context, path: branch(from: CGPoint(x: 1, y: topY),
+                                                 to: trunkY, exitingRight: false, splitX: splitX, endX: endX, r: r),
+                           color: topColor, powerW: topPowerW, dashPhase: dashPhase)
+                    stroke(context, path: branch(from: CGPoint(x: 1, y: bottomY),
+                                                 to: trunkY, exitingRight: false, splitX: splitX, endX: endX, r: r),
+                           color: bottomColor, powerW: bottomPowerW, dashPhase: dashPhase)
 
-                var trunk = Path()
-                trunk.move(to: CGPoint(x: splitX, y: trunkY))
-                trunk.addLine(to: CGPoint(x: endX, y: trunkY))
-                stroke(context, path: trunk, color: trunkColor, powerW: trunkPowerW)
+                    var trunk = Path()
+                    trunk.move(to: CGPoint(x: splitX, y: trunkY))
+                    trunk.addLine(to: CGPoint(x: endX, y: trunkY))
+                    stroke(context, path: trunk, color: trunkColor, powerW: trunkPowerW, dashPhase: dashPhase)
 
-                drawArrow(context, at: CGPoint(x: endX, y: trunkY), color: trunkColor)
-            }
-        }
-        .onAppear {
-            guard !reduceMotion else { return }
-            dashPhase = 0
-            withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
-                // Decreasing the phase moves dashes toward the destination.
-                dashPhase = -Self.dashPeriod
+                    drawArrow(context, at: CGPoint(x: endX, y: trunkY), color: trunkColor)
+                }
             }
         }
         .accessibilityHidden(true)
+    }
+
+    /// Phase for the given time; decreasing the phase moves dashes toward
+    /// the destination, and one full period per cycle loops seamlessly.
+    private static func dashPhase(at date: Date) -> CGFloat {
+        let cycle = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: dashDuration)
+        return -dashPeriod * CGFloat(cycle / dashDuration)
     }
 
     /// Builds one branch: horizontal run, rounded corner, vertical run to the
@@ -802,7 +811,13 @@ private struct PowerFlowJunctionLine: View {
         return path
     }
 
-    private func stroke(_ context: GraphicsContext, path: Path, color: Color, powerW: Double) {
+    private func stroke(
+        _ context: GraphicsContext,
+        path: Path,
+        color: Color,
+        powerW: Double,
+        dashPhase: CGFloat
+    ) {
         let lineWidth = 2.5 + min(max(powerW, 0) / 60, 1) * 2
         context.stroke(
             path,
