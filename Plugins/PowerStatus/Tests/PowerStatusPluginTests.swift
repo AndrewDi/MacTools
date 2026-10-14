@@ -72,6 +72,73 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(snapshot.headerPowerW, 80.0, accuracy: 0.01)
     }
 
+    func testUnpluggedWithSystemLoadResolvesToDischarging() {
+        // Right after unplugging, BatteryPower and Amperage can still read zero
+        // for one sample while the pack is already carrying the system.
+        let flow = PowerStatusSampler.resolveBatteryFlow(
+            isOnAC: false,
+            isChargingFlag: false,
+            acInputW: 0,
+            systemLoadW: 14.3,
+            amperagePowerW: nil,
+            batteryPowerFromTelemetry: 0
+        )
+
+        guard case .discharging(let rateW) = flow else {
+            return XCTFail("expected discharging, got \(flow)")
+        }
+        XCTAssertEqual(rateW, 14.3, accuracy: 0.01)
+    }
+
+    func testUnpluggedPrefersBatteryTelemetryForDischargeRate() {
+        let flow = PowerStatusSampler.resolveBatteryFlow(
+            isOnAC: false,
+            isChargingFlag: false,
+            acInputW: 0,
+            systemLoadW: 14.3,
+            amperagePowerW: nil,
+            batteryPowerFromTelemetry: -14.3
+        )
+
+        guard case .discharging(let rateW) = flow else {
+            return XCTFail("expected discharging, got \(flow)")
+        }
+        XCTAssertEqual(rateW, 14.3, accuracy: 0.01)
+    }
+
+    func testIdleOnlyWhenOffPowerAndDrawingNothing() {
+        let flow = PowerStatusSampler.resolveBatteryFlow(
+            isOnAC: false,
+            isChargingFlag: false,
+            acInputW: 0,
+            systemLoadW: 0,
+            amperagePowerW: nil,
+            batteryPowerFromTelemetry: 0
+        )
+
+        XCTAssertEqual(flow, .idle)
+    }
+
+    func testBatteryHealthUsesDesignCapacityNotPercentage() {
+        // Top-level MaxCapacity is a normalized 0-100 percentage on Apple
+        // silicon; reading it as milliamps collapses health to a rounding error.
+        let props: [String: Any] = [
+            "MaxCapacity": 100,
+            "BatteryData": [
+                "DesignCapacity": 6075,
+                "FullChargeCapacity": 5155,
+                "RemainingCapacity": 4967,
+            ] as [String: Any],
+        ]
+
+        let snapshot = PowerStatusSampler.readBatteryCapacitySnapshot(from: props)
+
+        XCTAssertEqual(snapshot.healthPercent, 84)
+        XCTAssertEqual(snapshot.designCapacityMAH, 6075)
+        XCTAssertEqual(snapshot.fullChargeCapacityMAH, 5155)
+        XCTAssertNil(snapshot.rawMaxCapacityMAH)
+    }
+
     func testEstimatedTimeFormatting() {
         let snapshot1 = makeSnapshot(
             avgTimeToEmptyMinutes: 45,

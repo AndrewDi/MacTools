@@ -133,22 +133,22 @@ struct PowerStatusComponentView: View {
 
     private var headerIconName: String {
         switch viewModel.snapshot.flowState {
-        case .onAC, .idle:
+        case .onAC:
             return "powerplug.fill"
+        case .idle, .discharging, .supplementalDischarge:
+            return "battery.50percent"
         case .charging:
             return "bolt.fill"
-        case .discharging, .supplementalDischarge:
-            return "battery.50percent"
         }
     }
 
     private var headerIconTint: Color {
         switch viewModel.snapshot.flowState {
-        case .onAC, .idle:
+        case .onAC:
             return theme.status.informational
         case .charging:
             return theme.status.success
-        case .discharging, .supplementalDischarge:
+        case .idle, .discharging, .supplementalDischarge:
             return theme.status.warning
         }
     }
@@ -299,11 +299,14 @@ struct PowerStatusComponentView: View {
                             }
 
                             if let amperage = snapshot.batteryAmperageMA {
+                                // IOKit signs Amperage by direction (negative
+                                // while discharging). The charge and discharge
+                                // rows above already carry that, so show magnitude.
                                 PowerStatusMiniMetric(
                                     icon: "arrow.left.arrow.right",
                                     iconTint: theme.status.warning,
                                     title: localization.string("detail.current", defaultValue: "电流"),
-                                    value: "\(amperage) mA"
+                                    value: "\(abs(amperage)) mA"
                                 )
                             }
 
@@ -534,10 +537,11 @@ enum PowerStatusLayout {
         }
     }
 
-    /// Mirrors the rows rendered by `PowerStatusComponentView`.
+    /// Mirrors the rows rendered by `PowerStatusComponentView`. The AC input
+    /// row is only rendered while the machine is on power.
     static func flowRowCount(for snapshot: PowerStatusSnapshot) -> Int {
         guard snapshot.isDataAvailable else { return 0 }
-        var count = 2 // system power + AC input
+        var count = snapshot.isOnAC ? 2 : 1 // system power, plus AC input on power
         if snapshot.batteryChargeRateW > 0 || snapshot.batteryDischargeRateW > 0 {
             count += 1
         }
@@ -601,7 +605,7 @@ private struct PowerFlowDiagramSection: View {
     var body: some View {
         VStack(spacing: PowerStatusLayout.flowRowSpacing) {
             switch snapshot.flowState {
-            case .onAC, .idle:
+            case .onAC:
                 flowRow(
                     source: acNode(value: snapshot.effectiveACOutputW),
                     destination: systemNode,
@@ -609,7 +613,8 @@ private struct PowerFlowDiagramSection: View {
                 )
             case .charging:
                 chargingForkRow
-            case .discharging:
+            case .discharging, .idle:
+                // `.idle` only resolves off power, so the pack is the source.
                 flowRow(
                     source: batteryNode,
                     destination: systemNode,

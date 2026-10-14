@@ -168,7 +168,10 @@ enum PowerStatusSampler {
         return (systemPowerW, batteryPowerW, 0, flow)
     }
 
-    private static func resolveBatteryFlow(
+    /// Pure classification of the current power path. Internal so the plugin
+    /// tests can pin down the off-power fallback that keeps the panel from
+    /// reporting "idle" while the machine is actually running on the battery.
+    static func resolveBatteryFlow(
         isOnAC: Bool,
         isChargingFlag: Bool,
         acInputW: Double,
@@ -229,6 +232,18 @@ enum PowerStatusSampler {
                 }
             }
             return .onAC
+        }
+
+        // Off power the pack is the only source, so a real discharge current or
+        // system load means the machine is running on battery even while
+        // BatteryPower and Amperage still read zero for a moment after
+        // unplugging.
+        if let ampPower = amperagePowerW, abs(ampPower) > powerThreshold {
+            return .discharging(rateW: abs(ampPower))
+        }
+
+        if abs(systemLoadW) > powerThreshold {
+            return .discharging(rateW: abs(systemLoadW))
         }
 
         return .idle
@@ -356,7 +371,7 @@ enum PowerStatusSampler {
 
     // MARK: - Battery capacity snapshot
 
-    private struct BatteryCapacitySnapshot {
+    struct BatteryCapacitySnapshot {
         var designCapacityMAH: Int?
         var rawMaxCapacityMAH: Int?
         var fullChargeCapacityMAH: Int?
@@ -364,12 +379,17 @@ enum PowerStatusSampler {
         var temperatureCentidegrees: Int?
     }
 
-    private static func readBatteryCapacitySnapshot(from props: [String: Any]) -> BatteryCapacitySnapshot {
+    /// Reads pack capacity telemetry. Internal so tests can pin the milliamp
+    /// sources apart from the normalized percentage keys on the same node.
+    static func readBatteryCapacitySnapshot(from props: [String: Any]) -> BatteryCapacitySnapshot {
         let batteryData = extractDict(from: props, key: "BatteryData")
 
+        // DesignCapacity moved under BatteryData on Apple silicon.
         let designCapacity = extractInt(from: props, key: "DesignCapacity")
+            ?? batteryData.flatMap { extractInt(from: $0, key: "DesignCapacity") }
+        // Top-level MaxCapacity is a normalized 0-100 percentage on modern Macs,
+        // so it must never be read as a milliamp capacity.
         let rawMaxCapacity = batteryData.flatMap { extractInt(from: $0, key: "AppleRawMaxCapacity") }
-            ?? extractInt(from: props, key: "MaxCapacity")
         let fullChargeCapacity = batteryData.flatMap { extractInt(from: $0, key: "FullChargeCapacity") }
         let nominalChargeCapacity = batteryData.flatMap { extractInt(from: $0, key: "NominalChargeCapacity") }
 
@@ -379,10 +399,12 @@ enum PowerStatusSampler {
 
         // Compute health percentage
         var healthPercent: Int?
-        if let design = designCapacity, let rawMax = rawMaxCapacity, design > 0 {
-            healthPercent = min(100, rawMax * 100 / design)
-        } else if let design = designCapacity, let fcc = fullChargeCapacity, design > 0 {
-            healthPercent = min(100, fcc * 100 / design)
+        if let design = designCapacity, design > 0 {
+            if let rawMax = rawMaxCapacity {
+                healthPercent = min(100, rawMax * 100 / design)
+            } else if let fcc = fullChargeCapacity {
+                healthPercent = min(100, fcc * 100 / design)
+            }
         }
 
         return BatteryCapacitySnapshot(
