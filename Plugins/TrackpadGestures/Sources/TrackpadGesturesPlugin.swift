@@ -36,7 +36,7 @@ private struct TrackpadGestureReadinessError: LocalizedError {
 }
 
 @MainActor
-final class TrackpadGesturesPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing, PluginSettingsPresenting, PluginSettingsSearchFocusing, PluginSettingsSearchFocusMetadataProviding, PluginFeatureExtractionReadinessProviding, TrackpadActionHostContextConsuming, PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting, PluginPersistentPreferencesChangeSignaling, PluginPortablePreferencesActionReferencesProviding, PluginInputGestureClaimProviding, TrackpadGestureEventProviding {
+final class TrackpadGesturesPlugin: MacToolsPlugin, TrackpadInputServiceConsuming, AccessibilityPermissionRefreshing, PluginSettingsPresenting, PluginSettingsSearchFocusing, PluginSettingsSearchFocusMetadataProviding, PluginFeatureExtractionReadinessProviding, TrackpadActionHostContextConsuming, PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting, PluginPersistentPreferencesChangeSignaling, PluginPortablePreferencesActionReferencesProviding, PluginInputGestureClaimProviding, TrackpadGestureEventProviding {
     var panelItems: [PluginPanelItem] {
         let state = rowState
         let descriptor = rowDescriptor
@@ -248,6 +248,22 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, AccessibilityPermissionRefre
                 self.testingModel.clearSnapshots()
             }
         }
+    }
+
+    private var weighingIsActive = false
+
+    func setTrackpadInputService(_ service: any TrackpadInputService) {
+        (session as? MultitouchDeviceSession)?.setInputService(service)
+        trackpadInputPauseDidChange(service.gesturesArePaused)
+        if !service.gesturesArePaused { applyConfiguration() }
+    }
+
+    func trackpadInputPauseDidChange(_ isPaused: Bool) {
+        guard weighingIsActive != isPaused else { return }
+        weighingIsActive = isPaused
+        session.invalidatePendingDeliveriesForConfigurationChange()
+        applyConfiguration()
+        onStateChange?()
     }
 
     func activate(context: PluginRuntimeContext) {
@@ -491,7 +507,7 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, AccessibilityPermissionRefre
         timestamp: TimeInterval?,
         evidence: TrackpadGestureRecognitionEvidence?
     ) {
-        guard session.isActive else {
+        guard session.isActive, !weighingIsActive else {
             return
         }
 
@@ -642,6 +658,10 @@ final class TrackpadGesturesPlugin: MacToolsPlugin, AccessibilityPermissionRefre
     }
 
     private func applyConfiguration() {
+        guard !weighingIsActive else {
+            session.deactivate()
+            return
+        }
         listenerActivationFailed = false
         if store.isTesting, let mode = testingModel.mode {
             (session as? any MultitouchDeviceTestingSessionManaging)?.updateTestingMode(mode)

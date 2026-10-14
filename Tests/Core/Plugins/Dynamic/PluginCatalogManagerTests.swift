@@ -139,6 +139,36 @@ final class PluginCatalogManagerTests: XCTestCase {
         )
     }
 
+    func testOldTrackpadCatalogEntryCannotInstallOrAutomaticallyUpdate() async throws {
+        let oldStore = PluginPackageStore(rootDirectory: temporaryRoot, userDefaults: defaults, hostVersion: "2.0.1")
+        _ = try oldStore.installPackage(from: makePackage(id: "trackpad-gestures", version: "2.0.0"))
+        let store = PluginPackageStore(rootDirectory: temporaryRoot, userDefaults: defaults, hostVersion: "2.0.2")
+        let dynamicManager = DynamicPluginManager(packageStore: store, pluginLoader: StubDynamicPluginLoader { _ in [] })
+        dynamicManager.prepareInstalledPluginsWithoutLoading()
+        let snapshot = makeCatalogSnapshot(entries: [
+            makeCatalogEntry(id: "trackpad-gestures", version: "2.0.1"),
+            makeCatalogEntry(id: "middle-click", version: "2.0.1"),
+        ])
+        let manager = PluginCatalogManager(
+            catalogProvider: StubPluginCatalogProvider(snapshot: snapshot),
+            packageResolver: StubPluginPackageResolver(packagesByID: [:]),
+            dynamicPluginManager: dynamicManager, source: .production(snapshot.sourceURL)
+        )
+        await manager.refreshCatalog()
+
+        XCTAssertTrue(manager.automaticUpdatePlanForInstalledPlugins().updateableInstalledPluginIDs.isEmpty)
+        for item in dynamicManager.pluginManagementItems {
+            guard case .incompatible = item.state else { return XCTFail("Old catalog entries must require an update") }
+        }
+        do {
+            try await manager.installPlugin(id: "middle-click")
+            XCTFail("Old package must be rejected before resolving a download")
+        } catch let error as PluginPackageManifestError {
+            XCTAssertEqual(error, .incompatiblePluginVersion(required: "2.0.2", current: "2.0.1"))
+        }
+        XCTAssertEqual(store.installedRecords().first?.manifest.version, "2.0.0")
+    }
+
     func testNewerHostEntryStaysVisibleButCannotInstallOrAutomaticallyUpdate() async throws {
         let store = PluginPackageStore(
             rootDirectory: temporaryRoot,
@@ -449,6 +479,63 @@ final class PluginCatalogManagerTests: XCTestCase {
         XCTAssertNil(defaults.object(
             forKey: "plugins.dynamic.extraction.mouse-enhancer-middle-click.v1.in-progress"
         ))
+    }
+
+    func testInterruptedMigrationWaitsForHostCompatibleDestinationThenResumes() async throws {
+        let rule = PluginExtractionMigrationPolicy.mouseEnhancerMiddleClick
+        let oldStore = PluginPackageStore(rootDirectory: temporaryRoot, userDefaults: defaults, hostVersion: "2.0.1")
+        _ = try oldStore.installPackage(from: makePackage(id: rule.sourcePluginID, version: "1.0.6"))
+        _ = try oldStore.installPackage(from: makePackage(id: rule.destinationPluginID, version: "2.0.1"))
+        defaults.set(true, forKey: rule.transactionJournalKey)
+        defaults.set(true, forKey: rule.legacyPreferenceKey)
+
+        let store = PluginPackageStore(rootDirectory: temporaryRoot, userDefaults: defaults, hostVersion: "2.0.2")
+        let loader = StubDynamicPluginLoader { records in
+            records.map { record in
+                guard case .installed = record.state else {
+                    return DynamicPluginLoadResult(record: record, plugins: [], errorMessage: nil)
+                }
+                return DynamicPluginLoadResult(
+                    record: record, plugins: [MockDynamicPlugin(id: record.id)], errorMessage: nil
+                )
+            }
+        }
+        let dynamicManager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
+        dynamicManager.prepareInstalledPluginsWithoutLoading()
+        let sourceUpdateURL = try makePackage(id: rule.sourcePluginID, version: "2.0.1")
+        let destinationUpdateURL = try makePackage(id: rule.destinationPluginID, version: "2.0.2")
+
+        for destinationVersion in ["2.0.1", "2.0.2"] {
+            let snapshot = makeCatalogSnapshot(entries: [
+                makeCatalogEntry(id: rule.sourcePluginID, version: "2.0.1"),
+                makeCatalogEntry(id: rule.destinationPluginID, version: destinationVersion),
+            ])
+            let manager = PluginCatalogManager(
+                catalogProvider: StubPluginCatalogProvider(snapshot: snapshot),
+                packageResolver: StubPluginPackageResolver(packagesByID: [
+                    rule.sourcePluginID: sourceUpdateURL,
+                    rule.destinationPluginID: destinationUpdateURL,
+                ]),
+                dynamicPluginManager: dynamicManager, source: .production(snapshot.sourceURL),
+                extractionMigrationUserDefaults: defaults
+            )
+            await manager.refreshCatalog()
+            try await manager.updateInstalledPluginsToLatestBeforeLoading()
+
+            if destinationVersion == "2.0.1" {
+                XCTAssertEqual(dynamicManager.installedPackageVersionsByID(), [
+                    rule.sourcePluginID: "1.0.6", rule.destinationPluginID: "2.0.1",
+                ])
+                XCTAssertNil(defaults.object(forKey: rule.completionKey))
+                XCTAssertTrue(defaults.bool(forKey: rule.transactionJournalKey))
+            } else {
+                XCTAssertEqual(dynamicManager.installedPackageVersionsByID(), [
+                    rule.sourcePluginID: "2.0.1", rule.destinationPluginID: "2.0.2",
+                ])
+                XCTAssertTrue(defaults.bool(forKey: rule.completionKey))
+                XCTAssertNil(defaults.object(forKey: rule.transactionJournalKey))
+            }
+        }
     }
 
     func testExtractionMigrationRollsBackReplacementWhenSourceUpdateFails() async throws {
@@ -1303,6 +1390,7 @@ private final class SuspendedPluginPackageResolver: PluginPackageResolving {
 
 @MainActor
 private final class StubDynamicPluginLoader: DynamicPluginLoading {
+    var preparePluginForActivation: ((any MacToolsPlugin) -> Void)?
     private let handler: ([PluginPackageRecord]) -> [DynamicPluginLoadResult]
     private(set) var receivedRecordIDBatches: [[String]] = []
 

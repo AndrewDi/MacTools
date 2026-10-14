@@ -1,0 +1,198 @@
+{
+  "id": "trackpad-scale",
+  "displayName": "触控板称重",
+  "summary": "用内置 Force Touch 触控板估算小物件重量（实验性）",
+  "localizedMetadata": {
+    "en": {
+      "displayName": "Trackpad Scale",
+      "summary": "Estimate small object weights with a built-in Force Touch trackpad (experimental)"
+    },
+    "zh-Hans": {
+      "displayName": "触控板称重",
+      "summary": "用内置 Force Touch 触控板估算小物件重量（实验性）"
+    },
+    "ar": {
+      "displayName": "ميزان لوحة التتبع",
+      "summary": "قدّر وزن الأجسام الصغيرة باستخدام لوحة Force Touch المدمجة (تجريبي)"
+    },
+    "de": {
+      "displayName": "Trackpad-Waage",
+      "summary": "Schätzt das Gewicht kleiner Gegenstände mit dem integrierten Force Touch Trackpad (experimentell)"
+    },
+    "es": {
+      "displayName": "Báscula del trackpad",
+      "summary": "Estima el peso de objetos pequeños con el trackpad Force Touch integrado (experimental)"
+    },
+    "fr": {
+      "displayName": "Balance du trackpad",
+      "summary": "Estimez le poids de petits objets avec le trackpad Force Touch intégré (expérimental)"
+    },
+    "ja": {
+      "displayName": "トラックパッド計量",
+      "summary": "内蔵Force Touchトラックパッドで小物の重さを推定します（実験的）"
+    },
+    "ko": {
+      "displayName": "트랙패드 저울",
+      "summary": "내장 Force Touch 트랙패드로 작은 물체의 무게를 추정합니다 (실험적)"
+    },
+    "pt": {
+      "displayName": "Balança do trackpad",
+      "summary": "Estime o peso de pequenos objetos com o trackpad Force Touch integrado (experimental)"
+    },
+    "ru": {
+      "displayName": "Весы на трекпаде",
+      "summary": "Оценка веса небольших предметов встроенным трекпадом Force Touch (экспериментально)"
+    },
+    "zh-Hant": {
+      "displayName": "觸控板稱重",
+      "summary": "用內建 Force Touch 觸控板估算小物件重量（實驗性）"
+    },
+    "tr": {
+      "displayName": "Trackpad Terazisi",
+      "summary": "Yerleşik Force Touch trackpad ile küçük nesnelerin ağırlığını tahmin edin (deneysel)"
+    }
+  },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary",
+    "setup.title": "@localizable.calibration",
+    "setup.description": "@localizable.calibration.instructions"
+  },
+  "version": "1.0.0",
+  "minHostVersion": "2.0.2",
+  "pluginKitVersion": 7,
+  "bundleRelativePath": "TrackpadScale.bundle",
+  "factoryClass": "TrackpadScalePlugin.TrackpadScalePluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "TrackpadScalePlugin"
+  },
+  "capabilities": {
+    "panelItems": [
+      "row"
+    ],
+    "settings": "form"
+  },
+  "permissions": [],
+  "category": "system",
+  "presentation": {
+    "longDescription": "@productStrings.summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@productStrings.summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "GPL-3.0-only"
+  },
+  "discovery": {
+    "keywords": [
+      "trackpad",
+      "scale",
+      "weight",
+      "force-touch",
+      "experimental"
+    ],
+    "localizedSynonyms": {
+      "en": [
+        "Trackpad Scale"
+      ],
+      "zh-Hans": [
+        "触控板称重"
+      ],
+      "ar": [
+        "ميزان لوحة التتبع"
+      ],
+      "de": [
+        "Trackpad-Waage"
+      ],
+      "es": [
+        "Báscula del trackpad"
+      ],
+      "fr": [
+        "Balance du trackpad"
+      ],
+      "ja": [
+        "トラックパッド計量"
+      ],
+      "ko": [
+        "트랙패드 저울"
+      ],
+      "pt": [
+        "Balança do trackpad"
+      ],
+      "ru": [
+        "Весы на трекпаде"
+      ],
+      "zh-Hant": [
+        "觸控板稱重"
+      ],
+      "tr": [
+        "Trackpad Terazisi"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@productStrings.display-name"
+      }
+    ],
+    "goalCategories": [
+      "system"
+    ],
+    "relatedPluginIDs": [],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [
+      "built-in Force Touch trackpad"
+    ],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "guided",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "input-events"
+    ],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [
+      {
+        "id": "calibrate",
+        "title": "@productStrings.setup.title",
+        "description": "@productStrings.setup.description"
+      }
+    ],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  }
+}

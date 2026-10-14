@@ -120,6 +120,13 @@ def _localized_requirement(
 
 
 LOCALIZED_REQUIREMENT_NAMES = {
+    "built-in Force Touch trackpad": _localized_requirement(
+        "built-in Force Touch trackpad", ar="لوحة Force Touch مدمجة", de="integriertes Force Touch Trackpad",
+        es="trackpad Force Touch integrado", fr="trackpad Force Touch intégré", ja="内蔵Force Touchトラックパッド",
+        ko="내장 Force Touch 트랙패드", pt="trackpad Force Touch integrado", ru="встроенный трекпад Force Touch",
+        tr="yerleşik Force Touch trackpad",
+        zh_hans="内置 Force Touch 触控板", zh_hant="內建 Force Touch 觸控板",
+    ),
     "accessibility": _localized_requirement(
         "Accessibility permission", ar="إذن تسهيلات الاستخدام", de="Bedienungshilfen-Berechtigung",
         es="permiso de Accesibilidad", fr="autorisation Accessibilité", ja="アクセシビリティ権限",

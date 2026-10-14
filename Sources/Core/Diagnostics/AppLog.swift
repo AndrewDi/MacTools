@@ -4,6 +4,7 @@ import OSLog
 enum AppLog {
     private static let subsystem = Bundle.main.bundleIdentifier ?? "com.example.mactools"
 
+    static let trackpadSensor = Logger(subsystem: subsystem, category: "TrackpadSensor")
     static let accessibilityPermissionObserver = Logger(subsystem: subsystem, category: "AccessibilityPermissionObserver")
     static let actionGrid = Logger(subsystem: subsystem, category: "ActionGrid")
     static let actionExecution = Logger(subsystem: subsystem, category: "ActionExecution")

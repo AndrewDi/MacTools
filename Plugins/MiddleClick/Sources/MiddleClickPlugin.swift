@@ -25,7 +25,7 @@ private struct MiddleClickPluginProvider: PluginProvider {
 
 /// Converts a trackpad tap with the configured finger count into a middle-button click.
 @MainActor
-final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing,
+final class MiddleClickPlugin: MacToolsPlugin, TrackpadInputServiceConsuming, AccessibilityPermissionRefreshing,
     PluginActionProviding, PluginActionPermissionProviding,
     PluginInputGestureClaimProviding, PluginInputGestureConflictConsuming
 {
@@ -376,7 +376,24 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
         return .succeeded()
     }
 
+    private var inputService: (any TrackpadInputService)?
+    private var weighingIsActive = false
+
+    func setTrackpadInputService(_ service: any TrackpadInputService) {
+        inputService = service
+        (session as? MiddleClickSession)?.setInputService(service)
+        trackpadInputPauseDidChange(service.gesturesArePaused)
+    }
+
+    func trackpadInputPauseDidChange(_ isPaused: Bool) {
+        guard weighingIsActive != isPaused else { return }
+        weighingIsActive = isPaused
+        applyCurrentConfiguration()
+        onStateChange?()
+    }
+
     private func applyCurrentConfiguration() {
+        guard !weighingIsActive else { session?.setInputPaused(true); return }
         guard store.isEnabled else {
             stopSession()
             return
@@ -396,12 +413,15 @@ final class MiddleClickPlugin: MacToolsPlugin, AccessibilityPermissionRefreshing
     }
 
     private func startSession() {
+        guard !weighingIsActive else { return }
         if let session {
             session.requiredFingerCount = store.requiredFingerCount
+            session.setInputPaused(false)
             return
         }
 
         let newSession = makeSession()
+        (newSession as? MiddleClickSession)?.inputService = inputService
         newSession.requiredFingerCount = store.requiredFingerCount
         newSession.activate()
         session = newSession

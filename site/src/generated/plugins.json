@@ -17080,7 +17080,7 @@
       "releaseNotesURL": null,
       "route": "/plugins/middle-click/",
       "summary": "触控板轻点 → 模拟鼠标中键",
-      "version": "2.0.1"
+      "version": "2.0.2"
     },
     {
       "capabilities": {
@@ -22850,7 +22850,262 @@
       "releaseNotesURL": null,
       "route": "/plugins/trackpad-gestures/",
       "summary": "将自定义触控板手势映射为 MacTools 操作、快捷键或中键点击",
-      "version": "2.0.1"
+      "version": "2.0.2"
+    },
+    {
+      "capabilities": {
+        "panelItems": [
+          "row"
+        ],
+        "settings": "form"
+      },
+      "category": "system",
+      "displayName": "触控板称重",
+      "id": "trackpad-scale",
+      "localizedMetadata": {
+        "ar": {
+          "displayName": "ميزان لوحة التتبع",
+          "summary": "قدّر وزن الأجسام الصغيرة باستخدام لوحة Force Touch المدمجة (تجريبي)"
+        },
+        "de": {
+          "displayName": "Trackpad-Waage",
+          "summary": "Schätzt das Gewicht kleiner Gegenstände mit dem integrierten Force Touch Trackpad (experimentell)"
+        },
+        "en": {
+          "displayName": "Trackpad Scale",
+          "summary": "Estimate small object weights with a built-in Force Touch trackpad (experimental)"
+        },
+        "es": {
+          "displayName": "Báscula del trackpad",
+          "summary": "Estima el peso de objetos pequeños con el trackpad Force Touch integrado (experimental)"
+        },
+        "fr": {
+          "displayName": "Balance du trackpad",
+          "summary": "Estimez le poids de petits objets avec le trackpad Force Touch intégré (expérimental)"
+        },
+        "ja": {
+          "displayName": "トラックパッド計量",
+          "summary": "内蔵Force Touchトラックパッドで小物の重さを推定します（実験的）"
+        },
+        "ko": {
+          "displayName": "트랙패드 저울",
+          "summary": "내장 Force Touch 트랙패드로 작은 물체의 무게를 추정합니다 (실험적)"
+        },
+        "pt": {
+          "displayName": "Balança do trackpad",
+          "summary": "Estime o peso de pequenos objetos com o trackpad Force Touch integrado (experimental)"
+        },
+        "ru": {
+          "displayName": "Весы на трекпаде",
+          "summary": "Оценка веса небольших предметов встроенным трекпадом Force Touch (экспериментально)"
+        },
+        "tr": {
+          "displayName": "Trackpad Terazisi",
+          "summary": "Yerleşik Force Touch trackpad ile küçük nesnelerin ağırlığını tahmin edin (deneysel)"
+        },
+        "zh-Hans": {
+          "displayName": "触控板称重",
+          "summary": "用内置 Force Touch 触控板估算小物件重量（实验性）"
+        },
+        "zh-Hant": {
+          "displayName": "觸控板稱重",
+          "summary": "用內建 Force Touch 觸控板估算小物件重量（實驗性）"
+        }
+      },
+      "openInMacToolsURL": "mactools://app/settings/plugins/marketplace/trackpad-scale",
+      "product": {
+        "actions": null,
+        "discovery": {
+          "alternativePluginIDs": [],
+          "goalCategories": [
+            "system"
+          ],
+          "keywords": [
+            "trackpad",
+            "scale",
+            "weight",
+            "force-touch",
+            "experimental"
+          ],
+          "localizedSynonyms": {
+            "ar": [
+              "ميزان لوحة التتبع"
+            ],
+            "de": [
+              "Trackpad-Waage"
+            ],
+            "en": [
+              "Trackpad Scale"
+            ],
+            "es": [
+              "Báscula del trackpad"
+            ],
+            "fr": [
+              "Balance du trackpad"
+            ],
+            "ja": [
+              "トラックパッド計量"
+            ],
+            "ko": [
+              "트랙패드 저울"
+            ],
+            "pt": [
+              "Balança do trackpad"
+            ],
+            "ru": [
+              "Весы на трекпаде"
+            ],
+            "tr": [
+              "Trackpad Terazisi"
+            ],
+            "zh-Hans": [
+              "触控板称重"
+            ],
+            "zh-Hant": [
+              "觸控板稱重"
+            ]
+          },
+          "relatedPluginIDs": [],
+          "useCases": [
+            {
+              "id": "primary-use",
+              "title": {
+                "ar": "ميزان لوحة التتبع",
+                "de": "Trackpad-Waage",
+                "en": "Trackpad Scale",
+                "es": "Báscula del trackpad",
+                "fr": "Balance du trackpad",
+                "ja": "トラックパッド計量",
+                "ko": "트랙패드 저울",
+                "pt": "Balança do trackpad",
+                "ru": "Весы на трекпаде",
+                "tr": "Trackpad Terazisi",
+                "zh-Hans": "触控板称重",
+                "zh-Hant": "觸控板稱重"
+              }
+            }
+          ]
+        },
+        "presentation": {
+          "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+          "examples": [
+            {
+              "id": "primary-use",
+              "text": {
+                "ar": "قدّر وزن الأجسام الصغيرة باستخدام لوحة Force Touch المدمجة (تجريبي)",
+                "de": "Schätzt das Gewicht kleiner Gegenstände mit dem integrierten Force Touch Trackpad (experimentell)",
+                "en": "Estimate small object weights with a built-in Force Touch trackpad (experimental)",
+                "es": "Estima el peso de objetos pequeños con el trackpad Force Touch integrado (experimental)",
+                "fr": "Estimez le poids de petits objets avec le trackpad Force Touch intégré (expérimental)",
+                "ja": "内蔵Force Touchトラックパッドで小物の重さを推定します（実験的）",
+                "ko": "내장 Force Touch 트랙패드로 작은 물체의 무게를 추정합니다 (실험적)",
+                "pt": "Estime o peso de pequenos objetos com o trackpad Force Touch integrado (experimental)",
+                "ru": "Оценка веса небольших предметов встроенным трекпадом Force Touch (экспериментально)",
+                "tr": "Yerleşik Force Touch trackpad ile küçük nesnelerin ağırlığını tahmin edin (deneysel)",
+                "zh-Hans": "用内置 Force Touch 触控板估算小物件重量（实验性）",
+                "zh-Hant": "用內建 Force Touch 觸控板估算小物件重量（實驗性）"
+              }
+            }
+          ],
+          "license": "GPL-3.0-only",
+          "longDescription": {
+            "ar": "قدّر وزن الأجسام الصغيرة باستخدام لوحة Force Touch المدمجة (تجريبي)",
+            "de": "Schätzt das Gewicht kleiner Gegenstände mit dem integrierten Force Touch Trackpad (experimentell)",
+            "en": "Estimate small object weights with a built-in Force Touch trackpad (experimental)",
+            "es": "Estima el peso de objetos pequeños con el trackpad Force Touch integrado (experimental)",
+            "fr": "Estimez le poids de petits objets avec le trackpad Force Touch intégré (expérimental)",
+            "ja": "内蔵Force Touchトラックパッドで小物の重さを推定します（実験的）",
+            "ko": "내장 Force Touch 트랙패드로 작은 물체의 무게를 추정합니다 (실험적)",
+            "pt": "Estime o peso de pequenos objetos com o trackpad Force Touch integrado (experimental)",
+            "ru": "Оценка веса небольших предметов встроенным трекпадом Force Touch (экспериментально)",
+            "tr": "Yerleşik Force Touch trackpad ile küçük nesnelerin ağırlığını tahmin edin (deneysel)",
+            "zh-Hans": "用内置 Force Touch 触控板估算小物件重量（实验性）",
+            "zh-Hant": "用內建 Force Touch 觸控板估算小物件重量（實驗性）"
+          },
+          "publisher": "MacTools",
+          "screenshots": [],
+          "supportURL": "https://github.com/ggbond268/MacTools/issues"
+        },
+        "privacy": {
+          "allowsUserConfiguredDomains": false,
+          "dataObserved": [
+            "input-events"
+          ],
+          "dataPersisted": [
+            "plugin-configuration"
+          ],
+          "diagnosticExportsContainUserData": false,
+          "networkDomains": [],
+          "networkUse": "none",
+          "processesSensitiveUserContent": false,
+          "retention": {
+            "policy": "user-controlled"
+          },
+          "telemetry": "none"
+        },
+        "relationships": {
+          "includedPackIDs": [],
+          "relatedPluginIDs": [],
+          "suggestedRecipeIDs": [],
+          "supersedesPluginIDs": []
+        },
+        "requirements": {
+          "applications": [],
+          "architectures": [
+            "arm64",
+            "x86_64"
+          ],
+          "executables": [],
+          "hardware": [
+            "built-in Force Touch trackpad"
+          ],
+          "minimumMacOSVersion": "14.0",
+          "permissionIDs": [],
+          "requiresRelaunch": false,
+          "setupComplexity": "guided"
+        },
+        "setup": {
+          "optionalSurfaces": [],
+          "steps": [
+            {
+              "description": {
+                "ar": "صفّر دون جسم، ثم ضع وزنًا معروفًا مستقلًا (1–100 غ). أبقِ الإصبع نفسه ملامسًا بخفة واحفظ عند الاستقرار.",
+                "de": "Ohne Gegenstand tarieren, dann ein unabhängig bekanntes Gewicht (1–100 g) auflegen. Denselben Finger leicht auflegen und bei stabilem Wert speichern.",
+                "en": "Tare without an object, then place an independently known weight (1–100 g). Keep the same finger lightly touching and save when stable.",
+                "es": "Tara sin un objeto y coloca un peso conocido de forma independiente (1–100 g). Mantén el mismo dedo apoyado suavemente y guarda cuando la lectura sea estable.",
+                "fr": "Faites la tare sans objet, puis posez un poids connu indépendamment (1–100 g). Gardez le même doigt légèrement posé et enregistrez quand la mesure est stable.",
+                "ja": "物を置かずにゼロ調整し、別途確認した重り（1–100 g）を置きます。同じ指を軽く触れたまま、安定してから保存してください。",
+                "ko": "물체 없이 영점을 맞춘 다음 별도로 확인한 무게(1–100 g)를 올리세요. 같은 손가락을 가볍게 대고 안정되면 저장하세요.",
+                "pt": "Zere sem objeto e coloque um peso conhecido de forma independente (1–100 g). Mantenha o mesmo dedo tocando levemente e salve quando estabilizar.",
+                "ru": "Обнулите без предмета, затем положите предмет с независимо известным весом (1–100 г). Слегка касайтесь тем же пальцем и сохраните после стабилизации.",
+                "tr": "Nesne olmadan sıfırlayın, ardından ağırlığı bağımsız olarak bilinen bir nesne (1–100 g) yerleştirin. Aynı parmakla hafifçe dokunmaya devam edin ve kararlı olduğunda kaydedin.",
+                "zh-Hans": "先在没有物件时归零，再放置已知重量的物件（1–100 g）。保持同一根手指轻触，稳定后保存。",
+                "zh-Hant": "先在沒有物件時歸零，再放置已知重量的物件（1–100 g）。保持同一根手指輕觸，穩定後儲存。"
+              },
+              "id": "calibrate",
+              "title": {
+                "ar": "معايرة بوزن معروف",
+                "de": "Kalibrierung mit bekanntem Gewicht",
+                "en": "Known-weight calibration",
+                "es": "Calibración con peso conocido",
+                "fr": "Étalonnage avec un poids connu",
+                "ja": "既知の重量で校正",
+                "ko": "알려진 무게로 보정",
+                "pt": "Calibração com peso conhecido",
+                "ru": "Калибровка известным весом",
+                "tr": "Bilinen ağırlıkla kalibrasyon",
+                "zh-Hans": "已知重量校准",
+                "zh-Hant": "已知重量校準"
+              }
+            }
+          ]
+        }
+      },
+      "releaseChannel": null,
+      "releaseNotesURL": null,
+      "route": "/plugins/trackpad-scale/",
+      "summary": "用内置 Force Touch 触控板估算小物件重量（实验性）",
+      "version": "1.0.0"
     },
     {
       "capabilities": {

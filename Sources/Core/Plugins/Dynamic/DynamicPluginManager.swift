@@ -220,6 +220,10 @@ final class DynamicPluginManager: ObservableObject {
     var onPluginsChanged: (([any MacToolsPlugin]) -> Void)?
     /// Revoke host-owned capabilities before plugin teardown or package removal.
     var onPluginWillDeactivate: ((String, PluginDeactivationReason) -> Void)?
+    /// Supply host capabilities before activation, including temporary migration preflight.
+    var preparePluginForActivation: ((any MacToolsPlugin) -> Void)? {
+        didSet { pluginLoader.preparePluginForActivation = preparePluginForActivation }
+    }
 
     var temporaryDirectory: URL {
         packageStore.temporaryDirectory
@@ -982,7 +986,9 @@ final class DynamicPluginManager: ObservableObject {
                 let compatibleCatalogEntry = PluginVersionComparator.isVersion(
                     packageStore.hostVersion,
                     atLeast: entry.minimumHostVersion
-                ) && requirementFailure(for: entry.requirements) == nil ? entry : nil
+                ) && PluginPackageManifestLoader.pluginVersionFailure(
+                    id: entry.id, version: entry.version, hostVersion: packageStore.hostVersion
+                ) == nil && requirementFailure(for: entry.requirements) == nil ? entry : nil
                 items.append(
                     managementItem(
                         for: result,
@@ -1002,6 +1008,10 @@ final class DynamicPluginManager: ObservableObject {
                             current: packageStore.hostVersion
                         ).localizedDescription
                     )
+                } else if let failure = PluginPackageManifestLoader.pluginVersionFailure(
+                    id: entry.id, version: entry.version, hostVersion: packageStore.hostVersion
+                ) {
+                    state = .incompatible(failure.localizedDescription)
                 } else if let failure = requirementFailure(for: entry.requirements) {
                     state = .incompatible(failure.localizedDescription)
                 } else {

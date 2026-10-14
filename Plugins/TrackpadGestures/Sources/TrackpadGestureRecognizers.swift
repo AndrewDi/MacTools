@@ -1,23 +1,18 @@
 import Foundation
 import MacToolsPluginKit
 
-struct TrackpadContactSnapshot: Equatable, Sendable {
-    let identifier: Int
-    let x: Double
-    let y: Double
+typealias TrackpadContactSnapshot = TrackpadSensorContact
+typealias TrackpadContactFrame = TrackpadSensorFrame
 
-    func distance(to other: TrackpadContactSnapshot) -> Double {
+extension TrackpadSensorContact {
+    func distance(to other: TrackpadSensorContact) -> Double {
         hypot(x - other.x, y - other.y)
     }
 }
 
-struct TrackpadContactFrame: Equatable, Sendable {
-    let deviceID: UInt64
-    let timestamp: TimeInterval
-    let contacts: [TrackpadContactSnapshot]
-
+extension TrackpadSensorFrame {
     var contactsByID: [Int: TrackpadContactSnapshot] {
-        Dictionary(uniqueKeysWithValues: contacts.map { ($0.identifier, $0) })
+        Dictionary(contacts.map { ($0.identifier, $0) }, uniquingKeysWith: { _, latest in latest })
     }
 }
 
