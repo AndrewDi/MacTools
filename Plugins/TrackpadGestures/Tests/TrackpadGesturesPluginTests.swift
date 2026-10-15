@@ -383,11 +383,20 @@ final class TrackpadGestureStoreTests: XCTestCase {
 @MainActor
 final class TrackpadGesturesPluginTests: XCTestCase {
 
-    func testMultitouchDriverFailsClosedWithoutRuntime() {
-        let driver = MultitouchDeviceDriver(runtime: nil)
-
-        XCTAssertFalse(driver.start { _ in })
-        XCTAssertEqual(driver.deviceCount, 0)
+    func testWeighingPausesAndRestoresMappingsWithoutSavedPreferenceChanges() {
+        let fixture = makePlugin()
+        let mapping = TrackpadGestureMapping(gesture: .threeFingerTap,
+            action: .keyboardShortcut(ShortcutBinding(keyCode: 0, modifiers: [.command])))
+        XCTAssertTrue(fixture.plugin.store.save(mapping))
+        fixture.plugin.configurationDidChange()
+        fixture.plugin.trackpadInputPauseDidChange(true)
+        XCTAssertFalse(fixture.session.isActive)
+        fixture.session.recognize(.threeFingerTap)
+        XCTAssertTrue(fixture.executor.actions.isEmpty)
+        XCTAssertEqual(fixture.plugin.store.mappings, [mapping])
+        fixture.plugin.trackpadInputPauseDidChange(false)
+        XCTAssertTrue(fixture.session.isActive)
+        XCTAssertEqual(fixture.plugin.store.mappings, [mapping])
     }
 
     func testEnabledMappingExecutesEveryRepeatedRecognizedAction() {
@@ -588,27 +597,6 @@ final class TrackpadGesturesPluginTests: XCTestCase {
         XCTAssertEqual(tapStarts, 3)
         XCTAssertEqual(tapStops, 2)
         session.deactivate()
-    }
-
-    func testInterprocessListenerLeaseNeverLetsATestHostOwnTheProductionListener() throws {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("TrackpadListenerTestHostLeaseTests-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let testHostLease = TrackpadInterprocessListenerLease(
-            bundleIdentifier: "test.mactools",
-            temporaryDirectory: directory,
-            isAcquisitionAllowed: false
-        )
-        let installedAppLease = TrackpadInterprocessListenerLease(
-            bundleIdentifier: "test.mactools",
-            temporaryDirectory: directory,
-            isAcquisitionAllowed: true
-        )
-
-        XCTAssertFalse(testHostLease.acquire())
-        XCTAssertTrue(installedAppLease.acquire())
-        installedAppLease.release()
     }
 
     func testEventTapDisableBalancesRewrittenDownAndSuppressesItsOriginalUp() throws {

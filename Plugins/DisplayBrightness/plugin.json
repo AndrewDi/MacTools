@@ -64,7 +64,21 @@
     "action.disable-built-in-display.title": "@localizable.displayDisable.action.disable",
     "action.disable-built-in-display.description": "@localizable.displayDisable.action.disable",
     "action.restore-built-in-display.title": "@localizable.displayDisable.action.restore",
-    "action.restore-built-in-display.description": "@localizable.displayDisable.action.restore"
+    "action.restore-built-in-display.description": "@localizable.displayDisable.action.restore",
+    "discovery.software-brightness": {
+      "ar": "سطوع برمجي",
+      "de": "Software-Helligkeit",
+      "en": "Software Brightness",
+      "es": "Brillo por software",
+      "fr": "Luminosité logicielle",
+      "ja": "ソフトウェアによる明るさ調整",
+      "ko": "소프트웨어 밝기 조절",
+      "pt": "Brilho por software",
+      "ru": "Программная яркость",
+      "tr": "Yazılımla parlaklık",
+      "zh-Hans": "软件亮度",
+      "zh-Hant": "軟體亮度"
+    }
   },
   "version": "2.0.1",
   "minHostVersion": "2.0.1",
@@ -100,7 +114,9 @@
   "discovery": {
     "keywords": [
       "display",
-      "brightness"
+      "brightness",
+      "DDC/CI",
+      "software brightness"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -134,7 +150,8 @@
         "Ekran Parlaklığı"
       ],
       "zh-Hans": [
-        "显示器亮度"
+        "显示器亮度",
+        "软件亮度"
       ],
       "zh-Hant": [
         "顯示器亮度"
@@ -150,7 +167,10 @@
       "display"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.software-brightness"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

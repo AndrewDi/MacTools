@@ -105,7 +105,7 @@ Editing a direct shortcut highlights its key and shows a concise prompt beside D
 | Keyboard, mouse & trackpad | Remap inputs, assign gestures and app shortcuts, tune scrolling, add middle-click, and type text with Auto Input. |
 | Displays & appearance | Adjust brightness and resolution, connect Sidecar, toggle True Tone and Night Shift, hide the notch, and organize menu bar icons and the Dock. |
 | Audio & power | Control system, microphone, app, and display volume; keep the Mac awake; manage fans and charging limits; lock, sleep, or shut down. |
-| Monitoring & calendar | Follow system performance, device batteries, activity statistics, AI usage, and network status, or combine battery, Wi-Fi, and volume into one resizable menu bar icon with the battery percentage, status colors, detailed network states, and a Bluetooth audio mark. Check your calendar and upcoming events. Monitor live system power consumption, AC input, battery charging/discharging wattage, battery health, temperature, and cycle count in a dedicated power panel. |
+| Monitoring & calendar | Follow system performance, device batteries, activity statistics, AI usage, and network status, manage Apple containers and virtual machines, or combine battery, Wi-Fi, and volume into one resizable menu bar icon with the battery percentage, status colors, detailed network states, and a Bluetooth audio mark. Check your calendar and upcoming events. Monitor live system power consumption, AC input, battery charging/discharging wattage, battery health, temperature, and cycle count in a dedicated power panel. |
 | Cleanup & maintenance | Explore disk usage visually, review large files and folders before moving them to Trash, see where storage goes across caches, developer tools, app data, and IM chat tools, clean disk and Xcode files, manage Homebrew and login items, eject disks, empty Trash, quit apps, repair quarantined apps, soft-restart macOS, and use physical Clean Mode. |
 | Utilities & configuration | Translate selected text, run editable AI prompt templates on selected text, upload to Cloudflare R2, edit zsh files, open Siri, and save reusable Mac Settings profiles. |
 
@@ -122,6 +122,8 @@ The clipboard panel and action menu use neutral system gray selections. Native a
 Clipboard selection and scrolling respond immediately. Rapid navigation skips transient preview requests, and recent image and rich-text previews are reused within bounded caches. Large rich-text items use their saved text summaries for preview.
 
 Screenshots work on macOS 14+; region recording and per-app volume require macOS 15+. Hardware controls depend on device support. See the [feature guides](docs/README.md) for details.
+
+Experimental [Trackpad Scale](docs/plugins/trackpad-scale.md) estimates small-object weight on a built-in Force Touch trackpad. Start with no object and keep one finger lightly resting in place; it automatically tares after about one second. Wait for the ready message, then gently place the object while maintaining that contact. Auto capture stops sampling after a stable reading and keeps the result visible so you can lift your finger; turn it off for continuous measuring. Calibration pauses auto capture and includes manual **Tare**; **⌘T** also resets the baseline while measuring.
 
 Screenshot selection remains available on each display after switching desktops or entering and leaving full-screen apps.
 

@@ -54,7 +54,21 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "discovery.external-drive": {
+      "ar": "قرص خارجي",
+      "de": "Externes Laufwerk",
+      "en": "External Drive",
+      "es": "Unidad externa",
+      "fr": "Disque externe",
+      "ja": "外付けドライブ",
+      "ko": "외장 드라이브",
+      "pt": "Unidade externa",
+      "ru": "Внешний диск",
+      "tr": "Harici sürücü",
+      "zh-Hans": "外接磁盘",
+      "zh-Hant": "外接磁碟"
+    }
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -93,7 +107,9 @@
       "eject",
       "disk",
       "disks",
-      "storage"
+      "storage",
+      "eject drives",
+      "external drive"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -127,7 +143,9 @@
         "Disk Çıkarma"
       ],
       "zh-Hans": [
-        "推出磁盘"
+        "推出磁盘",
+        "弹出磁盘",
+        "移动硬盘"
       ],
       "zh-Hant": [
         "退出磁碟"
@@ -143,7 +161,10 @@
       "storage"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.external-drive"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

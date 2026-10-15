@@ -122,10 +122,16 @@ enum PluginCategoryFilter: Hashable, Identifiable {
 
 enum PluginListFilter {
     static func normalized(_ query: String) -> String {
-        query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        // Match website search without depending on the current display language.
+        query.precomposedStringWithCanonicalMapping
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "i\u{0307}", with: "i")
+            .replacingOccurrences(of: "ı", with: "i")
+            .replacingOccurrences(of: "ß", with: "ss")
     }
 
-    /// Returns true when any haystack contains the lowercased query, or when the query is empty.
+    /// Returns true when any normalized haystack contains the normalized query, or when the query is empty.
     static func matches(query: String, in haystacks: [String?]) -> Bool {
         let needle = normalized(query)
 
@@ -134,7 +140,7 @@ enum PluginListFilter {
         }
 
         for haystack in haystacks {
-            if let haystack, haystack.lowercased().contains(needle) {
+            if let haystack, normalized(haystack).contains(needle) {
                 return true
             }
         }

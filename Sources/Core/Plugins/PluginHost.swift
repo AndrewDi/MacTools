@@ -345,6 +345,7 @@ final class PluginHost: ObservableObject {
 
     private var shortcutDefinitionRevision: UInt64 = 0
     private var shortcutResolutionSnapshot: ShortcutResolutionSnapshot?
+    private let derivedStateReadCache = PluginDerivedStateReadCache()
 
     /// Immutable inputs shared by one synchronous update. Plugin declarations
     /// are read again on the next update, including dynamic defaults and titles.
@@ -373,6 +374,7 @@ final class PluginHost: ObservableObject {
     }
 
     private let builtInPlugins: [any MacToolsPlugin]
+    private var deactivatedPluginInstances = Set<ObjectIdentifier>()
     private let shortcutStore: ShortcutStore
     private let pluginOrderingStore: PluginOrderingStore
     let menuBarPanelStore: MenuBarPanelStore
@@ -391,6 +393,7 @@ final class PluginHost: ObservableObject {
     private let displayConfigurationObserver: (any DisplayConfigurationObserving)?
     private let accessibilityPermissionObserver: (any AccessibilityPermissionObserving)?
     private let applicationActivityObserver: (any ApplicationActivityObserving)?
+    private let makeTrackpadInputService: () -> SharedTrackpadInputService
     private let focusedApplicationTargetProvider: any FocusedApplicationTargetProviding
     private let displayTopologyRefreshDelay: Duration
     private let pluginStateChangeRebuildDelay: Duration
@@ -484,6 +487,12 @@ final class PluginHost: ObservableObject {
     @Published private(set) var actionRegistryIssues: [ActionRegistryIssue] = []
     @Published private(set) var shortcutBindingRevision: UInt64 = 0
     @Published private(set) var pluginManagementItems: [PluginManagementItem] = []
+    @Published private(set) var pluginMarketplaceOperations: [String: PluginMarketplaceOperation] = [:]
+    @Published private(set) var isUpdatingAvailablePlugins = false
+    @Published private(set) var hasActiveMarketplaceOperation = false
+    private var marketplaceOperationAttemptsByPluginID: [String: UUID] = [:]
+    // Superseding feedback does not cancel the underlying package request.
+    private var marketplaceOperationAttemptsInFlight: Set<UUID> = []
     @Published private(set) var pluginCatalogStatus: PluginCatalogStatus = .unavailable
     @Published private(set) var automaticPluginUpdateStatus: PluginAutomaticUpdateStatus = .idle
     @Published private(set) var hasActivePlugin = false
@@ -574,6 +583,7 @@ final class PluginHost: ObservableObject {
         displayConfigurationObserver: (any DisplayConfigurationObserving)? = nil,
         accessibilityPermissionObserver: (any AccessibilityPermissionObserving)? = nil,
         applicationActivityObserver: (any ApplicationActivityObserving)? = nil,
+        makeTrackpadInputService: @escaping () -> SharedTrackpadInputService = { SharedTrackpadInputService() },
         focusedApplicationTargetProvider: (any FocusedApplicationTargetProviding)? = nil,
         displayTopologyRefreshDelay: Duration = .milliseconds(180),
         pluginStateChangeRebuildDelay: Duration = .milliseconds(80),
@@ -621,6 +631,7 @@ final class PluginHost: ObservableObject {
         self.displayConfigurationObserver = displayConfigurationObserver
         self.accessibilityPermissionObserver = accessibilityPermissionObserver
         self.applicationActivityObserver = applicationActivityObserver
+        self.makeTrackpadInputService = makeTrackpadInputService
         self.focusedApplicationTargetProvider = focusedApplicationTargetProvider
             ?? SystemFocusedApplicationTargetProvider()
         self.applicationActivityState = applicationActivityObserver?.state ?? .interactive
@@ -693,20 +704,30 @@ final class PluginHost: ObservableObject {
         configureCallbacks(for: self.builtInPlugins)
 
         if let dynamicPluginManager {
+            dynamicPluginManager.preparePluginForActivation = { [weak self] plugin in
+                guard let self else { return }
+                self.deactivatedPluginInstances.remove(ObjectIdentifier(plugin))
+                self.configureTrackpadInput(for: plugin)
+            }
             dynamicPluginManager.onPluginWillDeactivate = { [weak self] pluginID, reason in
-                self?.menuBarIconCoordinator.unregister(pluginID: pluginID, reason: reason)
+                guard let self else { return }
+                self.deactivatedPluginInstances.formUnion(self.dynamicPlugins
+                    .filter { $0.metadata.id == pluginID }.map { ObjectIdentifier($0) })
+                self.menuBarIconCoordinator.unregister(pluginID: pluginID, reason: reason)
             }
             let legacyHiddenPluginIDs = dynamicPluginManager.legacyHiddenPluginIDs()
             if menuBarPanelStore.migrateLegacyHiddenPlugins(legacyHiddenPluginIDs) {
                 dynamicPluginManager.clearLegacyHiddenPluginIDs()
             }
+            let installedMetadata: InstalledPluginMetadata
             if loadDynamicPluginsOnInit {
-                self.dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+                let loaded = dynamicPluginManager.loadInstalledPluginsAndMetadata()
+                self.dynamicPlugins = loaded.plugins
                 self.didLoadDynamicPlugins = true
+                installedMetadata = loaded.metadata
             } else {
-                dynamicPluginManager.prepareInstalledPluginsWithoutLoading()
+                installedMetadata = dynamicPluginManager.prepareInstalledPluginsWithoutLoading()
             }
-            let installedMetadata = dynamicPluginManager.installedMetadata()
             self.dynamicPluginCapabilitiesByID = installedMetadata.capabilitiesByID
             self.dynamicPluginCategoriesByID = installedMetadata.categoriesByID
             self.dynamicPluginReleaseChannelsByID = installedMetadata.releaseChannelsByID
@@ -882,6 +903,7 @@ final class PluginHost: ObservableObject {
     }
 
     func deactivateAllPlugins(reason: PluginDeactivationReason = .hostShutdown) {
+        trackpadInputService.shutdown()
         menuBarIconCoordinator.deactivateAll(reason: reason)
         pluginStateChangeRebuildTask?.cancel()
         pluginStateChangeRebuildTask = nil
@@ -2118,6 +2140,21 @@ final class PluginHost: ObservableObject {
         pluginSettingsItems.contains(where: { $0.id == pluginID })
     }
 
+    func marketplaceSetupPresentation(pluginID: String) -> MarketplacePluginSetupPresentation? {
+        guard let item = pluginManagementItems.first(where: { $0.id == pluginID }) else {
+            return nil
+        }
+        return MarketplacePluginSetupPresentation(
+            item: item,
+            missingPermissionCards: pluginSettingsItems.first(where: { $0.pluginID == pluginID })?
+                .missingPermissionCards ?? [],
+            runtimeIsolationFailure: isolatedPluginFailures[pluginID],
+            isRuntimeLoaded: corePlugin(for: pluginID) != nil,
+            isPreparingRuntime: isPreparingPlugins,
+            hasSettings: hasPluginSettings(pluginID: pluginID)
+        )
+    }
+
     func hasMarketplaceDetail(target: MarketplacePluginDetailTarget) -> Bool {
         guard let item = pluginManagementItems.first(where: { $0.id == target.pluginID }) else {
             return false
@@ -2374,6 +2411,8 @@ final class PluginHost: ObservableObject {
     }
 
     func recheckPluginRequirements() {
+        // Startup updates must replace packages before loading installed native bundles.
+        guard !isPreparingPlugins else { return }
         dynamicPluginManager?.reloadInstalledPlugins()
         syncPluginManagementState()
     }
@@ -2394,10 +2433,11 @@ final class PluginHost: ObservableObject {
             return
         }
 
-        dynamicPlugins = dynamicPluginManager.loadInstalledPlugins()
+        let loaded = dynamicPluginManager.loadInstalledPluginsAndMetadata()
+        dynamicPlugins = loaded.plugins
         didLoadDynamicPlugins = true
         configureCallbacks(for: dynamicPlugins)
-        syncPluginManagementState()
+        syncPluginManagementState(installedMetadata: loaded.metadata)
         refreshAll()
         startCloudPreferencesSyncIfReady()
     }
@@ -2409,11 +2449,7 @@ final class PluginHost: ObservableObject {
     }
 
     var hasInstalledDynamicPlugins: Bool {
-        guard let dynamicPluginManager else {
-            return false
-        }
-
-        return !dynamicPluginManager.installedPackageVersionsByID().isEmpty
+        !dynamicPluginManifestsByID.isEmpty
     }
 
     var hasPendingDynamicPluginExtractionMigration: Bool {
@@ -2507,51 +2543,118 @@ final class PluginHost: ObservableObject {
     }
 
     func installPluginFromCatalog(pluginID: String) async throws {
-        guard let pluginCatalogManager else {
-            return
-        }
-
-        try await pluginCatalogManager.installPlugin(id: pluginID)
-        syncPluginManagementState()
+        try await performMarketplaceOperation(pluginID: pluginID, kind: .install)
     }
 
     func updatePluginFromCatalog(pluginID: String) async throws {
-        guard let pluginCatalogManager else {
-            return
-        }
+        try await performMarketplaceOperation(pluginID: pluginID, kind: .update)
+    }
 
-        try await pluginCatalogManager.updatePlugin(id: pluginID)
-        syncPluginManagementState()
+    private func performMarketplaceOperation(
+        pluginID: String,
+        kind: PluginMarketplaceOperation.Kind
+    ) async throws {
+        guard !isUpdatingAvailablePlugins,
+              pluginMarketplaceOperations[pluginID]?.isActive != true else {
+            throw PluginMarketplaceOperationError.operationInProgress
+        }
+        let attemptID = UUID()
+        marketplaceOperationAttemptsInFlight.insert(attemptID)
+        marketplaceOperationAttemptsByPluginID[pluginID] = attemptID
+        pluginMarketplaceOperations[pluginID] = .init(kind: kind, phase: .running)
+        syncMarketplaceOperationActivity()
+        defer {
+            if marketplaceOperationAttemptsByPluginID[pluginID] == attemptID {
+                marketplaceOperationAttemptsByPluginID.removeValue(forKey: pluginID)
+            }
+            marketplaceOperationAttemptsInFlight.remove(attemptID)
+            syncMarketplaceOperationActivity()
+        }
+        do {
+            guard let pluginCatalogManager else {
+                throw PluginMarketplaceOperationError.catalogUnavailable
+            }
+            switch kind {
+            case .install:
+                try await pluginCatalogManager.installPlugin(id: pluginID)
+            case .update:
+                try await pluginCatalogManager.updatePlugin(id: pluginID)
+            }
+            syncPluginManagementState()
+            guard marketplaceOperationAttemptsByPluginID[pluginID] == attemptID else { return }
+            if dynamicPluginManager?.isInstalledPlugin(pluginID) == true {
+                pluginMarketplaceOperations[pluginID] = .init(kind: kind, phase: .completed)
+            } else {
+                pluginMarketplaceOperations.removeValue(forKey: pluginID)
+            }
+        } catch {
+            syncPluginManagementState()
+            if marketplaceOperationAttemptsByPluginID[pluginID] == attemptID {
+                pluginMarketplaceOperations[pluginID] = .init(kind: kind, phase: .failed(error.localizedDescription))
+            }
+            throw error
+        }
     }
 
     func updateAvailablePluginsFromCatalog(
         progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
     ) async throws {
+        guard !hasActiveMarketplaceOperation else {
+            throw PluginMarketplaceOperationError.operationInProgress
+        }
         guard let pluginCatalogManager else {
             return
         }
 
+        isUpdatingAvailablePlugins = true
+        syncMarketplaceOperationActivity()
         defer {
             syncPluginManagementState()
+            isUpdatingAvailablePlugins = false
+            syncMarketplaceOperationActivity()
         }
 
         try await pluginCatalogManager.updateAvailablePlugins(progress: progress)
     }
 
+    private func syncMarketplaceOperationActivity() {
+        hasActiveMarketplaceOperation = isUpdatingAvailablePlugins
+            || !marketplaceOperationAttemptsInFlight.isEmpty
+    }
+
     func installPluginPackage(from sourceURL: URL) throws {
+        guard !isUpdatingAvailablePlugins else {
+            throw PluginMarketplaceOperationError.operationInProgress
+        }
         try dynamicPluginManager?.installPluginPackage(from: sourceURL)
+        clearTerminalMarketplaceFeedback(forPackageAt: sourceURL)
         pluginCatalogManager?.rebuildManagementItems()
         syncPluginManagementState()
     }
 
     func updatePluginPackage(from sourceURL: URL) throws {
+        guard !isUpdatingAvailablePlugins else {
+            throw PluginMarketplaceOperationError.operationInProgress
+        }
         try dynamicPluginManager?.updatePluginPackage(from: sourceURL)
+        clearTerminalMarketplaceFeedback(forPackageAt: sourceURL)
         pluginCatalogManager?.rebuildManagementItems()
         syncPluginManagementState()
     }
 
+    private func clearTerminalMarketplaceFeedback(forPackageAt sourceURL: URL) {
+        guard let id = try? PluginPackageManifestLoader.load(from: sourceURL).id,
+              pluginMarketplaceOperations[id]?.isActive == false else { return }
+        pluginMarketplaceOperations.removeValue(forKey: id)
+    }
+
     func uninstallDynamicPlugin(pluginID: String, removeData: Bool = false) throws {
+        guard !isUpdatingAvailablePlugins else {
+            throw PluginMarketplaceOperationError.operationInProgress
+        }
         try dynamicPluginManager?.uninstallPlugin(pluginID: pluginID, removeData: removeData)
+        marketplaceOperationAttemptsByPluginID.removeValue(forKey: pluginID)
+        pluginMarketplaceOperations.removeValue(forKey: pluginID)
         pluginOrderingStore.removePlugin(pluginID)
         menuBarPanelStore.removePlugin(id: pluginID)
         shortcutStore.removeCustomizations(forPluginID: pluginID)
@@ -2566,7 +2669,10 @@ final class PluginHost: ObservableObject {
     }
 
     private var activePlugins: [any MacToolsPlugin] {
-        plugins.filter { isolatedPluginFailures[$0.metadata.id] == nil }
+        plugins.filter {
+            isolatedPluginFailures[$0.metadata.id] == nil
+                && !deactivatedPluginInstances.contains(ObjectIdentifier($0))
+        }
     }
 
     private var portablePluginPreferenceIDs: Set<String> {
@@ -2986,6 +3092,7 @@ final class PluginHost: ObservableObject {
 
     private func configureCallbacks(for plugins: [any MacToolsPlugin]) {
         for plugin in plugins {
+            guard !deactivatedPluginInstances.contains(ObjectIdentifier(plugin)) else { continue }
             let pluginID = plugin.metadata.id
 
             if let inputRequester = plugin as? any PluginActionInputPresentationRequesting {
@@ -3113,6 +3220,7 @@ final class PluginHost: ObservableObject {
             if let actionGridConsumer = plugin as? any ActionGridHostContextConsuming {
                 actionGridConsumer.actionGridHostContext = makeActionGridHostContext()
             }
+            configureTrackpadInput(for: plugin)
             if let trackpadActionConsumer = plugin as? any TrackpadActionHostContextConsuming {
                 trackpadActionConsumer.trackpadActionHostContext = makeTrackpadActionHostContext()
             }
@@ -3131,12 +3239,36 @@ final class PluginHost: ObservableObject {
             }
             configureHostStatusItemCallbacks(for: [plugin])
         }
+        if !TrackpadInputCompatibility.canWeigh(with: activePlugins) {
+            trackpadInputService.refreshWeighingAvailability()
+        }
         configureTrackpadGestureBridge()
         let pendingIconPluginIDs: Set<String>? = dynamicPluginManager != nil && !didLoadDynamicPlugins
             ? nil
             : Set(pluginManagementItems.filter { $0.state == .restartRequired }.map(\.id))
         menuBarIconCoordinator.synchronize(with: activePlugins, pendingPluginIDs: pendingIconPluginIDs)
     }
+
+    private func configureTrackpadInput(for plugin: any MacToolsPlugin) {
+        guard let consumer = plugin as? any TrackpadInputServiceConsuming else { return }
+        trackpadInputService.setActivityState(applicationActivityState)
+        consumer.setTrackpadInputService(trackpadInputService)
+    }
+
+    private lazy var trackpadInputService: SharedTrackpadInputService = {
+        let service = makeTrackpadInputService()
+        service.canBeginWeighing = { [weak self] in
+            guard let self else { return false }
+            return TrackpadInputCompatibility.canWeigh(with: self.activePlugins)
+        }
+        service.onGesturePauseChange = { [weak self] paused in
+            guard let self else { return }
+            for plugin in self.activePlugins {
+                (plugin as? any TrackpadInputServiceConsuming)?.trackpadInputPauseDidChange(paused)
+            }
+        }
+        return service
+    }()
 
     private let trackpadGestureBridge = TrackpadGestureBridge()
 
@@ -3152,6 +3284,7 @@ final class PluginHost: ObservableObject {
         let previousState = applicationActivityState
         guard previousState != state else { return }
         applicationActivityState = state
+        trackpadInputService.setActivityState(state)
 
         if previousState == .waking {
             switch state {
@@ -3198,16 +3331,24 @@ final class PluginHost: ObservableObject {
 
             return $0.metadata.order < $1.metadata.order
         }
+        deactivatedPluginInstances.formIntersection(dynamicPlugins.map { ObjectIdentifier($0) })
         configureCallbacks(for: dynamicPlugins)
         rebuildDerivedState(synchronizingShortcuts: true)
     }
 
     private func syncPluginManagementState(installedMetadata: InstalledPluginMetadata? = nil) {
         let metadata = installedMetadata ?? dynamicPluginManager?.installedMetadata()
+        let nextManifests = metadata?.manifestsByID ?? [:]
+        // A successful mutation through another surface supersedes old terminal feedback.
+        for (id, operation) in pluginMarketplaceOperations where !operation.isActive {
+            if dynamicPluginManifestsByID[id]?.version != nextManifests[id]?.version {
+                pluginMarketplaceOperations.removeValue(forKey: id)
+            }
+        }
         dynamicPluginCapabilitiesByID = metadata?.capabilitiesByID ?? [:]
         dynamicPluginCategoriesByID = metadata?.categoriesByID ?? [:]
         dynamicPluginReleaseChannelsByID = metadata?.releaseChannelsByID ?? [:]
-        dynamicPluginManifestsByID = metadata?.manifestsByID ?? [:]
+        dynamicPluginManifestsByID = nextManifests
         dynamicPluginInstalledAtByID = metadata?.installedAtByID ?? [:]
         pluginManagementItems = dynamicPluginManager?.pluginManagementItems ?? []
         pluginCatalogStatus = pluginCatalogManager?.status ?? .unavailable
@@ -3316,6 +3457,8 @@ final class PluginHost: ObservableObject {
         let descriptors = pluginDescriptorSnapshot()
         let isolatedPluginCountAtStart = isolatedPluginFailures.count
         let orderedDescriptors = descriptors.ordered
+        derivedStateReadCache.beginUpdate(plugins: orderedDescriptors.map(\.plugin), dirtyPluginIDs: dirtyPluginIDs)
+        defer { derivedStateReadCache.endUpdate() }
         for descriptor in orderedDescriptors {
             let id = descriptor.metadata.id
             guard dirtyPluginIDs == nil || dirtyPluginIDs!.contains(id) ||
@@ -3431,11 +3574,9 @@ final class PluginHost: ObservableObject {
                 return []
             }
 
-            let entries = guardedValue(
-                for: plugin,
-                operation: "read settings search entries",
-                provider.settingsSearchEntries
-            ) ?? []
+            let entries = derivedStateReadCache.value(for: plugin, projection: .settingsSearch) {
+                guardedValue(for: plugin, operation: "read settings search entries", provider.settingsSearchEntries)
+            } ?? []
             return entries.map {
                 PluginProvidedSettingsSearchItem(pluginID: plugin.metadata.id, entry: $0)
             }
@@ -3447,11 +3588,9 @@ final class PluginHost: ObservableObject {
                 return []
             }
 
-            let definitions = guardedValue(
-                for: plugin,
-                operation: "read command definitions",
-                provider.commandDefinitions
-            ) ?? []
+            let definitions = derivedStateReadCache.value(for: plugin, projection: .commands) {
+                guardedValue(for: plugin, operation: "read command definitions", provider.commandDefinitions)
+            } ?? []
             return definitions.map {
                 PluginCommandItem(
                     pluginID: plugin.metadata.id,
@@ -3525,6 +3664,8 @@ final class PluginHost: ObservableObject {
                 continue
             }
             let externalClaims = claims.filter { $0.ownerPluginID != plugin.metadata.id }
+            // Host-delivered conflicts may update declarations without a plugin state callback.
+            derivedStateReadCache.invalidate(pluginID: plugin.metadata.id)
             guardPluginCall(plugin, operation: "update input gesture conflicts") {
                 consumer.inputGestureConflictsDidChange(externalClaims)
             }
@@ -3548,6 +3689,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func rebuildDerivedStateAfterPluginChange(pluginID: String) {
+        derivedStateReadCache.invalidate(pluginID: pluginID)
         shortcutDefinitionRevision &+= 1
         guard !isHandlingPluginAction else {
             return
@@ -3558,6 +3700,7 @@ final class PluginHost: ObservableObject {
     }
 
     private func rebuildDerivedStateAfterActionSafetyChange(pluginID: String) {
+        derivedStateReadCache.invalidate(pluginID: pluginID)
         dirtyPluginIDs.remove(pluginID)
         if dirtyPluginIDs.isEmpty {
             pluginStateChangeRebuildTask?.cancel()
@@ -3618,16 +3761,12 @@ final class PluginHost: ObservableObject {
         for descriptor in descriptors where !isPluginIsolated(descriptor.plugin) {
             let plugin = descriptor.plugin
             if let provider = plugin as? any PluginActionProviding {
-                let definitions = guardedValue(
-                    for: plugin,
-                    operation: "read action definitions",
-                    provider.actionDefinitions
-                ) ?? []
-                let catalogEntries = guardedValue(
-                    for: plugin,
-                    operation: "read action catalog entries",
-                    provider.actionCatalogEntries
-                ) ?? []
+                let definitions = derivedStateReadCache.value(for: plugin, projection: .actionDefinitions) {
+                    guardedValue(for: plugin, operation: "read action definitions", provider.actionDefinitions)
+                } ?? []
+                let catalogEntries = derivedStateReadCache.value(for: plugin, projection: .actionCatalog) {
+                    guardedValue(for: plugin, operation: "read action catalog entries", provider.actionCatalogEntries)
+                } ?? []
                 registrations.append(
                     actionRegistration(
                         for: plugin,
@@ -3636,11 +3775,9 @@ final class PluginHost: ObservableObject {
                     )
                 )
             } else if let commandProvider = plugin as? any PluginCommandProviding {
-                let definitions = guardedValue(
-                    for: plugin,
-                    operation: "read legacy command definitions for actions",
-                    commandProvider.commandDefinitions
-                ) ?? []
+                let definitions = derivedStateReadCache.value(for: plugin, projection: .commands) {
+                    guardedValue(for: plugin, operation: "read legacy command definitions for actions", commandProvider.commandDefinitions)
+                } ?? []
                 registrations.append(
                     legacyCommandActionRegistration(
                         for: plugin,
@@ -3689,6 +3826,11 @@ final class PluginHost: ObservableObject {
             actionCatalogEntries = actionRegistry.catalogEntries
         }
         for plugin in activePlugins {
+            if plugin is any ActionGridHostContextConsuming
+                || plugin is any TrackpadActionHostContextConsuming
+                || plugin is any PluginActionExecutionHostContextConsuming {
+                derivedStateReadCache.invalidate(pluginID: plugin.metadata.id)
+            }
             (plugin as? any ActionGridHostContextConsuming)?.actionSurfaceCatalogDidChange()
             (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionCatalogDidChange()
             (plugin as? any PluginActionExecutionHostContextConsuming)?.actionExecutionCatalogDidChange()
@@ -4447,6 +4589,9 @@ final class PluginHost: ObservableObject {
     private func refreshDisplayTopologyNow() {
         displayTopologyRefreshTask = nil
         handlePluginAction {
+            if activePlugins.contains(where: { $0 is any TrackpadInputServiceConsuming }) {
+                trackpadInputService.deviceTopologyDidChange()
+            }
             for plugin in activePlugins {
                 if let displayTopologyRefreshing = plugin as? DisplayTopologyRefreshing {
                     guardPluginCall(plugin, operation: "refresh display topology") {
@@ -4487,11 +4632,9 @@ final class PluginHost: ObservableObject {
             let shortcutSettingsGroups: [PluginShortcutSettingsGroupConfiguration]
             if descriptor.hasSettings,
                let provider = descriptor.plugin as? any PluginGroupedShortcutSettingsProviding,
-               let configurations = guardedValue(
-                   for: descriptor.plugin,
-                   operation: "read grouped shortcut settings configuration",
-                   provider.shortcutSettingsGroups
-               ) {
+               let configurations = derivedStateReadCache.value(for: descriptor.plugin, projection: .shortcutSettingsGroups, read: {
+                   guardedValue(for: descriptor.plugin, operation: "read grouped shortcut settings configuration", provider.shortcutSettingsGroups)
+               }) {
                 var seenIDs: Set<String> = []
                 shortcutSettingsGroups = configurations.filter { configuration in
                     let id = configuration.id.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -4514,11 +4657,9 @@ final class PluginHost: ObservableObject {
             }
             let rawPage: PluginSettingsPage?
             if descriptor.hasSettings {
-                rawPage = guardedOptionalValue(
-                    for: descriptor.plugin,
-                    operation: "read plugin settings page",
-                    descriptor.plugin.settingsPage
-                )
+                rawPage = derivedStateReadCache.value(for: descriptor.plugin, projection: .settingsPage) {
+                    guardedOptionalValue(for: descriptor.plugin, operation: "read plugin settings page", descriptor.plugin.settingsPage)
+                }
             } else {
                 rawPage = nil
             }
@@ -4551,11 +4692,9 @@ final class PluginHost: ObservableObject {
             let actionShortcutSettingsConfiguration: PluginActionShortcutSettingsConfiguration?
             if descriptor.hasSettings,
                let provider = descriptor.plugin as? any PluginActionShortcutSettingsProviding,
-               let configuration = guardedValue(
-                   for: descriptor.plugin,
-                   operation: "read action shortcut settings configuration",
-                   provider.actionShortcutSettingsConfiguration
-               ) {
+               let configuration = derivedStateReadCache.value(for: descriptor.plugin, projection: .actionShortcutSettings, read: {
+                   guardedValue(for: descriptor.plugin, operation: "read action shortcut settings configuration", provider.actionShortcutSettingsConfiguration)
+               }) {
                 let title = configuration.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 let systemImage = configuration.systemImage.trimmingCharacters(in: .whitespacesAndNewlines)
                 if title.isEmpty || systemImage.isEmpty || configuration.actionIDs.isEmpty {

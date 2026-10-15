@@ -54,7 +54,21 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "discovery.turn-off-displays": {
+      "ar": "إطفاء الشاشات",
+      "de": "Bildschirme ausschalten",
+      "en": "Turn Off Displays",
+      "es": "Apagar pantallas",
+      "fr": "Éteindre les écrans",
+      "ja": "ディスプレイをオフにする",
+      "ko": "디스플레이 끄기",
+      "pt": "Desligar monitores",
+      "ru": "Выключить дисплеи",
+      "tr": "Ekranları kapat",
+      "zh-Hans": "关闭显示器",
+      "zh-Hant": "關閉顯示器"
+    }
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -91,7 +105,8 @@
   "discovery": {
     "keywords": [
       "display",
-      "sleep"
+      "sleep",
+      "turn off displays"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -125,7 +140,9 @@
         "Ekran Uykusu"
       ],
       "zh-Hans": [
-        "显示器休眠"
+        "显示器休眠",
+        "关闭显示器",
+        "息屏"
       ],
       "zh-Hant": [
         "顯示器睡眠"
@@ -141,7 +158,10 @@
       "display"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.turn-off-displays"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

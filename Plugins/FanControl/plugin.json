@@ -152,6 +152,22 @@
       "tr": "Uygulanacak kaydedilmiş fan hazır ayarını seçin.",
       "zh-Hans": "选择要应用的已存风扇预设。",
       "zh-Hant": "選擇要套用的已儲存風扇預設。"
+    },
+    "discovery.full-speed-fans": "@localizable.preset.fullSpeed.name",
+    "discovery.custom-fan-presets": "@localizable.settings.custom.title",
+    "discovery.custom-rpm-target": {
+      "ar": "سرعة الدوران المستهدفة",
+      "de": "Ziel-RPM",
+      "en": "Target RPM",
+      "es": "RPM objetivo",
+      "fr": "RPM cible",
+      "ja": "目標 RPM",
+      "ko": "목표 RPM",
+      "pt": "RPM desejado",
+      "ru": "Целевые обороты в минуту",
+      "tr": "Hedef RPM",
+      "zh-Hans": "目标转速",
+      "zh-Hant": "目標轉速"
     }
   },
   "version": "2.0.1",
@@ -194,7 +210,10 @@
     "keywords": [
       "fan",
       "control",
-      "system"
+      "system",
+      "RPM",
+      "full speed",
+      "fan presets"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -228,7 +247,9 @@
         "Fan Kontrolü"
       ],
       "zh-Hans": [
-        "风扇控制"
+        "风扇控制",
+        "风扇预设",
+        "自定义转速"
       ],
       "zh-Hant": [
         "風扇控制"
@@ -244,7 +265,12 @@
       "system"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.full-speed-fans",
+      "@productStrings.discovery.custom-fan-presets",
+      "@productStrings.discovery.custom-rpm-target"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

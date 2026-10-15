@@ -54,7 +54,8 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "discovery.low-battery-notifications": "@localizable.settings.notification.title"
   },
   "version": "2.0.1",
   "minHostVersion": "2.0.1",
@@ -95,7 +96,12 @@
       "battery",
       "monitoring",
       "rapoo",
-      "mchose"
+      "mchose",
+      "AirPods",
+      "iPhone",
+      "iPad",
+      "Apple Watch",
+      "low battery notifications"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -129,7 +135,8 @@
         "Aygıt Pili"
       ],
       "zh-Hans": [
-        "设备电量"
+        "设备电量",
+        "低电量通知"
       ],
       "zh-Hant": [
         "裝置電量"
@@ -145,7 +152,10 @@
       "monitoring"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.low-battery-notifications"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

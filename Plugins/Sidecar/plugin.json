@@ -76,7 +76,9 @@
       "tr": "Bu Mac'te depolanan yakın Sidecar ekranını seçin.",
       "zh-Hans": "选择存储在此 Mac 上的附近 Sidecar 显示器。",
       "zh-Hant": "選擇儲存在此 Mac 上的附近 Sidecar 顯示器。"
-    }
+    },
+    "discovery.wired": "@localizable.settings.transport.wiredOnly",
+    "discovery.cable": "@localizable.panel.action.wiredConnect"
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -112,7 +114,9 @@
   "discovery": {
     "keywords": [
       "sidecar",
-      "display"
+      "display",
+      "wired",
+      "cable"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -146,7 +150,9 @@
         "Sidecar"
       ],
       "zh-Hans": [
-        "Sidecar"
+        "Sidecar",
+        "有线连接",
+        "仅有线"
       ],
       "zh-Hant": [
         "Sidecar"
@@ -162,7 +168,11 @@
       "display"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.wired",
+      "@productStrings.discovery.cable"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

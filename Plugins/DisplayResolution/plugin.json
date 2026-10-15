@@ -108,7 +108,8 @@
   "discovery": {
     "keywords": [
       "display",
-      "resolution"
+      "resolution",
+      "HiDPI"
     ],
     "localizedSynonyms": {
       "ar": [

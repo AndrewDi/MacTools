@@ -197,6 +197,90 @@
       "tr": "En Son Mac Ayarları Değişikliğini Geri Al",
       "zh-Hans": "撤销最近的 Mac 设置更改",
       "zh-Hant": "復原最近的 Mac 設定變更"
+    },
+    "discovery.system-settings": {
+      "ar": "افتح إعدادات النظام",
+      "de": "Systemeinstellungen öffnen",
+      "en": "Open System Settings",
+      "es": "Abrir Ajustes del Sistema",
+      "fr": "Ouvrir Réglages Système",
+      "ja": "システム設定を開く",
+      "ko": "시스템 설정 열기",
+      "pt": "Abrir Ajustes do Sistema",
+      "ru": "Открыть Системные настройки",
+      "tr": "Sistem Ayarları'nı Aç",
+      "zh-Hans": "打开系统设置",
+      "zh-Hant": "開啟系統設定"
+    },
+    "discovery.finder-settings": {
+      "ar": "Finder",
+      "de": "Finder",
+      "en": "Finder",
+      "es": "Finder",
+      "fr": "Finder",
+      "ja": "Finder",
+      "ko": "Finder",
+      "pt": "Finder",
+      "ru": "Finder",
+      "tr": "Finder",
+      "zh-Hans": "访达",
+      "zh-Hant": "Finder"
+    },
+    "discovery.dock-settings": {
+      "ar": "سطح المكتب وDock",
+      "de": "Schreibtisch & Dock",
+      "en": "Desktop & Dock",
+      "es": "Escritorio y Dock",
+      "fr": "Bureau et Dock",
+      "ja": "デスクトップ&Dock",
+      "ko": "데스크탑 및 Dock",
+      "pt": "Mesa e Dock",
+      "ru": "Рабочий стол и Dock",
+      "tr": "Masaüstü ve Dock",
+      "zh-Hans": "桌面与程序坞",
+      "zh-Hant": "桌面與 Dock"
+    },
+    "discovery.screenshot-format": {
+      "ar": "تنسيق لقطة الشاشة",
+      "de": "Bildschirmfotoformat",
+      "en": "Screenshot Format",
+      "es": "Formato de captura de pantalla",
+      "fr": "Format de capture d'écran",
+      "ja": "スクリーンショットの形式",
+      "ko": "스크린샷 형식",
+      "pt": "Formato de captura de tela",
+      "ru": "Формат скриншота",
+      "tr": "Ekran Görüntüsü Biçimi",
+      "zh-Hans": "截屏格式",
+      "zh-Hant": "截圖格式"
+    },
+    "discovery.key-repeat-rate": {
+      "ar": "معدل تكرار المفتاح",
+      "de": "Tastenwiederholrate",
+      "en": "Key Repeat Rate",
+      "es": "Velocidad de repetición de teclas",
+      "fr": "Vitesse de répétition des touches",
+      "ja": "キーリピートレート",
+      "ko": "키 반복 속도",
+      "pt": "Taxa de repetição de teclas",
+      "ru": "Частота повторения клавиш",
+      "tr": "Tuş Yineleme Hızı",
+      "zh-Hans": "按键重复速度",
+      "zh-Hant": "按鍵重複速率"
+    },
+    "discovery.three-finger-drag": {
+      "ar": "السحب بثلاثة أصابع",
+      "de": "Bewegen mit drei Fingern",
+      "en": "Three-Finger Drag",
+      "es": "Arrastre con tres dedos",
+      "fr": "Glissement à trois doigts",
+      "ja": "3 本指ドラッグ",
+      "ko": "세 손가락 드래그",
+      "pt": "Arrastar com três dedos",
+      "ru": "Перетаскивание тремя пальцами",
+      "tr": "Üç Parmakla Sürükleme",
+      "zh-Hans": "三指拖移",
+      "zh-Hant": "三指拖移"
     }
   },
   "presentation": {
@@ -223,7 +307,13 @@
       "settings",
       "preferences",
       "profiles",
-      "accessibility"
+      "accessibility",
+      "System Preferences",
+      "Finder settings",
+      "Dock settings",
+      "screenshot format",
+      "key repeat rate",
+      "three-finger drag"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -257,7 +347,13 @@
         "Mac Ayarları"
       ],
       "zh-Hans": [
-        "搜索 Mac 设置"
+        "搜索 Mac 设置",
+        "系统设置",
+        "访达设置",
+        "程序坞设置",
+        "截屏格式",
+        "按键重复速度",
+        "三指拖移"
       ],
       "zh-Hant": [
         "搜尋 Mac 設定"
@@ -285,7 +381,15 @@
       "display-true-color",
       "night-shift"
     ],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.system-settings",
+      "@productStrings.discovery.finder-settings",
+      "@productStrings.discovery.dock-settings",
+      "@productStrings.discovery.screenshot-format",
+      "@productStrings.discovery.key-repeat-rate",
+      "@productStrings.discovery.three-finger-drag"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

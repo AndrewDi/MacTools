@@ -56,7 +56,24 @@
     "display-name": "@displayName",
     "summary": "@summary",
     "setup.requirements.title": "@standardSetup.requirements.title",
-    "setup.requirements.description": "@standardSetup.requirements.description"
+    "setup.requirements.description": "@standardSetup.requirements.description",
+    "discovery.smooth-scrolling": "@localizable.settings.mouse.smooth.title",
+    "discovery.scroll-speed": "@localizable.settings.mouse.scrollGain.title",
+    "discovery.scroll-step": "@localizable.settings.mouse.scrollStep.title",
+    "discovery.reverse-scrolling": {
+      "ar": "عكس التمرير",
+      "de": "Scrollrichtung umkehren",
+      "en": "Reverse Scrolling",
+      "es": "Invertir desplazamiento",
+      "fr": "Inverser le défilement",
+      "ja": "スクロール方向を反転",
+      "ko": "스크롤 방향 반전",
+      "pt": "Inverter rolagem",
+      "ru": "Обратная прокрутка",
+      "tr": "Kaydırma yönünü ters çevir",
+      "zh-Hans": "反转滚动",
+      "zh-Hant": "反轉捲動"
+    }
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -97,7 +114,11 @@
     "keywords": [
       "mouse",
       "enhancer",
-      "productivity"
+      "productivity",
+      "smooth scrolling",
+      "scroll speed",
+      "scroll step",
+      "reverse scrolling"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -131,7 +152,11 @@
         "Fare Geliştirici"
       ],
       "zh-Hans": [
-        "鼠标增强"
+        "鼠标增强",
+        "平滑滚动",
+        "滚动速度",
+        "滚动步长",
+        "反转滚动"
       ],
       "zh-Hant": [
         "滑鼠增強"
@@ -147,7 +172,13 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.smooth-scrolling",
+      "@productStrings.discovery.scroll-speed",
+      "@productStrings.discovery.scroll-step",
+      "@productStrings.discovery.reverse-scrolling"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

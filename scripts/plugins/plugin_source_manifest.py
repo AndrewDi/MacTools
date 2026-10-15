@@ -120,6 +120,13 @@ def _localized_requirement(
 
 
 LOCALIZED_REQUIREMENT_NAMES = {
+    "built-in Force Touch trackpad": _localized_requirement(
+        "built-in Force Touch trackpad", ar="لوحة Force Touch مدمجة", de="integriertes Force Touch Trackpad",
+        es="trackpad Force Touch integrado", fr="trackpad Force Touch intégré", ja="内蔵Force Touchトラックパッド",
+        ko="내장 Force Touch 트랙패드", pt="trackpad Force Touch integrado", ru="встроенный трекпад Force Touch",
+        tr="yerleşik Force Touch trackpad",
+        zh_hans="内置 Force Touch 触控板", zh_hant="內建 Force Touch 觸控板",
+    ),
     "accessibility": _localized_requirement(
         "Accessibility permission", ar="إذن تسهيلات الاستخدام", de="Bedienungshilfen-Berechtigung",
         es="permiso de Accesibilidad", fr="autorisation Accessibilité", ja="アクセシビリティ権限",
@@ -306,6 +313,10 @@ def _localized_source_fields(manifest: dict):
 
     discovery = manifest.get("discovery")
     if isinstance(discovery, dict):
+        synonym_refs = discovery.get("localizedSynonymRefs")
+        if isinstance(synonym_refs, list):
+            for index, reference in enumerate(synonym_refs):
+                yield f"discovery.localizedSynonymRefs[{index}]", reference
         use_cases = discovery.get("useCases")
         if isinstance(use_cases, list):
             for index, use_case in enumerate(use_cases):
@@ -598,13 +609,18 @@ def expand_localized_references(
 ) -> dict:
     """Expand source-only product-string references for catalog and package projection."""
     projected = json.loads(json.dumps(manifest))
+    plugin_id = projected.get("id", "unknown-plugin")
+    discovery = projected.get("discovery")
+    if isinstance(discovery, dict) and "localizedSynonymRefs" in discovery:
+        _unique_strings(discovery["localizedSynonymRefs"], plugin_id, "discovery.localizedSynonymRefs")
     localized_fields = list(_localized_source_fields(projected))
     product_strings = projected.get("productStrings")
-    plugin_id = projected.get("id", "unknown-plugin")
 
     if not localized_fields:
         if product_strings is not None:
             _fail(plugin_id, "productStrings", "is not allowed without localized product fields")
+        if isinstance(discovery, dict):
+            discovery.pop("localizedSynonymRefs", None)
         return projected
     if not isinstance(product_strings, dict) or not product_strings:
         _fail(plugin_id, "productStrings", "must be a non-empty object")
@@ -721,6 +737,21 @@ def expand_localized_references(
     ):
         if section in projected:
             projected[section] = expand(projected[section])
+    discovery = projected.get("discovery")
+    if isinstance(discovery, dict) and "localizedSynonymRefs" in discovery:
+        references = discovery.pop("localizedSynonymRefs")
+        synonyms = discovery.get("localizedSynonyms")
+        if not isinstance(synonyms, dict):
+            _fail(plugin_id, "discovery.localizedSynonyms", "must be an object")
+        missing_locales = sorted(SUPPORTED_LOCALE_SET - set(synonyms))
+        if missing_locales:
+            _fail(plugin_id, "discovery.localizedSynonyms", "missing: " + ", ".join(missing_locales))
+        for locale in SUPPORTED_LOCALE_ORDER:
+            _unique_strings(synonyms[locale], plugin_id, f"discovery.localizedSynonyms.{locale}")
+            for reference in references:
+                text = reference[locale]
+                if text not in synonyms[locale]:
+                    synonyms[locale].append(text)
     projected.pop("productStrings", None)
     return projected
 
@@ -1376,6 +1407,13 @@ def validate_projected_manifest(
         _fail(
             manifest.get("id", manifest_path.parent.name),
             "productStrings",
+            "must be removed from a projected package manifest",
+        )
+    discovery = manifest.get("discovery")
+    if isinstance(discovery, dict) and "localizedSynonymRefs" in discovery:
+        _fail(
+            manifest.get("id", manifest_path.parent.name),
+            "discovery.localizedSynonymRefs",
             "must be removed from a projected package manifest",
         )
     projected, _ = _validate_manifest(

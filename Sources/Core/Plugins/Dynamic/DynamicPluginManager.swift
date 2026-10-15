@@ -220,6 +220,10 @@ final class DynamicPluginManager: ObservableObject {
     var onPluginsChanged: (([any MacToolsPlugin]) -> Void)?
     /// Revoke host-owned capabilities before plugin teardown or package removal.
     var onPluginWillDeactivate: ((String, PluginDeactivationReason) -> Void)?
+    /// Supply host capabilities before activation, including temporary migration preflight.
+    var preparePluginForActivation: ((any MacToolsPlugin) -> Void)? {
+        didSet { pluginLoader.preparePluginForActivation = preparePluginForActivation }
+    }
 
     var temporaryDirectory: URL {
         packageStore.temporaryDirectory
@@ -242,6 +246,10 @@ final class DynamicPluginManager: ObservableObject {
     }
 
     func loadInstalledPlugins() -> [any MacToolsPlugin] {
+        loadInstalledPluginsAndMetadata().plugins
+    }
+
+    func loadInstalledPluginsAndMetadata() -> (plugins: [any MacToolsPlugin], metadata: InstalledPluginMetadata) {
         let records = packageStore.installedRecords()
         deactivateMissingPlugins(records: records)
 
@@ -321,7 +329,7 @@ final class DynamicPluginManager: ObservableObject {
             }
         )
         rebuildManagementItems(results: results, catalogSnapshot: catalogSnapshot)
-        return activePlugins(from: records)
+        return (activePlugins(from: records), InstalledPluginMetadata(records: records))
     }
 
     private func resultsByFallingBackToLegacyExtractionSourceIfNeeded(
@@ -399,7 +407,8 @@ final class DynamicPluginManager: ObservableObject {
         return results
     }
 
-    func prepareInstalledPluginsWithoutLoading() {
+    @discardableResult
+    func prepareInstalledPluginsWithoutLoading() -> InstalledPluginMetadata {
         let records = packageStore.installedRecords()
         deactivateMissingPlugins(records: records)
         latestLoadErrorsByID = [:]
@@ -411,6 +420,7 @@ final class DynamicPluginManager: ObservableObject {
             )
         }
         rebuildManagementItems(results: results, catalogSnapshot: catalogSnapshot)
+        return InstalledPluginMetadata(records: records)
     }
 
     func reloadInstalledPlugins() {
@@ -982,7 +992,9 @@ final class DynamicPluginManager: ObservableObject {
                 let compatibleCatalogEntry = PluginVersionComparator.isVersion(
                     packageStore.hostVersion,
                     atLeast: entry.minimumHostVersion
-                ) && requirementFailure(for: entry.requirements) == nil ? entry : nil
+                ) && PluginPackageManifestLoader.pluginVersionFailure(
+                    id: entry.id, version: entry.version, hostVersion: packageStore.hostVersion
+                ) == nil && requirementFailure(for: entry.requirements) == nil ? entry : nil
                 items.append(
                     managementItem(
                         for: result,
@@ -1002,6 +1014,10 @@ final class DynamicPluginManager: ObservableObject {
                             current: packageStore.hostVersion
                         ).localizedDescription
                     )
+                } else if let failure = PluginPackageManifestLoader.pluginVersionFailure(
+                    id: entry.id, version: entry.version, hostVersion: packageStore.hostVersion
+                ) {
+                    state = .incompatible(failure.localizedDescription)
                 } else if let failure = requirementFailure(for: entry.requirements) {
                     state = .incompatible(failure.localizedDescription)
                 } else {

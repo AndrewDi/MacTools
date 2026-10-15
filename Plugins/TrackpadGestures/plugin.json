@@ -56,10 +56,14 @@
     "display-name": "@displayName",
     "summary": "@summary",
     "setup.requirements.title": "@standardSetup.requirements.title",
-    "setup.requirements.description": "@standardSetup.requirements.description"
+    "setup.requirements.description": "@standardSetup.requirements.description",
+    "discovery.three-finger-tap": "@localizable.gesture.threeFingerTap",
+    "discovery.double-tap": "@localizable.gesture.category.doubleTap",
+    "discovery.touch-and-hold": "@localizable.gesture.category.longTouch",
+    "discovery.physical-click": "@localizable.gesture.category.click"
   },
-  "version": "2.0.1",
-  "minHostVersion": "1.3.1",
+  "version": "2.0.2",
+  "minHostVersion": "2.0.2",
   "pluginKitVersion": 7,
   "bundleRelativePath": "TrackpadGestures.bundle",
   "factoryClass": "TrackpadGesturesPlugin.TrackpadGesturesPluginFactory",
@@ -97,7 +101,13 @@
     "keywords": [
       "trackpad",
       "gestures",
-      "productivity"
+      "productivity",
+      "TipTap",
+      "tip tap",
+      "three-finger tap",
+      "double tap",
+      "touch and hold",
+      "physical click"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -131,7 +141,11 @@
         "Trackpad Hareketleri"
       ],
       "zh-Hans": [
-        "触控板手势"
+        "触控板手势",
+        "三指轻点",
+        "双击",
+        "长触",
+        "按下点击"
       ],
       "zh-Hant": [
         "觸控板手勢"
@@ -147,7 +161,13 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.three-finger-tap",
+      "@productStrings.discovery.double-tap",
+      "@productStrings.discovery.touch-and-hold",
+      "@productStrings.discovery.physical-click"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

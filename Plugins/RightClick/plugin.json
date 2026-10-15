@@ -68,7 +68,14 @@
       "tr": "MacTools Finder uzantısını, Sistem Ayarları > Genel > Oturum Öğeleri ve Uzantılar > Finder Uzantıları altından etkinleştirin.",
       "zh-Hans": "在“系统设置 > 通用 > 登录项与扩展 > Finder 扩展”中启用 MacTools 右键工具。",
       "zh-Hant": "在「系統設定 > 一般 > 登入項目與延伸功能 > Finder 延伸功能」中啟用 MacTools 右鍵工具。"
-    }
+    },
+    "discovery.new-file": "@localizable.settings.newFile.title",
+    "discovery.new-folder": "@localizable.settings.newFolder.title",
+    "discovery.open-in-terminal": "@localizable.settings.openTerminal.title",
+    "discovery.open-with": "@localizable.settings.openWith.title",
+    "discovery.copy-absolute-path": "@localizable.settings.copyAbsolutePath.title",
+    "discovery.copy-relative-path": "@localizable.settings.copyRelativePath.title",
+    "discovery.copy-file-name": "@localizable.settings.copyFileName.title"
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -103,7 +110,13 @@
     "keywords": [
       "right",
       "click",
-      "productivity"
+      "productivity",
+      "new file",
+      "new folder",
+      "open in terminal",
+      "open with",
+      "copy path",
+      "copy file name"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -137,7 +150,11 @@
         "Sağ Tıklama"
       ],
       "zh-Hans": [
-        "右键工具"
+        "右键工具",
+        "在终端打开",
+        "用应用打开",
+        "复制路径",
+        "复制文件名"
       ],
       "zh-Hant": [
         "右鍵工具"
@@ -153,7 +170,16 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.new-file",
+      "@productStrings.discovery.new-folder",
+      "@productStrings.discovery.open-in-terminal",
+      "@productStrings.discovery.open-with",
+      "@productStrings.discovery.copy-absolute-path",
+      "@productStrings.discovery.copy-relative-path",
+      "@productStrings.discovery.copy-file-name"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

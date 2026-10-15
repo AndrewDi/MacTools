@@ -54,7 +54,22 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "discovery.folders": "@localizable.文件夹",
+    "discovery.nested-folders": {
+      "ar": "مجلدات متداخلة",
+      "de": "Verschachtelte Ordner",
+      "en": "Nested Folders",
+      "es": "Carpetas anidadas",
+      "fr": "Dossiers imbriqués",
+      "ja": "入れ子のフォルダ",
+      "ko": "중첩 폴더",
+      "pt": "Pastas aninhadas",
+      "ru": "Вложенные папки",
+      "tr": "İç içe klasörler",
+      "zh-Hans": "嵌套文件夹",
+      "zh-Hant": "巢狀資料夾"
+    }
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -89,7 +104,8 @@
     "keywords": [
       "action",
       "grid",
-      "system"
+      "system",
+      "nested folders"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -123,7 +139,8 @@
         "Eylem Izgarası"
       ],
       "zh-Hans": [
-        "操作网格"
+        "操作网格",
+        "多级网格"
       ],
       "zh-Hant": [
         "操作網格"
@@ -139,7 +156,11 @@
       "system"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.folders",
+      "@productStrings.discovery.nested-folders"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

@@ -54,7 +54,10 @@
   },
   "productStrings": {
     "display-name": "@displayName",
-    "summary": "@summary"
+    "summary": "@summary",
+    "discovery.wi-fi-signal": "@localizable.settings.indicatorWiFi",
+    "discovery.battery-percentage": "@localizable.settings.showsPercentage",
+    "discovery.bluetooth-audio-status": "@localizable.settings.bluetoothGlyphDescription"
   },
   "version": "1.0.1",
   "minHostVersion": "1.3.1",
@@ -93,7 +96,10 @@
       "volume",
       "network",
       "menu bar",
-      "status"
+      "status",
+      "Wi-Fi signal",
+      "battery percentage",
+      "Bluetooth audio"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -127,7 +133,10 @@
         "Duo Durumu"
       ],
       "zh-Hans": [
-        "Duo 状态"
+        "Duo 状态",
+        "Wi-Fi 信号",
+        "电量百分比",
+        "蓝牙音频"
       ],
       "zh-Hant": [
         "Duo 狀態"
@@ -146,7 +155,12 @@
       "device-battery",
       "activity-bar"
     ],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.wi-fi-signal",
+      "@productStrings.discovery.battery-percentage",
+      "@productStrings.discovery.bluetooth-audio-status"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

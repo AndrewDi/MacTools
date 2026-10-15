@@ -102,7 +102,25 @@
     "restart-sequential-queue-title": "@localizable.hud.queue.restart",
     "restart-sequential-queue-description": "@localizable.action.queue.restart.description",
     "cancel-sequential-queue-title": "@localizable.hud.queue.cancel",
-    "cancel-sequential-queue-description": "@localizable.action.queue.cancel.description"
+    "cancel-sequential-queue-description": "@localizable.action.queue.cancel.description",
+    "discovery.keyword-expansion": "@localizable.settings.saved.expansion.title",
+    "discovery.clipboard-backup": "@localizable.backup.createTitle",
+    "discovery.paste": "@localizable.common.paste",
+    "discovery.export": "@localizable.panel.shortcuts.export",
+    "discovery.text-expansion": {
+      "ar": "توسيع النص",
+      "de": "Texterweiterung",
+      "en": "Text Expansion",
+      "es": "Expansión de texto",
+      "fr": "Expansion de texte",
+      "ja": "テキスト展開",
+      "ko": "텍스트 확장",
+      "pt": "Expansão de texto",
+      "ru": "Развёртывание текста",
+      "tr": "Metin genişletme",
+      "zh-Hans": "文本展开",
+      "zh-Hant": "文字展開"
+    }
   },
   "presentation": {
     "longDescription": "@productStrings.summary",
@@ -124,7 +142,10 @@
       "history",
       "paste",
       "OCR",
-      "export"
+      "export",
+      "keyword expansion",
+      "text expansion",
+      "clipboard backup"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -158,7 +179,10 @@
         "Pano"
       ],
       "zh-Hans": [
-        "剪贴板历史"
+        "剪贴板历史",
+        "关键词展开",
+        "文本展开",
+        "剪贴板备份"
       ],
       "zh-Hant": [
         "剪貼簿記錄"
@@ -176,7 +200,14 @@
     "relatedPluginIDs": [
       "clipboard-clear"
     ],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.keyword-expansion",
+      "@productStrings.discovery.clipboard-backup",
+      "@productStrings.discovery.paste",
+      "@productStrings.discovery.export",
+      "@productStrings.discovery.text-expansion"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

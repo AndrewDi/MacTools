@@ -139,7 +139,10 @@
     "action.restore-previous-frame.description": "@localizable.action.restore-previous-frame.description",
     "action.custom-command.title": "@localizable.settings.custom.defaultName",
     "action.custom-command.description": "@localizable.action.custom.description",
-    "action.custom-command.parameter-summary": "@localizable.settings.custom.name"
+    "action.custom-command.parameter-summary": "@localizable.settings.custom.name",
+    "discovery.custom-layouts": "@localizable.settings.custom.title",
+    "discovery.modifier-drag": "@localizable.settings.modifierDrag.sectionTitle",
+    "discovery.centered-window-guides": "@localizable.settings.centeredGuides.title"
   },
   "version": "2.0.1",
   "minHostVersion": "2.0.1",
@@ -176,7 +179,10 @@
     "keywords": [
       "window",
       "layouts",
-      "productivity"
+      "productivity",
+      "custom layouts",
+      "modifier drag",
+      "centered window guides"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -210,7 +216,10 @@
         "Pencere Düzenleri"
       ],
       "zh-Hans": [
-        "窗口布局"
+        "窗口布局",
+        "自定义布局",
+        "修饰键拖移",
+        "窗口居中参考线"
       ],
       "zh-Hant": [
         "視窗佈局"
@@ -226,7 +235,12 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.custom-layouts",
+      "@productStrings.discovery.modifier-drag",
+      "@productStrings.discovery.centered-window-guides"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

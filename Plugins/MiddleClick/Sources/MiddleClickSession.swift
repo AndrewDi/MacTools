@@ -5,7 +5,6 @@ import Darwin
 import Foundation
 import IOKit
 import MacToolsPluginKit
-import MultitouchSupport
 import OSLog
 
 @MainActor
@@ -14,187 +13,7 @@ protocol MiddleClickSessionManaging: AnyObject {
 
     func activate()
     func deactivate()
-}
-
-final class MiddleClickMultitouchRuntime: @unchecked Sendable {
-    typealias CreateDeviceListFunction = @convention(c) () -> Unmanaged<CFMutableArray>?
-    typealias RegisterCallbackFunction = @convention(c) (
-        MTDevice,
-        MTFrameCallbackWithRefconFunction,
-        UnsafeMutableRawPointer?
-    ) -> Void
-    typealias UnregisterCallbackFunction = @convention(c) (
-        MTDevice,
-        MTFrameCallbackWithRefconFunction
-    ) -> Void
-    typealias StartDeviceFunction = @convention(c) (MTDevice, Int32) -> Void
-    typealias StopDeviceFunction = @convention(c) (MTDevice) -> Void
-
-    private static let frameworkPath =
-        "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport"
-
-    private let libraryHandle: UnsafeMutableRawPointer
-    private let createDeviceListFunction: CreateDeviceListFunction
-    private let registerCallbackFunction: RegisterCallbackFunction
-    private let unregisterCallbackFunction: UnregisterCallbackFunction
-    private let startDeviceFunction: StartDeviceFunction
-    private let stopDeviceFunction: StopDeviceFunction
-
-    static func load() -> MiddleClickMultitouchRuntime? {
-        guard let handle = dlopen(frameworkPath, RTLD_LAZY | RTLD_LOCAL) else { return nil }
-        guard
-            let createDeviceList: CreateDeviceListFunction = loadSymbol(
-                "MTDeviceCreateList", from: handle
-            ),
-            let registerCallback: RegisterCallbackFunction = loadSymbol(
-                "MTRegisterContactFrameCallbackWithRefcon", from: handle
-            ),
-            let unregisterCallback: UnregisterCallbackFunction = loadSymbol(
-                "MTUnregisterContactFrameCallback", from: handle
-            ),
-            let startDevice: StartDeviceFunction = loadSymbol("MTDeviceStart", from: handle),
-            let stopDevice: StopDeviceFunction = loadSymbol("MTDeviceStop", from: handle)
-        else {
-            dlclose(handle)
-            return nil
-        }
-        return MiddleClickMultitouchRuntime(
-            libraryHandle: handle,
-            createDeviceListFunction: createDeviceList,
-            registerCallbackFunction: registerCallback,
-            unregisterCallbackFunction: unregisterCallback,
-            startDeviceFunction: startDevice,
-            stopDeviceFunction: stopDevice
-        )
-    }
-
-    private static func loadSymbol<Function>(
-        _ name: String,
-        from handle: UnsafeMutableRawPointer
-    ) -> Function? {
-        guard let symbol = dlsym(handle, name) else { return nil }
-        return unsafeBitCast(symbol, to: Function.self)
-    }
-
-    private init(
-        libraryHandle: UnsafeMutableRawPointer,
-        createDeviceListFunction: CreateDeviceListFunction,
-        registerCallbackFunction: RegisterCallbackFunction,
-        unregisterCallbackFunction: UnregisterCallbackFunction,
-        startDeviceFunction: StartDeviceFunction,
-        stopDeviceFunction: StopDeviceFunction
-    ) {
-        self.libraryHandle = libraryHandle
-        self.createDeviceListFunction = createDeviceListFunction
-        self.registerCallbackFunction = registerCallbackFunction
-        self.unregisterCallbackFunction = unregisterCallbackFunction
-        self.startDeviceFunction = startDeviceFunction
-        self.stopDeviceFunction = stopDeviceFunction
-    }
-
-    deinit {
-        dlclose(libraryHandle)
-    }
-
-    func createDeviceCollection() -> MiddleClickMultitouchDeviceCollection? {
-        guard let retainedList = createDeviceListFunction()?.takeRetainedValue() else {
-            return nil
-        }
-        return MiddleClickMultitouchDeviceCollection(
-            devices: retainedList as? [MTDevice] ?? [],
-            lifetimeOwner: retainedList
-        )
-    }
-
-    func register(
-        _ device: MTDevice,
-        callback: MTFrameCallbackWithRefconFunction,
-        refcon: UnsafeMutableRawPointer
-    ) {
-        registerCallbackFunction(device, callback, refcon)
-    }
-
-    func unregister(_ device: MTDevice, callback: MTFrameCallbackWithRefconFunction) {
-        unregisterCallbackFunction(device, callback)
-    }
-
-    func start(_ device: MTDevice) {
-        startDeviceFunction(device, 0)
-    }
-
-    func stop(_ device: MTDevice) {
-        stopDeviceFunction(device)
-    }
-
-}
-
-final class MiddleClickMultitouchDeviceCollection: @unchecked Sendable {
-    let devices: [MTDevice]
-    private let lifetimeOwner: AnyObject?
-
-    init(devices: [MTDevice], lifetimeOwner: AnyObject? = nil) {
-        self.devices = devices
-        self.lifetimeOwner = lifetimeOwner
-    }
-}
-
-final class MiddleClickFrameCallbackGate: @unchecked Sendable {
-    typealias Handler = @Sendable (MiddleClickContactFrame) -> Void
-
-    private let lock = NSLock()
-    private var handler: Handler?
-
-    func activate(_ handler: @escaping Handler) {
-        lock.withLock { self.handler = handler }
-    }
-
-    func invalidate() {
-        lock.withLock { handler = nil }
-    }
-
-    @discardableResult
-    func deliver(_ frame: MiddleClickContactFrame) -> Bool {
-        lock.withLock {
-            guard let handler else { return false }
-            handler(frame)
-            return true
-        }
-    }
-}
-
-final class MiddleClickCallbackContextRegistry: @unchecked Sendable {
-    static let shared = MiddleClickCallbackContextRegistry()
-
-    private let lock = NSLock()
-    private var nextToken: UInt = 1
-    private var gates: [UInt: MiddleClickFrameCallbackGate] = [:]
-
-    private init() {}
-
-    func insert(_ gate: MiddleClickFrameCallbackGate) -> UnsafeMutableRawPointer {
-        lock.withLock {
-            var token = nextToken
-            while token == 0 || gates[token] != nil {
-                token &+= 1
-            }
-            nextToken = token &+ 1
-            if nextToken == 0 {
-                nextToken = 1
-            }
-            gates[token] = gate
-            return UnsafeMutableRawPointer(bitPattern: token)!
-        }
-    }
-
-    func gate(for refcon: UnsafeMutableRawPointer?) -> MiddleClickFrameCallbackGate? {
-        guard let refcon else { return nil }
-        return lock.withLock { gates[UInt(bitPattern: refcon)] }
-    }
-
-    func remove(_ refcon: UnsafeMutableRawPointer?) {
-        guard let refcon else { return }
-        _ = lock.withLock { gates.removeValue(forKey: UInt(bitPattern: refcon)) }
-    }
+    func setInputPaused(_ isPaused: Bool)
 }
 
 private enum MiddleClickEventPoster {
@@ -257,10 +76,22 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
 
     // MARK: - Infrastructure
 
-    private var deviceCollection: MiddleClickMultitouchDeviceCollection?
-    private var devices: [MTDevice] = []
-    private var touchCallbackGate: MiddleClickFrameCallbackGate?
-    private var touchCallbackContext: UnsafeMutableRawPointer?
+    var inputService: (any TrackpadInputService)?
+    private lazy var inputSubscription: MiddleClickInputSubscription = {
+        let pipeline = tapPipeline
+        return MiddleClickInputSubscription { event in
+            switch event {
+            case .interrupted:
+                pipeline.reset(preservingNativeUp: true)
+            case let .frame(frame):
+                let snapshot = MiddleClickContactFrame(deviceID: frame.deviceID,
+                    timestamp: frame.timestamp, contacts: frame.contacts.map {
+                        MiddleClickContactSnapshot(identifier: $0.identifier, x: $0.x, y: $0.y)
+                    })
+                if pipeline.process(snapshot) { MiddleClickEventPoster.postClick() }
+            }
+        }
+    }()
     private var eventTap: CFMachPort?
     private var eventTapSource: CFRunLoopSource?
     private var eventTapCallbackPointer: UnsafeMutableRawPointer?
@@ -272,8 +103,11 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
     private var displayCallbackRegistered = false
     private var displayCallbackPointer: UnsafeMutableRawPointer?
     private var restartWorkItem: DispatchWorkItem?
-    private let multitouchRuntime: MiddleClickMultitouchRuntime?
-    nonisolated private let tapPipeline = MiddleClickTapPipeline(fingerCount: 3)
+    nonisolated private let tapPipeline: MiddleClickTapPipeline
+    private var inputIsPaused = false
+    private let eventTapStartOverride: (() -> Void)?
+    private let eventTapStopOverride: (() -> Void)?
+    private let observesSystemEvents: Bool
     private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools", category: "MiddleClickSession")
 
     /// After wake, the multitouch driver may not be ready; delay before rebuilding listeners.
@@ -283,55 +117,23 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
     private static let wakeRestartDelay: TimeInterval = 10
     private static let deviceChangeRestartDelay: TimeInterval = 0.5
 
+    init(tapPipeline: MiddleClickTapPipeline = MiddleClickTapPipeline(fingerCount: 3),
+         eventTapStart: (() -> Void)? = nil, eventTapStop: (() -> Void)? = nil,
+         observesSystemEvents: Bool = true) {
+        self.tapPipeline = tapPipeline
+        self.eventTapStartOverride = eventTapStart
+        self.eventTapStopOverride = eventTapStop
+        self.observesSystemEvents = observesSystemEvents
+    }
+
     // MARK: - Singleton Reference
 
     nonisolated(unsafe) static weak var activeSession: MiddleClickSession?
 
-    init(multitouchRuntime: MiddleClickMultitouchRuntime? = .load()) {
-        self.multitouchRuntime = multitouchRuntime
-    }
-
-    // MARK: - Multitouch Callback
-    //
-    // Converts private-framework frames into the same normalized contact snapshots used by the
-    // current TrackpadGestures implementation. Stage values 3 and 4 are make-touch/touching;
-    // hover, break-touch, and linger samples are not active fingers.
-
-    private nonisolated static let touchCallback: MTFrameCallbackWithRefconFunction = {
-        device, data, nFingers, timestamp, _, refcon in
-        guard nFingers >= 0,
-              let callbackGate = MiddleClickCallbackContextRegistry.shared.gate(for: refcon)
-        else {
-            return
-        }
-
-        let count = Int(nFingers)
-        var contacts: [MiddleClickContactSnapshot] = []
-        contacts.reserveCapacity(count)
-        if count > 0, let data {
-            for index in 0..<count {
-                let touch = data[index]
-                guard touch.stage.rawValue == 3 || touch.stage.rawValue == 4 else { continue }
-                contacts.append(MiddleClickContactSnapshot(
-                    identifier: Int(touch.identifier),
-                    x: Double(touch.normalizedVector.position.x),
-                    y: Double(touch.normalizedVector.position.y)
-                ))
-            }
-        }
-
-        let pointer = Unmanaged.passUnretained(device).toOpaque()
-        let frame = MiddleClickContactFrame(
-            deviceID: UInt64(UInt(bitPattern: pointer)),
-            timestamp: timestamp,
-            contacts: contacts
-        )
-        callbackGate.deliver(frame)
-    }
-
     // MARK: - CGEvent Tap
 
     private func startEventTap() {
+        if let eventTapStartOverride { eventTapStartOverride(); return }
         if let eventTap, CFMachPortIsValid(eventTap), eventTapSource != nil {
             return
         }
@@ -353,7 +155,7 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
 
             if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
                 context.withOwner { session in
-                    session.tapPipeline.reset()
+                    session.tapPipeline.reset(preservingNativeUp: true)
                     DispatchQueue.main.async { [weak session] in
                         session?.reenableEventTap()
                     }
@@ -377,9 +179,7 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
 
             guard let nativeEvent else { return passthrough }
             let decision = context.withOwner { session in
-                session.tapPipeline.handleNativeMouseEvent(
-                    nativeEvent
-                )
+                session.handleNativeMouseEvent(nativeEvent)
             } ?? .passThrough
 
             switch decision {
@@ -434,6 +234,7 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
     }
 
     private func stopEventTap() {
+        if let eventTapStopOverride { eventTapStopOverride(); return }
         callbackContext(from: eventTapCallbackPointer)?.invalidate()
         guard let eventTap else {
             eventTapSource = nil
@@ -463,64 +264,33 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
 
     // MARK: - Multitouch Listeners
 
-    private func startTouchListeners() {
-        guard devices.isEmpty else { return }
-        guard let multitouchRuntime else {
-            logger.error("MultitouchSupport is unavailable; middle click cannot start")
-            return
-        }
-        guard let collection = multitouchRuntime.createDeviceCollection() else {
-            logger.warning("no multitouch device collection available; waiting for IOKit notification or wake retry")
-            return
-        }
-        deviceCollection = collection
-        devices = collection.devices
-        if devices.isEmpty {
-            logger.warning("no multitouch devices detected; waiting for IOKit notification or wake retry")
-        }
-        let tapPipeline = tapPipeline
-        let touchCallbackGate = MiddleClickFrameCallbackGate()
-        touchCallbackGate.activate { frame in
-            if tapPipeline.process(frame) {
-                MiddleClickEventPoster.postClick()
-            }
-        }
-        let callbackContext = MiddleClickCallbackContextRegistry.shared.insert(touchCallbackGate)
-        self.touchCallbackGate = touchCallbackGate
-        touchCallbackContext = callbackContext
-        devices.forEach {
-            multitouchRuntime.register(
-                $0,
-                callback: Self.touchCallback,
-                refcon: callbackContext
-            )
-            multitouchRuntime.start($0)
-        }
+    func setInputService(_ service: any TrackpadInputService) {
+        inputService = service
+        if !inputIsPaused { startTouchListeners() }
     }
 
-    private func stopTouchListeners() {
-        touchCallbackGate?.invalidate()
-        MiddleClickCallbackContextRegistry.shared.remove(touchCallbackContext)
-        touchCallbackContext = nil
-        devices.forEach {
-            multitouchRuntime?.unregister($0, callback: Self.touchCallback)
-            multitouchRuntime?.stop($0)
-        }
-        devices.removeAll()
-        deviceCollection = nil
-        touchCallbackGate = nil
-        tapPipeline.reset()
+    private func startTouchListeners() {
+        guard let inputService else { return }
+        inputSubscription.start(service: inputService)
+    }
+
+    private func stopTouchListeners(preservingNativeUp: Bool = false) {
+        inputSubscription.stop()
+        tapPipeline.reset(preservingNativeUp: preservingNativeUp)
     }
 
     // MARK: - Start / Stop
 
     func start() {
+        guard !inputIsPaused else { return }
         startTouchListeners()
         startEventTap()
-        observeSystemWake()
-        observeMultitouchDeviceArrival()
-        observeDisplayReconfiguration()
-        logger.info("multitouch listener started deviceCount=\(self.devices.count, privacy: .public)")
+        if observesSystemEvents {
+            observeSystemWake()
+            observeMultitouchDeviceArrival()
+            observeDisplayReconfiguration()
+        }
+        logger.info("multitouch listener started deviceCount=\(self.inputService?.devices.count ?? 0, privacy: .public)")
     }
 
     func stop() {
@@ -546,20 +316,53 @@ final class MiddleClickSession: MiddleClickSessionManaging, @unchecked Sendable 
         stop()
     }
 
+    func setInputPaused(_ isPaused: Bool) {
+        guard inputIsPaused != isPaused else { return }
+        inputIsPaused = isPaused
+        tapPipeline.setPaused(isPaused)
+        if isPaused {
+            cancelPendingRestart()
+            removeDisplayReconfigurationObserver()
+            removeMultitouchDeviceObserver()
+            removeSystemWakeObserver()
+            stopTouchListeners(preservingNativeUp: true)
+            finishPausedEventTapIfPossible()
+        } else {
+            start()
+        }
+    }
+
+    nonisolated func handleNativeMouseEvent(_ event: MiddleClickNativeMouseEvent) -> MiddleClickNativeEventDecision {
+        let decision = tapPipeline.handleNativeMouseEvent(event)
+        if case .up = event {
+            DispatchQueue.main.async { [weak self] in self?.finishPausedEventTapIfPossible() }
+        }
+        return decision
+    }
+
+    private func finishPausedEventTapIfPossible() {
+        // A rewritten Down owns its exact Up. Keep only that terminal conversion
+        // active while paused; new clicks and contact recognition pass through.
+        guard inputIsPaused, !tapPipeline.hasPendingNativeUp else { return }
+        stopEventTap()
+    }
+
     // MARK: - System Recovery: Listener Restart
 
-    /// Rebuilds fragile `MTDevice` listeners while keeping the session object.
+    /// Rebuilds shared touch subscriptions while keeping the session object.
     /// Used after wake, display reconfiguration, and trackpad re-enumeration.
     private func restartListeners() {
+        guard !inputIsPaused else { return }
         logger.info("rebuilding multitouch and CGEvent tap listeners")
-        stopEventTap()
-        stopTouchListeners()
+        if !tapPipeline.hasPendingNativeUp { stopEventTap() }
+        stopTouchListeners(preservingNativeUp: true)
         startTouchListeners()
         startEventTap()
-        logger.info("listener rebuild completed deviceCount=\(self.devices.count, privacy: .public)")
+        logger.info("listener rebuild completed deviceCount=\(self.inputService?.devices.count ?? 0, privacy: .public)")
     }
 
     private func scheduleRestart(after delay: TimeInterval, reason: String) {
+        guard !inputIsPaused else { return }
         logger.info("scheduled listener restart reason=\(reason, privacy: .public) delay=\(delay, privacy: .public)")
         cancelPendingRestart()
         let work = DispatchWorkItem { [weak self] in

@@ -59,7 +59,38 @@
     "action.set-tracking-enabled.description": "@standardAction.set-enabled.description",
     "action.set-tracking-enabled.parameter-summary": "@standardAction.set-enabled.description",
     "action.reset-today.title": "@localizable.panel.action.resetToday",
-    "action.reset-today.description": "@localizable.panel.action.resetToday"
+    "action.reset-today.description": "@localizable.panel.action.resetToday",
+    "discovery.screen-time": {
+      "ar": "وقت النظر إلى الشاشة",
+      "de": "Bildschirmzeit",
+      "en": "Screen Time",
+      "es": "Tiempo de pantalla",
+      "fr": "Temps d'écran",
+      "ja": "スクリーンタイム",
+      "ko": "스크린 타임",
+      "pt": "Tempo de uso",
+      "ru": "Экранное время",
+      "tr": "Ekran Süresi",
+      "zh-Hans": "屏幕时间",
+      "zh-Hant": "螢幕時間"
+    },
+    "discovery.keystrokes": "@localizable.component.metric.keystrokes",
+    "discovery.mouse-clicks": "@localizable.component.metric.clicks",
+    "discovery.scrolls": {
+      "ar": "التمرير",
+      "de": "Scrollen",
+      "en": "Scrolls",
+      "es": "Desplazamiento",
+      "fr": "Défilement",
+      "ja": "スクロール",
+      "ko": "스크롤",
+      "pt": "Rolagem",
+      "ru": "Прокрутка",
+      "tr": "Kaydırma",
+      "zh-Hans": "滚动",
+      "zh-Hant": "滾動"
+    },
+    "discovery.ai-work-time": "@localizable.component.ai.title"
   },
   "version": "2.0.1",
   "minHostVersion": "2.0.1",
@@ -100,7 +131,12 @@
       "activity",
       "bar",
       "stats",
-      "monitoring"
+      "monitoring",
+      "screen time",
+      "keystrokes",
+      "mouse clicks",
+      "scrolls",
+      "AI work time"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -134,7 +170,12 @@
         "Etkinlik İstatistikleri"
       ],
       "zh-Hans": [
-        "活动统计"
+        "活动统计",
+        "屏幕时间",
+        "按键统计",
+        "点击统计",
+        "滚动统计",
+        "AI 工作时长"
       ],
       "zh-Hant": [
         "活動統計"
@@ -150,7 +191,14 @@
       "monitoring"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.screen-time",
+      "@productStrings.discovery.keystrokes",
+      "@productStrings.discovery.mouse-clicks",
+      "@productStrings.discovery.scrolls",
+      "@productStrings.discovery.ai-work-time"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

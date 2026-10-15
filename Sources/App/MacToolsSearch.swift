@@ -43,6 +43,11 @@ enum MacToolsSearchAction: Hashable {
     case appHostCommand(expectedDefinition: AppHostCommandDefinition)
 }
 
+enum MacToolsSearchResultRole: Hashable {
+    case standard
+    case marketplaceCapability
+}
+
 struct MacToolsSearchResult: Identifiable, Hashable {
     let id: String
     let kind: MacToolsSearchResultKind
@@ -54,6 +59,7 @@ struct MacToolsSearchResult: Identifiable, Hashable {
     let action: MacToolsSearchAction
     let confirmation: MacToolsCommandConfirmation?
     let suggestionPriority: Int?
+    var role: MacToolsSearchResultRole = .standard
 
     var accessibilityLabel: String {
         [title, subtitle, kind.title].filter { !$0.isEmpty }.joined(separator: ", ")
@@ -201,6 +207,12 @@ struct MacToolsSearchIndex {
         query: String,
         tokens: [String]
     ) -> MatchTier {
+        if item.result.role == .marketplaceCapability,
+           item.normalizedTitle.contains(query)
+            || tokens.allSatisfy(item.normalizedTitle.contains) {
+            // Informational capabilities must not outrank ordinary title matches.
+            return .keyword
+        }
         if item.normalizedTitle == query {
             return .exactTitle
         }
@@ -495,34 +507,6 @@ enum MacToolsSearchIndexBuilder {
             )
         }
 
-        items += pluginHost.pluginManagementItems.compactMap { item in
-            return MacToolsSearchResult(
-                id: "plugin.marketplace.\(item.id)",
-                kind: .navigation,
-                title: item.title,
-                subtitle: AppL10n.settings(
-                    "plugins.sidebar.marketplace",
-                    defaultValue: "插件市场"
-                ),
-                detail: item.detailText,
-                keywords: pluginMetadataKeywords(
-                    pluginID: item.id,
-                    category: item.category,
-                    releaseChannel: item.releaseChannel,
-                    additionalKeywords: item.productSearchKeywords
-                ) + [item.statusText, item.version] + [item.summary].compactMap { $0 },
-                systemImage: "shippingbox",
-                action: .navigate(
-                    destination: .plugins(.marketplace),
-                    target: .marketplace(
-                        MarketplacePluginSearchTarget(pluginID: item.id)
-                    )
-                ),
-                confirmation: nil,
-                suggestionPriority: nil
-            )
-        }
-
         items += pluginHost.pluginSettingsItems.flatMap { item in
             settingResults(for: item)
         }
@@ -675,7 +659,103 @@ enum MacToolsSearchIndexBuilder {
             )
         }
 
+        // Discovery must not displace commands that Search can already execute.
+        let executableActionKeys = Set(items.compactMap { result -> ActionKey? in
+            switch result.action {
+            case let .executeAction(reference):
+                reference.key
+            case let .collectActionInput(item):
+                item.id
+            case let .pluginCommand(pluginID, definition):
+                ActionKey(providerID: pluginID, actionID: definition.id)
+            default:
+                nil
+            }
+        })
+        items += pluginHost.pluginManagementItems.flatMap { item in
+            marketplaceDiscoveryResults(for: item, excludingActionKeys: executableActionKeys)
+        }
+
         return MacToolsSearchIndex(items: deduplicated(items))
+    }
+
+    static func marketplaceDiscoveryResults(
+        for item: PluginManagementItem,
+        excludingActionKeys: Set<ActionKey> = []
+    ) -> [MacToolsSearchResult] {
+        let marketplaceTitle = AppL10n.settings(
+            "plugins.sidebar.marketplace",
+            defaultValue: "插件市场"
+        )
+        let detailDestination = SettingsNavigationDestination.marketplaceDetail(
+            MarketplacePluginDetailTarget(pluginID: item.id)
+        )
+        var results = [MacToolsSearchResult(
+            id: "plugin.marketplace.\(item.id)",
+            kind: .navigation,
+            title: item.title,
+            subtitle: marketplaceTitle,
+            detail: item.detailText,
+            keywords: pluginMetadataKeywords(
+                pluginID: item.id,
+                category: item.category,
+                releaseChannel: item.releaseChannel,
+                additionalKeywords: item.productSearchKeywords
+            ) + [item.statusText, item.version] + [item.summary].compactMap { $0 },
+            systemImage: "shippingbox",
+            action: .navigate(destination: detailDestination, target: nil),
+            confirmation: nil,
+            suggestionPriority: nil
+        )]
+
+        for provider in item.productMetadata?.actions?.providers ?? [] {
+            for action in provider.staticActions {
+                guard !excludingActionKeys.contains(ActionKey(providerID: provider.id, actionID: action.id)) else {
+                    continue
+                }
+                results.append(MacToolsSearchResult(
+                    id: "plugin.marketplace-action.\(item.id).\(provider.id).\(action.id)",
+                    kind: .navigation,
+                    title: action.title.localizedValue() ?? action.id,
+                    subtitle: "\(item.title) › \(marketplaceTitle)",
+                    detail: action.description.localizedValue() ?? "",
+                    keywords: action.keywords + [item.id, provider.id, action.id]
+                        + [action.parameterSummary?.localizedValue()].compactMap { $0 },
+                    systemImage: action.systemImage,
+                    action: .navigate(
+                        destination: .marketplaceDetail(MarketplacePluginDetailTarget(
+                            pluginID: item.id,
+                            providerID: provider.id,
+                            actionID: action.id
+                        )),
+                        target: nil
+                    ),
+                    confirmation: nil,
+                    suggestionPriority: nil,
+                    role: .marketplaceCapability
+                ))
+            }
+            for template in provider.dynamicTemplates {
+                guard !excludingActionKeys.contains(ActionKey(providerID: provider.id, actionID: template.id)) else {
+                    continue
+                }
+                results.append(MacToolsSearchResult(
+                    id: "plugin.marketplace-template.\(item.id).\(provider.id).\(template.id)",
+                    kind: .navigation,
+                    title: template.title.localizedValue() ?? template.id,
+                    subtitle: "\(item.title) › \(marketplaceTitle)",
+                    detail: template.description.localizedValue() ?? "",
+                    keywords: template.keywords + [item.id, provider.id, template.id, template.entrySource]
+                        + [template.parameterSummary.localizedValue()].compactMap { $0 },
+                    systemImage: "sparkles",
+                    action: .navigate(destination: detailDestination, target: nil),
+                    confirmation: nil,
+                    suggestionPriority: nil,
+                    role: .marketplaceCapability
+                ))
+            }
+        }
+        return results
     }
 
     private static func navigationResult(

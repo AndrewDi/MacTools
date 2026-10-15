@@ -164,6 +164,48 @@
       "tr": "İlk kez bir uygulamanın ses düzeyini değiştirirken izin verin.",
       "zh-Hans": "首次更改应用音量时授予权限。",
       "zh-Hant": "首次更改 App 音量時授予權限。"
+    },
+    "discovery.per-app-volume": {
+      "ar": "مستوى الصوت لكل تطبيق",
+      "de": "Lautstärke pro App",
+      "en": "Per-App Volume",
+      "es": "Volumen por aplicación",
+      "fr": "Volume par application",
+      "ja": "アプリごとの音量",
+      "ko": "앱별 음량",
+      "pt": "Volume por aplicativo",
+      "ru": "Громкость отдельных приложений",
+      "tr": "Uygulama başına ses düzeyi",
+      "zh-Hans": "应用音量",
+      "zh-Hant": "應用程式音量"
+    },
+    "discovery.mute-app": {
+      "ar": "كتم صوت التطبيق",
+      "de": "App stummschalten",
+      "en": "Mute App",
+      "es": "Silenciar aplicación",
+      "fr": "Couper le son d’une application",
+      "ja": "アプリを消音",
+      "ko": "앱 음소거",
+      "pt": "Silenciar aplicativo",
+      "ru": "Отключить звук приложения",
+      "tr": "Uygulamanın sesini kapat",
+      "zh-Hans": "应用静音",
+      "zh-Hant": "應用程式靜音"
+    },
+    "discovery.audio-mixer": {
+      "ar": "مزج الصوت",
+      "de": "Audiomixer",
+      "en": "Audio Mixer",
+      "es": "Mezclador de audio",
+      "fr": "Mixeur audio",
+      "ja": "オーディオミキサー",
+      "ko": "오디오 믹서",
+      "pt": "Mixer de áudio",
+      "ru": "Аудиомикшер",
+      "tr": "Ses mikseri",
+      "zh-Hans": "音量混音器",
+      "zh-Hant": "音訊混音器"
     }
   },
   "version": "2.0.1",
@@ -204,7 +246,8 @@
       "application volume",
       "audio",
       "mute",
-      "mixer"
+      "mixer",
+      "per-app volume"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -248,7 +291,8 @@
       ],
       "zh-Hans": [
         "应用音量",
-        "音频混音"
+        "音频混音",
+        "应用静音"
       ],
       "zh-Hant": [
         "App 音量",
@@ -269,7 +313,12 @@
     "relatedPluginIDs": [
       "system-mute"
     ],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.per-app-volume",
+      "@productStrings.discovery.mute-app",
+      "@productStrings.discovery.audio-mixer"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "15.0",

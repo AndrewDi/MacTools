@@ -68,6 +68,21 @@
       "tr": "İlk karşıya yüklemeden önce hesap kimliğini, kovayı, erişim anahtarını ve Keychain'de saklanan gizli anahtarı girin.",
       "zh-Hans": "首次上传前，请填写账户 ID、存储桶、访问密钥，并将密钥安全地存入钥匙串。",
       "zh-Hant": "首次上傳前，請填寫帳戶 ID、儲存貯體、存取金鑰，並將密鑰安全地存入鑰匙圈。"
+    },
+    "discovery.public-link": "@localizable.settings.options.publicURL",
+    "discovery.object-storage": {
+      "ar": "تخزين الكائنات",
+      "de": "Objektspeicher",
+      "en": "Object Storage",
+      "es": "Almacenamiento de objetos",
+      "fr": "Stockage d’objets",
+      "ja": "オブジェクトストレージ",
+      "ko": "객체 스토리지",
+      "pt": "Armazenamento de objetos",
+      "ru": "Объектное хранилище",
+      "tr": "Nesne depolama",
+      "zh-Hans": "对象存储",
+      "zh-Hant": "物件儲存"
     }
   },
   "version": "2.0.1",
@@ -107,7 +122,9 @@
       "cloudflare",
       "r2",
       "upload",
-      "productivity"
+      "productivity",
+      "object storage",
+      "public link"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -141,7 +158,9 @@
         "Cloudflare R2 Karşıya Yükleme"
       ],
       "zh-Hans": [
-        "Cloudflare R2 上传"
+        "Cloudflare R2 上传",
+        "对象存储",
+        "公开链接"
       ],
       "zh-Hant": [
         "Cloudflare R2 上傳"
@@ -157,7 +176,11 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.public-link",
+      "@productStrings.discovery.object-storage"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

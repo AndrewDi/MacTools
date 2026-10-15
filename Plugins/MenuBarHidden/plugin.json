@@ -77,7 +77,9 @@
     "display-name": "@displayName",
     "summary": "@summary",
     "setup.requirements.title": "@standardSetup.requirements.title",
-    "setup.requirements.description": "@standardSetup.requirements.description"
+    "setup.requirements.description": "@standardSetup.requirements.description",
+    "discovery.always-hidden-icons": "@localizable.section.alwaysHidden",
+    "discovery.menu-bar-layout": "@localizable.settings.layout.title"
   },
   "presentation": {
     "longDescription": "@productStrings.summary",
@@ -98,7 +100,9 @@
       "menu bar",
       "icons",
       "hide",
-      "layout"
+      "layout",
+      "always hidden",
+      "menu bar layout"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -132,7 +136,9 @@
         "Menü Çubuğu Simgelerini Gizleme"
       ],
       "zh-Hans": [
-        "隐藏菜单栏图标"
+        "隐藏菜单栏图标",
+        "永久隐藏",
+        "菜单栏布局"
       ],
       "zh-Hant": [
         "隱藏選單列圖示"
@@ -148,7 +154,11 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.always-hidden-icons",
+      "@productStrings.discovery.menu-bar-layout"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",

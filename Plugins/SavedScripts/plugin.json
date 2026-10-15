@@ -68,7 +68,8 @@
       "tr": "Bu Mac'te depolanan, çalıştırılacak kaydedilmiş betiği seçin.",
       "zh-Hans": "选择存储在此 Mac 上、要运行的已存脚本。",
       "zh-Hant": "選擇儲存在此 Mac 上、要執行的已儲存指令碼。"
-    }
+    },
+    "discovery.script-library": "@localizable.settings.library.title"
   },
   "version": "2.0.1",
   "minHostVersion": "1.3.1",
@@ -105,7 +106,10 @@
     "keywords": [
       "saved",
       "scripts",
-      "productivity"
+      "productivity",
+      "bash",
+      "zsh",
+      "script library"
     ],
     "localizedSynonyms": {
       "ar": [
@@ -139,7 +143,8 @@
         "Kayıtlı Betikler"
       ],
       "zh-Hans": [
-        "已存脚本"
+        "已存脚本",
+        "脚本库"
       ],
       "zh-Hant": [
         "已儲存腳本"
@@ -155,7 +160,10 @@
       "productivity"
     ],
     "relatedPluginIDs": [],
-    "alternativePluginIDs": []
+    "alternativePluginIDs": [],
+    "localizedSynonymRefs": [
+      "@productStrings.discovery.script-library"
+    ]
   },
   "requirements": {
     "minimumMacOSVersion": "14.0",
