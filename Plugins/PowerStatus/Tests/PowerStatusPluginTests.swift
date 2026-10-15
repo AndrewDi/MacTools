@@ -142,10 +142,55 @@ final class PowerStatusPluginTests: XCTestCase {
 
         let snapshot = PowerStatusSampler.readBatteryCapacitySnapshot(from: props)
 
-        XCTAssertEqual(snapshot.healthPercent, 84)
+        // 5155 / 6075 = 84.9%, which rounds up to 85% the way macOS reports it.
+        XCTAssertEqual(snapshot.healthPercent, 85)
         XCTAssertEqual(snapshot.designCapacityMAH, 6075)
         XCTAssertEqual(snapshot.fullChargeCapacityMAH, 5155)
         XCTAssertNil(snapshot.rawMaxCapacityMAH)
+    }
+
+    func testBatteryHealthPrefersCompensatedCapacityFromPackNode() {
+        // System Settings' "Maximum Capacity" is FccComp1 ÷ DesignCapacity, and
+        // on Apple Silicon FccComp1 lives on AppleSmartBatteryPack, not on the
+        // battery node that the raw milliamp readings come from.
+        let props: [String: Any] = [
+            "BatteryData": [
+                "DesignCapacity": 6075,
+                "FullChargeCapacity": 5179,
+            ] as [String: Any],
+        ]
+        let packProps: [String: Any] = [
+            "BatteryData": [
+                "DesignCapacity": 6075,
+                "FccComp1": 5401,
+                "AppleRawMaxCapacity": 5179,
+            ] as [String: Any],
+        ]
+
+        let snapshot = PowerStatusSampler.readBatteryCapacitySnapshot(
+            from: props,
+            packProps: packProps
+        )
+
+        XCTAssertEqual(snapshot.healthPercent, 89)
+        XCTAssertEqual(snapshot.fullChargeCapacityMAH, 5401)
+        XCTAssertEqual(snapshot.rawMaxCapacityMAH, 5179)
+    }
+
+    func testBatteryHealthRoundsUpInsteadOfTruncating() {
+        // 5376 / 6075 = 88.49%: truncating gives 88% and rounding to nearest
+        // also gives 88%, while System Settings reports 89%. Only rounding up
+        // matches, and this is the live reading on the test machine.
+        let props: [String: Any] = [
+            "BatteryData": [
+                "DesignCapacity": 6075,
+                "FccComp1": 5376,
+            ] as [String: Any],
+        ]
+
+        let snapshot = PowerStatusSampler.readBatteryCapacitySnapshot(from: props)
+
+        XCTAssertEqual(snapshot.healthPercent, 89)
     }
 
     func testBatteryHealthReportsNinetyPercentFromRawMaxCapacity() {

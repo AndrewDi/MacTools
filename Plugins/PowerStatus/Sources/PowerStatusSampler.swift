@@ -26,8 +26,12 @@ enum PowerStatusSampler {
         let amperage = extractInt(from: props, key: "Amperage")
         let cycleCount = extractInt(from: props, key: "CycleCount")
 
-        // Battery health
-        let capacitySnapshot = readBatteryCapacitySnapshot(from: props)
+        // Battery health. On Apple Silicon the compensated capacity that System
+        // Settings reports lives on the pack node rather than the battery node.
+        let capacitySnapshot = readBatteryCapacitySnapshot(
+            from: props,
+            packProps: getIOServiceProperties(className: "AppleSmartBatteryPack")
+        )
         let batteryHealthPercent = capacitySnapshot.healthPercent
         let designCapacity = capacitySnapshot.designCapacityMAH
         let fullChargeCapacity = capacitySnapshot.fullChargeCapacityMAH
@@ -381,19 +385,30 @@ enum PowerStatusSampler {
 
     /// Reads pack capacity telemetry. Internal so tests can pin the milliamp
     /// sources apart from the normalized percentage keys on the same node.
-    static func readBatteryCapacitySnapshot(from props: [String: Any]) -> BatteryCapacitySnapshot {
+    ///
+    /// - Parameter packProps: the sibling `AppleSmartBatteryPack` node, where
+    ///   Apple Silicon reports the compensated full-charge capacity.
+    static func readBatteryCapacitySnapshot(
+        from props: [String: Any],
+        packProps: [String: Any]? = nil
+    ) -> BatteryCapacitySnapshot {
         let batteryData = extractDict(from: props, key: "BatteryData")
+        let packBatteryData = packProps.flatMap { extractDict(from: $0, key: "BatteryData") }
 
         // Depending on the machine and macOS version these fields appear either
-        // at the top level or nested under BatteryData, so read both.
+        // at the top level or nested under BatteryData, so read both. The pack
+        // node is consulted last because the battery node owns DesignCapacity.
         func capacityValue(_ key: String) -> Int? {
             batteryData.flatMap { extractInt(from: $0, key: key) }
                 ?? extractInt(from: props, key: key)
+                ?? packBatteryData.flatMap { extractInt(from: $0, key: key) }
+                ?? packProps.flatMap { extractInt(from: $0, key: key) }
         }
 
         // Top-level MaxCapacity is a normalized 0-100 percentage on modern Macs,
         // so it must never be read as a milliamp capacity.
         let designCapacity = capacityValue("DesignCapacity")
+        let compensatedCapacity = capacityValue("FccComp1")
         let rawMaxCapacity = capacityValue("AppleRawMaxCapacity")
         let fullChargeCapacity = capacityValue("FullChargeCapacity")
         let nominalChargeCapacity = capacityValue("NominalChargeCapacity")
@@ -401,21 +416,28 @@ enum PowerStatusSampler {
         // Temperature is in centidegrees
         let temperature = capacityValue("Temperature")
 
-        // Health is a measured milliamp capacity over the design capacity.
+        // FccComp1 is the gas gauge's temperature- and age-compensated reading,
+        // the same figure macOS shows as System Settings' "Maximum Capacity".
+        // The remaining keys are raw milliamp fallbacks for machines without it.
+        let displayedCapacity = compensatedCapacity
+            ?? rawMaxCapacity
+            ?? fullChargeCapacity
+            ?? nominalChargeCapacity
+
+        // Rounded up, not truncated or rounded to nearest: System Settings shows
+        // 89% for 88.49%, where both of those report 88%. Capped because a fresh
+        // pack can report slightly more than its design capacity.
         var healthPercent: Int?
-        if let design = designCapacity, design > 0 {
-            for measured in [rawMaxCapacity, fullChargeCapacity, nominalChargeCapacity] {
-                if let measured, measured > 0 {
-                    healthPercent = min(100, measured * 100 / design)
-                    break
-                }
-            }
+        if let design = designCapacity, design > 0,
+           let measured = displayedCapacity, measured > 0 {
+            let ratio = Double(measured) * 100.0 / Double(design)
+            healthPercent = min(100, Int(ratio.rounded(.up)))
         }
 
         return BatteryCapacitySnapshot(
             designCapacityMAH: designCapacity,
             rawMaxCapacityMAH: rawMaxCapacity,
-            fullChargeCapacityMAH: fullChargeCapacity ?? nominalChargeCapacity,
+            fullChargeCapacityMAH: displayedCapacity,
             healthPercent: healthPercent,
             temperatureCentidegrees: temperature
         )
