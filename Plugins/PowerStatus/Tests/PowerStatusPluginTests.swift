@@ -470,6 +470,23 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(PowerStatusLayout.capacityTileCount(for: full), 5)
     }
 
+    func testCapacityReadingsShareOneTileForHeight() {
+        // Full-charge and design capacity render in a single merged tile, so
+        // supplying both must not add a row to the panel height.
+        let designOnly = makeSnapshot(designCapacityMAH: 6_075, flowState: .onAC)
+        let merged = makeSnapshot(
+            designCapacityMAH: 6_075,
+            fullChargeCapacityMAH: 5_374,
+            flowState: .onAC
+        )
+
+        XCTAssertEqual(
+            PowerStatusLayout.capacityTileCount(for: merged),
+            PowerStatusLayout.capacityTileCount(for: designOnly)
+        )
+        XCTAssertEqual(PowerStatusLayout.capacityTileCount(for: designOnly), 1)
+    }
+
     // MARK: - Helpers
 
     private func makeSnapshot(

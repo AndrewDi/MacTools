@@ -227,9 +227,9 @@ struct PowerStatusComponentView: View {
         }
     }
 
-    /// The pack itself: level, capacity, health, cycles, time estimate, and
-    /// temperature. Health is the full-charge to design capacity ratio, so it
-    /// sits beside the two readings it is derived from.
+    /// The pack itself: level, charge beside the time it buys, then the
+    /// full-charge over design capacity reading that health is derived from,
+    /// followed by health, cycles, and temperature.
     private var capacityGroup: some View {
         let snapshot = viewModel.snapshot
         return detailGroup(title: localization.string("detail.group.capacity", defaultValue: "电池容量")) {
@@ -249,16 +249,40 @@ struct PowerStatusComponentView: View {
                         )
                     }
 
+                    // The remaining charge and the time it lasts belong together.
+                    if snapshot.showFullyCharged {
+                        PowerStatusMiniMetric(
+                            icon: "checkmark.circle.fill",
+                            iconTint: theme.status.success,
+                            title: localization.string("metric.timeToFull", defaultValue: "预计充满时间"),
+                            value: localization.string("metric.fullyCharged", defaultValue: "已充满")
+                        )
+                    } else if let timeText = snapshot.estimatedTimeRemainingText {
+                        PowerStatusMiniMetric(
+                            icon: "clock",
+                            iconTint: theme.status.informational,
+                            title: snapshot.estimatedTimeLabelText(localization) ?? "",
+                            value: timeText,
+                            help: snapshot.estimatedTimeIsComputed
+                                ? localization.string(
+                                    "metric.timeEstimate.help",
+                                    defaultValue: "基于剩余电量与近期平均功耗估算"
+                                )
+                                : nil
+                        )
+                    }
+
+                    // Full-charge and design capacity are the two readings the
+                    // health ratio is made of, so they share one tile.
                     if let fullCharge = snapshot.fullChargeCapacityMAH {
                         PowerStatusMiniMetric(
                             icon: "checkmark.shield",
                             iconTint: theme.status.success,
                             title: localization.string("detail.fullChargeCapacity", defaultValue: "满电容量"),
-                            value: "\(fullCharge) mAh"
+                            value: snapshot.designCapacityMAH.map { "\(fullCharge)/\($0) mAh" }
+                                ?? "\(fullCharge) mAh"
                         )
-                    }
-
-                    if let design = snapshot.designCapacityMAH {
+                    } else if let design = snapshot.designCapacityMAH {
                         PowerStatusMiniMetric(
                             icon: "cube",
                             iconTint: theme.text.secondary,
@@ -282,28 +306,6 @@ struct PowerStatusComponentView: View {
                             iconTint: theme.text.secondary,
                             title: localization.string("metric.cycles", defaultValue: "循环次数"),
                             value: "\(cycles)"
-                        )
-                    }
-
-                    if snapshot.showFullyCharged {
-                        PowerStatusMiniMetric(
-                            icon: "checkmark.circle.fill",
-                            iconTint: theme.status.success,
-                            title: localization.string("metric.timeToFull", defaultValue: "预计充满时间"),
-                            value: localization.string("metric.fullyCharged", defaultValue: "已充满")
-                        )
-                    } else if let timeText = snapshot.estimatedTimeRemainingText {
-                        PowerStatusMiniMetric(
-                            icon: "clock",
-                            iconTint: theme.status.informational,
-                            title: snapshot.estimatedTimeLabelText(localization) ?? "",
-                            value: timeText,
-                            help: snapshot.estimatedTimeIsComputed
-                                ? localization.string(
-                                    "metric.timeEstimate.help",
-                                    defaultValue: "基于剩余电量与近期平均功耗估算"
-                                )
-                                : nil
                         )
                     }
 
@@ -551,11 +553,11 @@ enum PowerStatusLayout {
 
     /// Mirrors the tiles rendered by the battery-capacity group. The group also
     /// carries the battery level bar, so it always renders when data exists.
+    /// Full-charge and design capacity share one tile, so they count once.
     static func capacityTileCount(for snapshot: PowerStatusSnapshot) -> Int {
         guard snapshot.isDataAvailable else { return 0 }
         return (snapshot.remainingCapacityMAH != nil ? 1 : 0)
-            + (snapshot.fullChargeCapacityMAH != nil ? 1 : 0)
-            + (snapshot.designCapacityMAH != nil ? 1 : 0)
+            + (snapshot.fullChargeCapacityMAH != nil || snapshot.designCapacityMAH != nil ? 1 : 0)
             + (snapshot.batteryHealthPercent != nil ? 1 : 0)
             + (snapshot.cycleCount != nil ? 1 : 0)
             + (snapshot.estimatedTimeRemainingMinutes != nil || snapshot.showFullyCharged ? 1 : 0)
@@ -1060,6 +1062,9 @@ private struct PowerStatusMiniMetric: View {
                     .foregroundStyle(theme.text.primary)
                     .monospacedDigit()
                     .lineLimit(1)
+                    // The merged capacity reading is the longest value here;
+                    // shrink it before lineLimit would clip it instead.
+                    .minimumScaleFactor(0.8)
             }
 
             Spacer(minLength: 0)
