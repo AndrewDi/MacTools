@@ -101,7 +101,13 @@ enum PowerStatusSampler {
 
     // MARK: - Power computation
 
-    private static func computePowerMetrics(
+    /// Battery power below this many watts is measurement noise rather than a
+    /// real charge or discharge.
+    static let powerThreshold = 0.3
+
+    /// Pure power-path computation. Internal so the plugin tests can pin the
+    /// no-telemetry fallback, which must not report charging as a discharge.
+    static func computePowerMetrics(
         telemetry: [String: Any]?,
         isOnAC: Bool,
         isCharging: Bool,
@@ -144,37 +150,51 @@ enum PowerStatusSampler {
             return (systemPowerW, batteryPowerW, acInputW, flow)
         }
 
-        // Fallback: calculate from signed Amperage x Voltage
-        var systemPowerW: Double = 0
-        var batteryPowerW: Double = 0
-        if let signedPower = amperagePowerW {
-            batteryPowerW = signedPower
-            if !isOnAC {
-                systemPowerW = abs(signedPower)
-            } else if signedPower < 0 {
-                systemPowerW = 0
-            } else {
-                systemPowerW = signedPower
+        // Fallback: classify from signed Amperage x Voltage only, using the same
+        // rule as the raw-current branch in resolveBatteryFlow.
+        let raw = flowFromRawCurrent(
+            amperagePowerW: amperagePowerW,
+            isOnAC: isOnAC,
+            isChargingFlag: isCharging
+        )
+        // With no telemetry the AC input is unknown, so the system draw is
+        // reported as the pack's own rate.
+        return (abs(raw.batteryPowerW), raw.batteryPowerW, 0, raw.flow)
+    }
+
+    /// Classifies from signed Amperage x Voltage alone. IOKit reports that
+    /// current positive while the pack takes charge and negative while it
+    /// feeds the machine, so the two directions stay distinguishable instead of
+    /// both collapsing into discharge.
+    private static func flowFromRawCurrent(
+        amperagePowerW: Double?,
+        isOnAC: Bool,
+        isChargingFlag: Bool
+    ) -> (flow: PowerFlowState, batteryPowerW: Double) {
+        guard let signedPower = amperagePowerW, abs(signedPower) > powerThreshold else {
+            // Amperage is missing or too small to read; the charger flag is the
+            // only remaining signal, so a charging pack is not reported as idle.
+            if isOnAC, isChargingFlag {
+                return (.charging(rateW: 0), 0)
             }
+            return (isOnAC ? .onAC : .idle, 0)
         }
 
-        let flow: PowerFlowState
-        if batteryPowerW > 0.3 {
-            flow = isOnAC ? .supplementalDischarge(rateW: batteryPowerW) : .discharging(rateW: batteryPowerW)
-        } else if batteryPowerW < -0.3 {
-            flow = isOnAC ? .supplementalDischarge(rateW: abs(batteryPowerW)) : .discharging(rateW: abs(batteryPowerW))
-        } else if isOnAC {
-            flow = .onAC
-        } else {
-            flow = .idle
+        if signedPower > 0 {
+            return (isOnAC ? .charging(rateW: signedPower) : .idle, signedPower)
         }
-
-        return (systemPowerW, batteryPowerW, 0, flow)
+        let rateW = abs(signedPower)
+        return (isOnAC ? .supplementalDischarge(rateW: rateW) : .discharging(rateW: rateW), rateW)
     }
 
     /// Pure classification of the current power path. Internal so the plugin
     /// tests can pin down the off-power fallback that keeps the panel from
     /// reporting "idle" while the machine is actually running on the battery.
+    ///
+    /// `Amperage` and the telemetry `BatteryPower` are IOKit-signed: positive
+    /// while the pack takes charge, negative while it feeds the machine. They
+    /// are converted to `PowerFlowState` rates here, which use the opposite,
+    /// discharging-positive convention that `computePowerFromFlow` expects.
     static func resolveBatteryFlow(
         isOnAC: Bool,
         isChargingFlag: Bool,
@@ -183,70 +203,46 @@ enum PowerStatusSampler {
         amperagePowerW: Double?,
         batteryPowerFromTelemetry: Double
     ) -> PowerFlowState {
-        let powerThreshold = 0.3
-
         // Energy balance on AC: input > load -> surplus charges battery.
         if isOnAC, acInputW > systemLoadW + powerThreshold {
-            if let ampPower = amperagePowerW, ampPower < -powerThreshold {
-                return .charging(rateW: abs(ampPower))
+            if let ampPower = amperagePowerW, ampPower > powerThreshold {
+                return .charging(rateW: ampPower)
             }
-            if batteryPowerFromTelemetry < -powerThreshold {
-                return .charging(rateW: abs(batteryPowerFromTelemetry))
+            if batteryPowerFromTelemetry > powerThreshold {
+                return .charging(rateW: batteryPowerFromTelemetry)
             }
             return .charging(rateW: acInputW - systemLoadW)
         }
 
         // Energy balance on AC: load > input -> battery may supplement.
         if isOnAC, systemLoadW > acInputW + powerThreshold {
-            if let ampPower = amperagePowerW, ampPower > powerThreshold {
-                let rate = batteryPowerFromTelemetry > powerThreshold
-                    ? batteryPowerFromTelemetry
-                    : ampPower
+            if let ampPower = amperagePowerW, ampPower < -powerThreshold {
+                let rate = batteryPowerFromTelemetry < -powerThreshold
+                    ? abs(batteryPowerFromTelemetry)
+                    : abs(ampPower)
                 return .supplementalDischarge(rateW: rate)
             }
-            if batteryPowerFromTelemetry > powerThreshold {
-                return .supplementalDischarge(rateW: batteryPowerFromTelemetry)
+            if batteryPowerFromTelemetry < -powerThreshold {
+                return .supplementalDischarge(rateW: abs(batteryPowerFromTelemetry))
             }
         }
 
-        if let ampPower = amperagePowerW {
-            if ampPower > powerThreshold {
-                return isOnAC
-                    ? .supplementalDischarge(rateW: ampPower)
-                    : .discharging(rateW: ampPower)
-            }
-            if isOnAC, ampPower < -powerThreshold {
-                return .charging(rateW: abs(ampPower))
-            }
+        // Raw current, used directly when the energy balance above could not
+        // classify: both current directions stay distinguishable here.
+        let raw = flowFromRawCurrent(
+            amperagePowerW: amperagePowerW,
+            isOnAC: isOnAC,
+            isChargingFlag: isChargingFlag
+        )
+        if abs(raw.batteryPowerW) > powerThreshold || isChargingFlag {
+            return raw.flow
         }
 
-        if batteryPowerFromTelemetry > powerThreshold {
-            return isOnAC
-                ? .supplementalDischarge(rateW: batteryPowerFromTelemetry)
-                : .discharging(rateW: batteryPowerFromTelemetry)
-        }
-        if batteryPowerFromTelemetry < -powerThreshold {
-            return isOnAC ? .charging(rateW: abs(batteryPowerFromTelemetry)) : .discharging(rateW: abs(batteryPowerFromTelemetry))
-        }
-
-        if isOnAC {
-            if isChargingFlag {
-                if let ampPower = amperagePowerW, ampPower < 0 {
-                    return .charging(rateW: abs(ampPower))
-                }
-            }
-            return .onAC
-        }
-
-        // Off power the pack is the only source, so a real discharge current or
-        // system load means the machine is running on battery even while
-        // BatteryPower and Amperage still read zero for a moment after
+        // Current is missing or too small to classify; off power the pack is the
+        // only source, so a real system load still means the machine is running
+        // on the battery even while Amperage reads zero for a moment after
         // unplugging.
-        if let ampPower = amperagePowerW, abs(ampPower) > powerThreshold {
-            return .discharging(rateW: abs(ampPower))
-        }
-
-        if abs(systemLoadW) > powerThreshold {
+        if !isOnAC, abs(systemLoadW) > powerThreshold {
             return .discharging(rateW: abs(systemLoadW))
         }
 

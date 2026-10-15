@@ -81,6 +81,70 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(snapshot.headerPowerW, 80.0, accuracy: 0.01)
     }
 
+    func testMissingTelemetryReportsChargingInsteadOfDischarge() {
+        // IOKit signs Amperage positive while the pack takes charge, so a
+        // charging current must not fall through as supplemental discharge
+        // when PowerTelemetryData is absent or empty.
+        let metrics = PowerStatusSampler.computePowerMetrics(
+            telemetry: nil,
+            isOnAC: true,
+            isCharging: true,
+            amperage: 1000,
+            voltage: 10000
+        )
+
+        guard case .charging(let rateW) = metrics.flowState else {
+            return XCTFail("expected charging, got \(metrics.flowState)")
+        }
+        XCTAssertEqual(rateW, 10.0, accuracy: 0.01)
+
+        let emptyTelemetry = PowerStatusSampler.computePowerMetrics(
+            telemetry: [:],
+            isOnAC: true,
+            isCharging: true,
+            amperage: 1000,
+            voltage: 10000
+        )
+        guard case .charging(let emptyRateW) = emptyTelemetry.flowState else {
+            return XCTFail("expected charging for empty telemetry, got \(emptyTelemetry.flowState)")
+        }
+        XCTAssertEqual(emptyRateW, 10.0, accuracy: 0.01)
+    }
+
+    func testMissingTelemetryKeepsNegativeAmperageAsSupplementalDischarge() {
+        // The opposite current direction has to stay distinguishable: a
+        // negative reading on AC means the pack is feeding the machine.
+        let metrics = PowerStatusSampler.computePowerMetrics(
+            telemetry: nil,
+            isOnAC: true,
+            isCharging: false,
+            amperage: -1000,
+            voltage: 10000
+        )
+
+        guard case .supplementalDischarge(let rateW) = metrics.flowState else {
+            return XCTFail("expected supplementalDischarge, got \(metrics.flowState)")
+        }
+        XCTAssertEqual(rateW, 10.0, accuracy: 0.01)
+    }
+
+    func testMissingTelemetryHonorsChargerFlagWithoutCurrent() {
+        // No usable current; the charger flag alone has to keep the panel from
+        // reporting idle while the pack is actually charging.
+        let metrics = PowerStatusSampler.computePowerMetrics(
+            telemetry: nil,
+            isOnAC: true,
+            isCharging: true,
+            amperage: nil,
+            voltage: nil
+        )
+
+        guard case .charging(let rateW) = metrics.flowState else {
+            return XCTFail("expected charging from the charger flag, got \(metrics.flowState)")
+        }
+        XCTAssertEqual(rateW, 0, accuracy: 0.01)
+    }
+
     func testUnpluggedWithSystemLoadResolvesToDischarging() {
         // Right after unplugging, BatteryPower and Amperage can still read zero
         // for one sample while the pack is already carrying the system.
