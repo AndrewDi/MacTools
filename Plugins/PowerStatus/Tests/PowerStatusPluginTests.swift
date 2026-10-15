@@ -145,6 +145,69 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(rateW, 0, accuracy: 0.01)
     }
 
+    func testOnACWithoutBatteryCurrentResolvesToOnACNotIdle() {
+        // A full pack or paused charging leaves zero battery current while the
+        // adapter still carries the load. That must stay `.onAC`; `.idle` is
+        // only valid off power, and the diagram would otherwise draw the pack
+        // as the source.
+        let flow = PowerStatusSampler.resolveBatteryFlow(
+            isOnAC: true,
+            isChargingFlag: false,
+            acInputW: 20,
+            systemLoadW: 20,
+            amperagePowerW: nil,
+            batteryPowerFromTelemetry: 0
+        )
+
+        XCTAssertEqual(flow, .onAC)
+    }
+
+    func testMissingTelemetryChargingDoesNotDoubleCountACInput() {
+        // A 10 W charge rate is the only measured quantity, so the header must
+        // read 10 W. Echoing the rate into the system draw would let
+        // effectiveACOutputW add it back and report 20 W.
+        let metrics = PowerStatusSampler.computePowerMetrics(
+            telemetry: nil,
+            isOnAC: true,
+            isCharging: true,
+            amperage: 1000,
+            voltage: 10000
+        )
+        let snapshot = makeSnapshot(
+            systemPowerW: metrics.systemPowerW,
+            batteryPowerW: metrics.batteryPowerW,
+            acInputW: metrics.acInputW,
+            isOnAC: true,
+            isCharging: true,
+            flowState: metrics.flowState
+        )
+
+        XCTAssertEqual(metrics.systemPowerW, 0, accuracy: 0.01)
+        XCTAssertEqual(snapshot.headerPowerW, 10.0, accuracy: 0.01)
+
+        // Empty telemetry must take the same path as missing telemetry.
+        let emptyTelemetry = PowerStatusSampler.computePowerMetrics(
+            telemetry: [:],
+            isOnAC: true,
+            isCharging: true,
+            amperage: 1000,
+            voltage: 10000
+        )
+        XCTAssertEqual(emptyTelemetry.systemPowerW, 0, accuracy: 0.01)
+        XCTAssertEqual(
+            makeSnapshot(
+                systemPowerW: emptyTelemetry.systemPowerW,
+                batteryPowerW: emptyTelemetry.batteryPowerW,
+                acInputW: emptyTelemetry.acInputW,
+                isOnAC: true,
+                isCharging: true,
+                flowState: emptyTelemetry.flowState
+            ).headerPowerW,
+            10.0,
+            accuracy: 0.01
+        )
+    }
+
     func testUnpluggedWithSystemLoadResolvesToDischarging() {
         // Right after unplugging, BatteryPower and Amperage can still read zero
         // for one sample while the pack is already carrying the system.

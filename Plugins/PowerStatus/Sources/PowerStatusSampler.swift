@@ -120,7 +120,7 @@ enum PowerStatusSampler {
             return Double(a) * Double(v) / 1_000_000.0
         }()
 
-        if let telem = telemetry {
+        if let telem = telemetry, !telem.isEmpty {
             let systemLoad = extractInt(from: telem, key: "SystemLoad") ?? 0
             let systemPowerIn = extractInt(from: telem, key: "SystemPowerIn") ?? 0
             let batteryPower = extractInt(from: telem, key: "BatteryPower") ?? 0
@@ -157,9 +157,17 @@ enum PowerStatusSampler {
             isOnAC: isOnAC,
             isChargingFlag: isCharging
         )
-        // With no telemetry the AC input is unknown, so the system draw is
-        // reported as the pack's own rate.
-        return (abs(raw.batteryPowerW), raw.batteryPowerW, 0, raw.flow)
+        // Without telemetry the battery rate is the only measured quantity. For
+        // charging it must not be echoed into the system draw, because
+        // `effectiveACOutputW` would add it back and report double the real AC
+        // input. Every other flow keeps its rate as the system draw so the
+        // header does not drop to a false 0 W while the pack feeds the machine.
+        let systemPowerW: Double = {
+            if case .charging = raw.flow { return 0 }
+            return abs(raw.batteryPowerW)
+        }()
+        // AC input is unknown without telemetry, so it reads zero.
+        return (systemPowerW, raw.batteryPowerW, 0, raw.flow)
     }
 
     /// Classifies from signed Amperage x Voltage alone. IOKit reports that
@@ -236,6 +244,14 @@ enum PowerStatusSampler {
         )
         if abs(raw.batteryPowerW) > powerThreshold || isChargingFlag {
             return raw.flow
+        }
+
+        // On AC with no battery current the pack is neither charging nor
+        // supplementing: the adapter is carrying the system alone. This happens
+        // when the battery is full or charging is paused, so it must not fall
+        // through to `.idle`, which the diagram renders as battery-powered.
+        if isOnAC {
+            return .onAC
         }
 
         // Current is missing or too small to classify; off power the pack is the
