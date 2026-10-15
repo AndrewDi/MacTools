@@ -7029,6 +7029,274 @@
         "panelItems": [
           "widget"
         ],
+        "settings": "none"
+      },
+      "category": "monitoring",
+      "displayName": "Apple Container状态",
+      "id": "container-indicator",
+      "localizedMetadata": {
+        "ar": {
+          "displayName": "حالة Apple Container",
+          "summary": "عرض والتحكم في خدمة container والحاويات والأجهزة الافتراضية."
+        },
+        "de": {
+          "displayName": "Apple Container Status",
+          "summary": "Dienst, Container und virtuelle Maschinen von container anzeigen und steuern."
+        },
+        "en": {
+          "displayName": "Apple Container Status",
+          "summary": "View and control the container service, containers, and virtual machines."
+        },
+        "es": {
+          "displayName": "Estado de Apple Container",
+          "summary": "Muestra y controla el servicio container, los contenedores y las máquinas virtuales."
+        },
+        "fr": {
+          "displayName": "Statut d'Apple Container",
+          "summary": "Affiche et contrôle le service container, les conteneurs et les machines virtuelles."
+        },
+        "ja": {
+          "displayName": "Apple Container のステータス",
+          "summary": "container サービス、コンテナ、仮想マシンを確認して操作します。"
+        },
+        "ko": {
+          "displayName": "Apple Container 상태",
+          "summary": "container 서비스, 컨테이너, 가상 머신을 확인하고 제어합니다."
+        },
+        "pt": {
+          "displayName": "Status do Apple Container",
+          "summary": "Visualize e controle o serviço container, os contêineres e as máquinas virtuais."
+        },
+        "ru": {
+          "displayName": "Состояние Apple Container",
+          "summary": "Просмотр и управление службой container, контейнерами и виртуальными машинами."
+        },
+        "tr": {
+          "displayName": "Apple Container Durumu",
+          "summary": "container hizmetini, konteynerleri ve sanal makineleri görüntüleyin ve yönetin."
+        },
+        "zh-Hans": {
+          "displayName": "Apple Container状态",
+          "summary": "查看并控制 container 服务、容器与虚拟机"
+        },
+        "zh-Hant": {
+          "displayName": "Apple Container狀態",
+          "summary": "檢視並控制 container 服務、容器與虛擬機"
+        }
+      },
+      "openInMacToolsURL": "mactools://app/settings/plugins/marketplace/container-indicator",
+      "product": {
+        "actions": null,
+        "discovery": {
+          "alternativePluginIDs": [],
+          "goalCategories": [
+            "monitoring"
+          ],
+          "keywords": [
+            "container",
+            "containers",
+            "container service",
+            "machine",
+            "virtual machine",
+            "容器",
+            "虚拟机",
+            "apple container"
+          ],
+          "localizedSynonyms": {
+            "ar": [
+              "حالة Apple Container",
+              "حالة الحاويات"
+            ],
+            "de": [
+              "Apple Container Status",
+              "Container-Status"
+            ],
+            "en": [
+              "Apple Container Status",
+              "Container Status"
+            ],
+            "es": [
+              "Estado de Apple Container",
+              "Estado de contenedores"
+            ],
+            "fr": [
+              "Statut d'Apple Container",
+              "État des conteneurs"
+            ],
+            "ja": [
+              "Apple Container のステータス",
+              "コンテナのステータス"
+            ],
+            "ko": [
+              "Apple Container 상태",
+              "컨테이너 상태"
+            ],
+            "pt": [
+              "Status do Apple Container",
+              "Status de contêineres"
+            ],
+            "ru": [
+              "Состояние Apple Container",
+              "Статус контейнеров"
+            ],
+            "tr": [
+              "Apple Container Durumu",
+              "Konteyner Durumu"
+            ],
+            "zh-Hans": [
+              "Apple Container状态",
+              "容器状态"
+            ],
+            "zh-Hant": [
+              "Apple Container狀態",
+              "容器狀態"
+            ]
+          },
+          "relatedPluginIDs": [],
+          "useCases": [
+            {
+              "id": "primary-use",
+              "title": {
+                "ar": "حالة Apple Container",
+                "de": "Apple Container Status",
+                "en": "Apple Container Status",
+                "es": "Estado de Apple Container",
+                "fr": "Statut d'Apple Container",
+                "ja": "Apple Container のステータス",
+                "ko": "Apple Container 상태",
+                "pt": "Status do Apple Container",
+                "ru": "Состояние Apple Container",
+                "tr": "Apple Container Durumu",
+                "zh-Hans": "Apple Container状态",
+                "zh-Hant": "Apple Container狀態"
+              }
+            }
+          ]
+        },
+        "presentation": {
+          "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+          "examples": [
+            {
+              "id": "primary-use",
+              "text": {
+                "ar": "عرض والتحكم في خدمة container والحاويات والأجهزة الافتراضية.",
+                "de": "Dienst, Container und virtuelle Maschinen von container anzeigen und steuern.",
+                "en": "View and control the container service, containers, and virtual machines.",
+                "es": "Muestra y controla el servicio container, los contenedores y las máquinas virtuales.",
+                "fr": "Affiche et contrôle le service container, les conteneurs et les machines virtuelles.",
+                "ja": "container サービス、コンテナ、仮想マシンを確認して操作します。",
+                "ko": "container 서비스, 컨테이너, 가상 머신을 확인하고 제어합니다.",
+                "pt": "Visualize e controle o serviço container, os contêineres e as máquinas virtuais.",
+                "ru": "Просмотр и управление службой container, контейнерами и виртуальными машинами.",
+                "tr": "container hizmetini, konteynerleri ve sanal makineleri görüntüleyin ve yönetin.",
+                "zh-Hans": "查看并控制 container 服务、容器与虚拟机",
+                "zh-Hant": "檢視並控制 container 服務、容器與虛擬機"
+              }
+            }
+          ],
+          "license": "GPL-3.0-only",
+          "longDescription": {
+            "ar": "عرض والتحكم في خدمة container والحاويات والأجهزة الافتراضية.",
+            "de": "Dienst, Container und virtuelle Maschinen von container anzeigen und steuern.",
+            "en": "View and control the container service, containers, and virtual machines.",
+            "es": "Muestra y controla el servicio container, los contenedores y las máquinas virtuales.",
+            "fr": "Affiche et contrôle le service container, les conteneurs et les machines virtuelles.",
+            "ja": "container サービス、コンテナ、仮想マシンを確認して操作します。",
+            "ko": "container 서비스, 컨테이너, 가상 머신을 확인하고 제어합니다.",
+            "pt": "Visualize e controle o serviço container, os contêineres e as máquinas virtuais.",
+            "ru": "Просмотр и управление службой container, контейнерами и виртуальными машинами.",
+            "tr": "container hizmetini, konteynerleri ve sanal makineleri görüntüleyin ve yönetin.",
+            "zh-Hans": "查看并控制 container 服务、容器与虚拟机",
+            "zh-Hant": "檢視並控制 container 服務、容器與虛擬機"
+          },
+          "publisher": "MacTools",
+          "screenshots": [],
+          "supportURL": "https://github.com/ggbond268/MacTools/issues"
+        },
+        "privacy": {
+          "allowsUserConfiguredDomains": false,
+          "dataObserved": [
+            "container-service-state"
+          ],
+          "dataPersisted": [],
+          "diagnosticExportsContainUserData": false,
+          "networkDomains": [],
+          "networkUse": "none",
+          "processesSensitiveUserContent": false,
+          "retention": {
+            "policy": "none"
+          },
+          "telemetry": "none"
+        },
+        "relationships": {
+          "includedPackIDs": [],
+          "relatedPluginIDs": [],
+          "suggestedRecipeIDs": [],
+          "supersedesPluginIDs": []
+        },
+        "requirements": {
+          "applications": [],
+          "architectures": [
+            "arm64",
+            "x86_64"
+          ],
+          "executables": [
+            "container"
+          ],
+          "hardware": [],
+          "minimumMacOSVersion": "14.0",
+          "permissionIDs": [],
+          "requiresRelaunch": false,
+          "setupComplexity": "simple"
+        },
+        "setup": {
+          "optionalSurfaces": [],
+          "steps": [
+            {
+              "description": {
+                "ar": "قبل استخدام هذه الإضافة، راجع المتطلبات التالية واستوفها: container.",
+                "de": "Prüfe und erfülle vor der Verwendung dieses Plugins folgende Anforderungen: container.",
+                "en": "Before using this plugin, review and satisfy these requirements: container.",
+                "es": "Antes de usar este plugin, revisa y cumple estos requisitos: container.",
+                "fr": "Avant d’utiliser ce module, vérifiez et remplissez les conditions suivantes : container.",
+                "ja": "このプラグインを使用する前に、次の要件を確認して満たしてください：container。",
+                "ko": "이 플러그인을 사용하기 전에 다음 요구 사항을 확인하고 충족하세요: container.",
+                "pt": "Antes de usar este plugin, revise e cumpra estes requisitos: container.",
+                "ru": "Перед использованием плагина проверьте и выполните следующие требования: container.",
+                "tr": "Bu eklentiyi kullanmadan önce şu gereksinimleri gözden geçirin ve karşılayın: container.",
+                "zh-Hans": "使用此插件前，请检查并满足以下要求：container。",
+                "zh-Hant": "使用此外掛程式前，請檢查並滿足以下要求：container。"
+              },
+              "id": "review-requirements",
+              "title": {
+                "ar": "إعداد حالة Apple Container",
+                "de": "Apple Container Status einrichten",
+                "en": "Set Up Apple Container Status",
+                "es": "Configurar Estado de Apple Container",
+                "fr": "Configurer Statut d'Apple Container",
+                "ja": "Apple Container のステータスを設定",
+                "ko": "Apple Container 상태 설정",
+                "pt": "Configurar Status do Apple Container",
+                "ru": "Настройка «Состояние Apple Container»",
+                "tr": "Apple Container Durumu Kurulumu",
+                "zh-Hans": "设置Apple Container状态",
+                "zh-Hant": "設定Apple Container狀態"
+              }
+            }
+          ]
+        }
+      },
+      "releaseChannel": null,
+      "releaseNotesURL": null,
+      "route": "/plugins/container-indicator/",
+      "summary": "查看并控制 container 服务、容器与虚拟机",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
+        "panelItems": [
+          "widget"
+        ],
         "settings": "form"
       },
       "category": "monitoring",
