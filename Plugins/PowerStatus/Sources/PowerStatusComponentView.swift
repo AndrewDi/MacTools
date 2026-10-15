@@ -114,14 +114,23 @@ struct PowerStatusComponentView: View {
 
             Spacer(minLength: 4)
 
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(String(format: "%.0f", viewModel.snapshot.headerPowerW))
+            if let headerPowerW = viewModel.snapshot.headerPowerW {
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text(String(format: "%.0f", headerPowerW))
+                        .font(PluginTypography.sectionTitle.font.weight(.bold))
+                        .foregroundStyle(theme.text.primary)
+                        .monospacedDigit()
+                    Text("W")
+                        .font(PluginTypography.caption.font)
+                        .foregroundStyle(theme.text.secondary)
+                }
+            } else {
+                // Nothing establishes the current total draw; say so instead of
+                // claiming 0 W.
+                Text(PowerStatusValueText.unavailable)
                     .font(PluginTypography.sectionTitle.font.weight(.bold))
-                    .foregroundStyle(theme.text.primary)
+                    .foregroundStyle(theme.text.tertiary)
                     .monospacedDigit()
-                Text("W")
-                    .font(PluginTypography.caption.font)
-                    .foregroundStyle(theme.text.secondary)
             }
         }
         .padding(.horizontal, PowerStatusLayout.horizontalPadding)
@@ -158,8 +167,8 @@ struct PowerStatusComponentView: View {
                 icon: "cpu",
                 iconTint: theme.status.informational,
                 title: localization.string("metric.systemPower", defaultValue: "系统功耗"),
-                value: String(format: "%.1f W", viewModel.snapshot.systemPowerW),
-                valueTint: theme.text.primary
+                value: PowerStatusValueText.watts(viewModel.snapshot.systemPowerW),
+                valueTint: viewModel.snapshot.systemPowerW == nil ? theme.text.tertiary : theme.text.primary
             )
 
             if viewModel.snapshot.isOnAC {
@@ -167,8 +176,8 @@ struct PowerStatusComponentView: View {
                     icon: "powerplug.fill",
                     iconTint: theme.status.informational,
                     title: localization.string("metric.acInput", defaultValue: "交流输入"),
-                    value: String(format: "%.1f W", viewModel.snapshot.acInputW),
-                    valueTint: viewModel.snapshot.acInputW > 0 ? theme.text.primary : theme.text.tertiary
+                    value: PowerStatusValueText.watts(viewModel.snapshot.acInputW),
+                    valueTint: (viewModel.snapshot.acInputW ?? 0) > 0 ? theme.text.primary : theme.text.tertiary
                 )
             }
 
@@ -631,13 +640,13 @@ private struct PowerFlowDiagramSection: View {
         }
     }
 
-    private func acNode(value: Double) -> PowerFlowNodeModel {
+    private func acNode(value: Double?) -> PowerFlowNodeModel {
         PowerFlowNodeModel(
             icon: "powerplug.fill",
             title: localization.string("flow.ac", defaultValue: "交流电"),
-            value: Self.wattText(value),
+            value: PowerStatusValueText.watts(value),
             tint: theme.status.informational,
-            powerW: value
+            powerW: value ?? 0
         )
     }
 
@@ -645,9 +654,9 @@ private struct PowerFlowDiagramSection: View {
         PowerFlowNodeModel(
             icon: "desktopcomputer",
             title: localization.string("flow.system", defaultValue: "系统"),
-            value: Self.wattText(snapshot.systemPowerW),
+            value: PowerStatusValueText.watts(snapshot.systemPowerW),
             tint: theme.text.primary,
-            powerW: snapshot.systemPowerW
+            powerW: snapshot.systemPowerW ?? 0
         )
     }
 
@@ -655,7 +664,7 @@ private struct PowerFlowDiagramSection: View {
         PowerFlowNodeModel(
             icon: "battery.50percent",
             title: localization.string("flow.battery", defaultValue: "电池"),
-            value: Self.wattText(snapshot.batteryDischargeRateW),
+            value: PowerStatusValueText.watts(snapshot.batteryDischargeRateW),
             tint: theme.status.warning,
             powerW: snapshot.batteryDischargeRateW
         )
@@ -665,7 +674,7 @@ private struct PowerFlowDiagramSection: View {
         PowerFlowNodeModel(
             icon: "battery.100percent.bolt",
             title: localization.string("flow.charging", defaultValue: "充电"),
-            value: Self.wattText(snapshot.batteryChargeRateW),
+            value: PowerStatusValueText.watts(snapshot.batteryChargeRateW),
             tint: theme.status.success,
             powerW: snapshot.batteryChargeRateW
         )
@@ -679,9 +688,9 @@ private struct PowerFlowDiagramSection: View {
             PowerFlowJunctionLine(
                 mode: .fork,
                 trunkColor: theme.status.informational,
-                trunkPowerW: snapshot.effectiveACOutputW,
+                trunkPowerW: snapshot.effectiveACOutputW ?? 0,
                 topColor: theme.status.informational,
-                topPowerW: snapshot.systemPowerW,
+                topPowerW: snapshot.systemPowerW ?? 0,
                 bottomColor: theme.status.success,
                 bottomPowerW: snapshot.batteryChargeRateW
             )
@@ -705,9 +714,9 @@ private struct PowerFlowDiagramSection: View {
             PowerFlowJunctionLine(
                 mode: .merge,
                 trunkColor: theme.status.informational,
-                trunkPowerW: snapshot.systemPowerW,
+                trunkPowerW: snapshot.systemPowerW ?? 0,
                 topColor: theme.status.informational,
-                topPowerW: snapshot.acInputW,
+                topPowerW: snapshot.acInputW ?? 0,
                 bottomColor: theme.status.warning,
                 bottomPowerW: snapshot.batteryDischargeRateW
             )
@@ -715,10 +724,6 @@ private struct PowerFlowDiagramSection: View {
 
             PowerFlowNode(model: systemNode)
         }
-    }
-
-    private static func wattText(_ watts: Double) -> String {
-        String(format: "%.1f W", max(0, watts))
     }
 }
 

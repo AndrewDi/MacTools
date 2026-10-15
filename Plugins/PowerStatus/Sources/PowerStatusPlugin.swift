@@ -127,7 +127,7 @@ final class PowerStatusPlugin: MacToolsPlugin {
 
     private var subtitle: String {
         guard viewModel.snapshot.isDataAvailable else { return "" }
-        let power = String(format: "%.0fW", viewModel.snapshot.headerPowerW)
+        let power = PowerStatusValueText.wholeWatts(viewModel.snapshot.headerPowerW)
         return "\(viewModel.snapshot.powerSourceText(localization)) · \(power)"
     }
 }

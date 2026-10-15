@@ -10,14 +10,34 @@ enum PowerFlowState: Equatable {
     case idle
 }
 
+/// Formats power readings for display. A reading that could not be established
+/// is printed as an em dash: a measured zero and an unavailable value are not
+/// interchangeable, and showing `0 W` for the latter contradicts the readings
+/// drawn beside it.
+enum PowerStatusValueText {
+    static let unavailable = "—"
+
+    /// One decimal place, for metric rows and diagram nodes.
+    static func watts(_ watts: Double?) -> String {
+        guard let watts else { return unavailable }
+        return String(format: "%.1f W", max(0, watts))
+    }
+
+    /// Whole watts, for the compact panel subtitle.
+    static func wholeWatts(_ watts: Double?) -> String {
+        guard let watts else { return unavailable }
+        return String(format: "%.0fW", max(0, watts))
+    }
+}
+
 /// A snapshot of power and battery telemetry collected from IOKit.
 struct PowerStatusSnapshot: Equatable {
     let timestamp: Date
 
-    // Core power metrics (watts)
-    let systemPowerW: Double
-    let batteryPowerW: Double
-    let acInputW: Double
+    // Core power metrics (watts). A `nil` reading was not established, which is
+    // deliberately distinct from a measured `0`.
+    let systemPowerW: Double?
+    let acInputW: Double?
     let acAdapterWattage: Int
 
     // Battery basics
@@ -53,9 +73,8 @@ struct PowerStatusSnapshot: Equatable {
 
     static let empty = PowerStatusSnapshot(
         timestamp: Date(),
-        systemPowerW: 0,
-        batteryPowerW: 0,
-        acInputW: 0,
+        systemPowerW: nil,
+        acInputW: nil,
         acAdapterWattage: 0,
         batteryPercent: 0,
         isOnAC: false,
@@ -84,10 +103,17 @@ struct PowerStatusSnapshot: Equatable {
         isOnAC || isCharging
     }
 
-    var effectiveACOutputW: Double {
-        guard effectiveIsOnAC else { return 0 }
-        if acInputW > 0 { return acInputW }
-        if case let .charging(rate) = flowState { return systemPowerW + rate }
+    /// Total power the adapter supplies, or `nil` when its share is not
+    /// established. The adapter is the AC source, so the reading is unavailable
+    /// whenever the machine is off power.
+    var effectiveACOutputW: Double? {
+        guard effectiveIsOnAC else { return nil }
+        if let acInputW, acInputW > 0 { return acInputW }
+        if case let .charging(rate) = flowState {
+            // Without AC-input telemetry only the pack's intake is measured,
+            // which does not establish the adapter's total output.
+            return systemPowerW.map { $0 + rate }
+        }
         return systemPowerW
     }
 
@@ -104,7 +130,9 @@ struct PowerStatusSnapshot: Equatable {
         }
     }
 
-    var headerPowerW: Double {
+    /// Wattage shown in the header, or `nil` when nothing establishes the
+    /// current draw.
+    var headerPowerW: Double? {
         switch flowState {
         case .onAC, .idle:
             return effectiveIsOnAC ? effectiveACOutputW : systemPowerW
@@ -156,7 +184,9 @@ struct PowerStatusSnapshot: Equatable {
         if let smoothed = smoothedDischargePowerW, smoothed >= 0.2 { return smoothed }
         let rate = batteryDischargeRateW
         if rate >= 0.2 { return rate }
-        if case .discharging = flowState, systemPowerW >= 0.2 { return systemPowerW }
+        if case .discharging = flowState, let systemPower = systemPowerW, systemPower >= 0.2 {
+            return systemPower
+        }
         return nil
     }
 

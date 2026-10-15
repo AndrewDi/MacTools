@@ -10,7 +10,7 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertFalse(snapshot.isOnAC)
         XCTAssertFalse(snapshot.isCharging)
         XCTAssertFalse(snapshot.isDataAvailable)
-        XCTAssertEqual(snapshot.systemPowerW, 0)
+        XCTAssertNil(snapshot.systemPowerW)
         XCTAssertEqual(snapshot.flowState, .idle)
     }
 
@@ -31,10 +31,9 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(makeSnapshot(flowState: .idle).powerSourceLocalizationKey, "flow.source.idle")
     }
 
-    func testChargingSnapshotComputedProperties() {
+    func testChargingSnapshotComputedProperties() throws {
         let snapshot = makeSnapshot(
             systemPowerW: 25.0,
-            batteryPowerW: -10.0,
             acInputW: 35.0,
             isOnAC: true,
             isCharging: true,
@@ -42,16 +41,15 @@ final class PowerStatusPluginTests: XCTestCase {
         )
 
         XCTAssertTrue(snapshot.effectiveIsOnAC)
-        XCTAssertEqual(snapshot.effectiveACOutputW, 35.0, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(snapshot.effectiveACOutputW), 35.0, accuracy: 0.01)
         XCTAssertEqual(snapshot.batteryChargeRateW, 10.0, accuracy: 0.01)
-        XCTAssertEqual(snapshot.headerPowerW, 35.0, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(snapshot.headerPowerW), 35.0, accuracy: 0.01)
         XCTAssertEqual(snapshot.batteryDischargeRateW, 0, accuracy: 0.01)
     }
 
-    func testDischargeSnapshotComputedProperties() {
+    func testDischargeSnapshotComputedProperties() throws {
         let snapshot = makeSnapshot(
             systemPowerW: 20.0,
-            batteryPowerW: 20.0,
             acInputW: 0,
             isOnAC: false,
             isCharging: false,
@@ -61,15 +59,14 @@ final class PowerStatusPluginTests: XCTestCase {
 
         XCTAssertFalse(snapshot.effectiveIsOnAC)
         XCTAssertEqual(snapshot.batteryDischargeRateW, 20.0, accuracy: 0.01)
-        XCTAssertEqual(snapshot.headerPowerW, 20.0, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(snapshot.headerPowerW), 20.0, accuracy: 0.01)
         XCTAssertEqual(snapshot.estimatedTimeRemainingMinutes, 120)
         XCTAssertEqual(snapshot.estimatedTimeRemainingText, "2h 0m")
     }
 
-    func testSupplementalDischargeFlowState() {
+    func testSupplementalDischargeFlowState() throws {
         let snapshot = makeSnapshot(
             systemPowerW: 80.0,
-            batteryPowerW: 20.0,
             acInputW: 60.0,
             isOnAC: true,
             isCharging: false,
@@ -78,7 +75,7 @@ final class PowerStatusPluginTests: XCTestCase {
 
         XCTAssertTrue(snapshot.effectiveIsOnAC)
         XCTAssertEqual(snapshot.batteryDischargeRateW, 20.0, accuracy: 0.01)
-        XCTAssertEqual(snapshot.headerPowerW, 80.0, accuracy: 0.01)
+        XCTAssertEqual(try XCTUnwrap(snapshot.headerPowerW), 80.0, accuracy: 0.01)
     }
 
     func testMissingTelemetryReportsChargingInsteadOfDischarge() {
@@ -162,10 +159,11 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(flow, .onAC)
     }
 
-    func testMissingTelemetryChargingDoesNotDoubleCountACInput() {
-        // A 10 W charge rate is the only measured quantity, so the header must
-        // read 10 W. Echoing the rate into the system draw would let
-        // effectiveACOutputW add it back and report 20 W.
+    func testMissingTelemetryChargingLeavesACInputAndSystemLoadUnavailable() {
+        // The pack's charge rate is the only measured quantity. Total AC input
+        // and the system draw are not established by it, so both must read as
+        // unavailable rather than as a false 0 W that the header and diagram
+        // would then present as a real AC output.
         let metrics = PowerStatusSampler.computePowerMetrics(
             telemetry: nil,
             isOnAC: true,
@@ -173,17 +171,24 @@ final class PowerStatusPluginTests: XCTestCase {
             amperage: 1000,
             voltage: 10000
         )
+        guard case .charging(let rateW) = metrics.flowState else {
+            return XCTFail("expected charging, got \(metrics.flowState)")
+        }
+        XCTAssertEqual(rateW, 10.0, accuracy: 0.01)
+        XCTAssertNil(metrics.systemPowerW)
+        XCTAssertNil(metrics.acInputW)
+
         let snapshot = makeSnapshot(
             systemPowerW: metrics.systemPowerW,
-            batteryPowerW: metrics.batteryPowerW,
             acInputW: metrics.acInputW,
             isOnAC: true,
             isCharging: true,
             flowState: metrics.flowState
         )
-
-        XCTAssertEqual(metrics.systemPowerW, 0, accuracy: 0.01)
-        XCTAssertEqual(snapshot.headerPowerW, 10.0, accuracy: 0.01)
+        // The charge rate is still reported on its own.
+        XCTAssertEqual(snapshot.batteryChargeRateW, 10.0, accuracy: 0.01)
+        XCTAssertNil(snapshot.headerPowerW)
+        XCTAssertNil(snapshot.effectiveACOutputW)
 
         // Empty telemetry must take the same path as missing telemetry.
         let emptyTelemetry = PowerStatusSampler.computePowerMetrics(
@@ -193,19 +198,45 @@ final class PowerStatusPluginTests: XCTestCase {
             amperage: 1000,
             voltage: 10000
         )
-        XCTAssertEqual(emptyTelemetry.systemPowerW, 0, accuracy: 0.01)
-        XCTAssertEqual(
-            makeSnapshot(
-                systemPowerW: emptyTelemetry.systemPowerW,
-                batteryPowerW: emptyTelemetry.batteryPowerW,
-                acInputW: emptyTelemetry.acInputW,
-                isOnAC: true,
-                isCharging: true,
-                flowState: emptyTelemetry.flowState
-            ).headerPowerW,
-            10.0,
-            accuracy: 0.01
+        XCTAssertNil(emptyTelemetry.systemPowerW)
+        XCTAssertNil(emptyTelemetry.acInputW)
+    }
+
+    func testMissingTelemetryDischargingStillDerivesSystemLoadFromPackRate() {
+        // Off power the pack is the only source, so its rate does establish the
+        // system draw; there is no adapter input to report either way.
+        let metrics = PowerStatusSampler.computePowerMetrics(
+            telemetry: nil,
+            isOnAC: false,
+            isCharging: false,
+            amperage: -1000,
+            voltage: 10000
         )
+
+        guard case .discharging = metrics.flowState else {
+            return XCTFail("expected discharging, got \(metrics.flowState)")
+        }
+        XCTAssertEqual(metrics.systemPowerW ?? -1, 10.0, accuracy: 0.01)
+        XCTAssertEqual(metrics.acInputW, 0)
+    }
+
+    func testMeasuredZeroStaysDistinctFromUnavailable() {
+        // Telemetry reporting a real 0 W system load has to stay a measured
+        // zero; only a reading that could not be established becomes nil.
+        let metrics = PowerStatusSampler.computePowerMetrics(
+            telemetry: [
+                "SystemLoad": 0,
+                "SystemPowerIn": 20_000,
+                "BatteryPower": 20_000,
+            ],
+            isOnAC: true,
+            isCharging: true,
+            amperage: 2_000,
+            voltage: 10_000
+        )
+
+        XCTAssertEqual(metrics.systemPowerW, 0)
+        XCTAssertEqual(metrics.acInputW, 20.0)
     }
 
     func testUnpluggedWithSystemLoadResolvesToDischarging() {
@@ -403,7 +434,6 @@ final class PowerStatusPluginTests: XCTestCase {
         // Without one, the estimate is computed locally and labelled as such.
         XCTAssertEqual(
             makeSnapshot(
-                batteryPowerW: 12,
                 batteryVoltageMV: 12_000,
                 remainingCapacityMAH: 3_000,
                 flowState: .discharging(rateW: 12)
@@ -617,9 +647,8 @@ final class PowerStatusPluginTests: XCTestCase {
     // MARK: - Helpers
 
     private func makeSnapshot(
-        systemPowerW: Double = 0,
-        batteryPowerW: Double = 0,
-        acInputW: Double = 0,
+        systemPowerW: Double? = nil,
+        acInputW: Double? = nil,
         acAdapterWattage: Int = 0,
         batteryPercent: Int = 0,
         isOnAC: Bool = false,
@@ -643,7 +672,6 @@ final class PowerStatusPluginTests: XCTestCase {
         PowerStatusSnapshot(
             timestamp: Date(),
             systemPowerW: systemPowerW,
-            batteryPowerW: batteryPowerW,
             acInputW: acInputW,
             acAdapterWattage: acAdapterWattage,
             batteryPercent: batteryPercent,

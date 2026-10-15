@@ -123,7 +123,9 @@ final class PowerStatusViewModel: ObservableObject {
         if case .supplementalDischarge = data.flowState {
             instant = data.batteryDischargeRateW
         } else {
-            instant = max(data.systemPowerW, data.batteryDischargeRateW)
+            // Only a measured system draw can raise the estimate; an
+            // unavailable one leaves the pack rate to speak for itself.
+            instant = max(data.systemPowerW ?? 0, data.batteryDischargeRateW)
         }
         guard instant >= 0.2 else { return dischargeEMA }
 

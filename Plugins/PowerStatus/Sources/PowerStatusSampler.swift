@@ -58,7 +58,7 @@ enum PowerStatusSampler {
         // Power telemetry
         let telemetry = extractDict(from: props, key: "PowerTelemetryData")
 
-        let (systemPowerW, batteryPowerW, acInputW, flowState) = computePowerMetrics(
+        let (systemPowerW, acInputW, flowState) = computePowerMetrics(
             telemetry: telemetry,
             isOnAC: isOnAC,
             isCharging: isCharging,
@@ -69,7 +69,6 @@ enum PowerStatusSampler {
         return PowerStatusSnapshot(
             timestamp: Date(),
             systemPowerW: systemPowerW,
-            batteryPowerW: batteryPowerW,
             acInputW: acInputW,
             acAdapterWattage: acAdapterWattage,
             batteryPercent: batteryPercent,
@@ -107,13 +106,18 @@ enum PowerStatusSampler {
 
     /// Pure power-path computation. Internal so the plugin tests can pin the
     /// no-telemetry fallback, which must not report charging as a discharge.
+    ///
+    /// `systemPowerW` and `acInputW` are optional because a reading that could
+    /// not be established is not the same as a measured zero: the UI prints the
+    /// former as an em dash. The pack's own rate stays available through
+    /// `flowState` either way.
     static func computePowerMetrics(
         telemetry: [String: Any]?,
         isOnAC: Bool,
         isCharging: Bool,
         amperage: Int?,
         voltage: Int?
-    ) -> (systemPowerW: Double, batteryPowerW: Double, acInputW: Double, flowState: PowerFlowState) {
+    ) -> (systemPowerW: Double?, acInputW: Double?, flowState: PowerFlowState) {
 
         let amperagePowerW: Double? = {
             guard let a = amperage, let v = voltage, a != 0, v > 0 else { return nil }
@@ -139,35 +143,50 @@ enum PowerStatusSampler {
                 batteryPowerFromTelemetry: batteryPowerFromTelemetry
             )
 
-            let (systemPowerW, batteryPowerW) = computePowerFromFlow(
+            let systemPowerW = computePowerFromFlow(
                 flow: flow,
                 isOnAC: isOnAC,
                 acInputW: acInputW,
                 systemLoadW: systemLoadW,
                 batteryPowerFromTelemetry: batteryPowerFromTelemetry
-            )
+            ).systemPowerW
 
-            return (systemPowerW, batteryPowerW, acInputW, flow)
+            return (systemPowerW, acInputW, flow)
         }
 
         // Fallback: classify from signed Amperage x Voltage only, using the same
-        // rule as the raw-current branch in resolveBatteryFlow.
-        let raw = flowFromRawCurrent(
+        // rule as the raw-current branch in resolveBatteryFlow. The pack's
+        // current is the only measured quantity there, so any reading it cannot
+        // establish stays `nil` and the UI prints it as an em dash instead of a
+        // false `0 W`.
+        let flow = flowFromRawCurrent(
             amperagePowerW: amperagePowerW,
             isOnAC: isOnAC,
             isChargingFlag: isCharging
-        )
-        // Without telemetry the battery rate is the only measured quantity. For
-        // charging it must not be echoed into the system draw, because
-        // `effectiveACOutputW` would add it back and report double the real AC
-        // input. Every other flow keeps its rate as the system draw so the
-        // header does not drop to a false 0 W while the pack feeds the machine.
-        let systemPowerW: Double = {
-            if case .charging = raw.flow { return 0 }
-            return abs(raw.batteryPowerW)
-        }()
-        // AC input is unknown without telemetry, so it reads zero.
-        return (systemPowerW, raw.batteryPowerW, 0, raw.flow)
+        ).flow
+
+        switch flow {
+        case .charging:
+            // The measured rate is what the pack takes in. The adapter also
+            // feeds the machine, so total AC input and the system draw are not
+            // established by it. Reporting either as 0 W would contradict the
+            // charge rate shown beside them.
+            return (nil, nil, flow)
+        case .supplementalDischarge:
+            // How much of the load the adapter carries is unknown; so is the
+            // total the two sources supply.
+            return (nil, nil, flow)
+        case .onAC:
+            // On power with no measurable current: no draw is known.
+            return (nil, nil, flow)
+        case .discharging(let rate):
+            // Off power the pack is the only source, so its rate is the system
+            // draw. There is no AC input to report.
+            return (rate, 0, flow)
+        case .idle:
+            // Off power and drawing nothing measurable.
+            return (0, 0, flow)
+        }
     }
 
     /// Classifies from signed Amperage x Voltage alone. IOKit reports that
@@ -370,13 +389,6 @@ enum PowerStatusSampler {
         if let intVal = value as? Int { return intVal }
         if let numVal = value as? NSNumber { return numVal.intValue }
         if let doubleVal = value as? Double { return Int(doubleVal) }
-        return nil
-    }
-
-    private static func extractString(from dict: [String: Any], key: String) -> String? {
-        guard let value = dict[key] else { return nil }
-        if let strVal = value as? String { return strVal }
-        if let numVal = value as? NSNumber { return numVal.stringValue }
         return nil
     }
 
