@@ -1,0 +1,192 @@
+{
+  "id": "power-status",
+  "displayName": "电源状态",
+  "summary": "实时查看系统功耗、电池状态和充电信息",
+  "localizedMetadata": {
+    "ar": {
+      "displayName": "حالة الطاقة",
+      "summary": "عرض استهلاك الطاقة وحالة البطارية ومعلومات الشحن في الوقت الفعلي."
+    },
+    "de": {
+      "displayName": "Energiezustand",
+      "summary": "Live-Anzeige von Energieverbrauch, Batteriestatus und Ladeinformationen."
+    },
+    "en": {
+      "displayName": "Power Status",
+      "summary": "View live system power consumption, battery status, and charging details."
+    },
+    "es": {
+      "displayName": "Estado de energía",
+      "summary": "Consulta el consumo de energía del sistema, el estado de la batería y los detalles de carga en vivo."
+    },
+    "fr": {
+      "displayName": "État de l'alimentation",
+      "summary": "Affichez la consommation d'énergie, l'état de la batterie et les détails de charge en direct."
+    },
+    "ja": {
+      "displayName": "電源状態",
+      "summary": "システムの電力消費、バッテリー状態、充電情報をリアルタイムで表示します。"
+    },
+    "ko": {
+      "displayName": "전원 상태",
+      "summary": "시스템 전력 소비, 배터리 상태 및 충전 정보를 실시간으로 확인하세요."
+    },
+    "pt": {
+      "displayName": "Status de energia",
+      "summary": "Veja o consumo de energia do sistema, o estado da bateria e os detalhes de carregamento ao vivo."
+    },
+    "ru": {
+      "displayName": "Состояние питания",
+      "summary": "Просмотр энергопотребления системы, состояния батареи и информации о зарядке в реальном времени."
+    },
+    "tr": {
+      "displayName": "Güç Durumu",
+      "summary": "Sistem güç tüketimini, pil durumunu ve şarj bilgilerini canlı olarak görüntüleyin."
+    },
+    "zh-Hans": {
+      "displayName": "电源状态",
+      "summary": "实时查看系统功耗、电池状态和充电信息"
+    },
+    "zh-Hant": {
+      "displayName": "電源狀態",
+      "summary": "即時查看系統功耗、電池狀態和充電資訊"
+    }
+  },
+  "productStrings": {
+    "display-name": "@displayName",
+    "summary": "@summary"
+  },
+  "version": "1.0.0",
+  "minHostVersion": "2.0.1",
+  "pluginKitVersion": 7,
+  "bundleRelativePath": "PowerStatus.bundle",
+  "factoryClass": "PowerStatusPlugin.PowerStatusPluginFactory",
+  "build": {
+    "project": "../../MacTools.xcodeproj",
+    "scheme": "PowerStatusPlugin"
+  },
+  "capabilities": {
+    "panelItems": [
+      "widget"
+    ],
+    "settings": "none"
+  },
+  "permissions": [],
+  "category": "monitoring",
+  "presentation": {
+    "longDescription": "@productStrings.summary",
+    "examples": [
+      {
+        "id": "primary-use",
+        "text": "@productStrings.summary"
+      }
+    ],
+    "screenshots": [],
+    "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+    "supportURL": "https://github.com/ggbond268/MacTools/issues",
+    "publisher": "MacTools",
+    "license": "GPL-3.0-only"
+  },
+  "discovery": {
+    "keywords": [
+      "power",
+      "battery",
+      "charging",
+      "thermal",
+      "wattage"
+    ],
+    "localizedSynonyms": {
+      "ar": [
+        "حالة الطاقة"
+      ],
+      "de": [
+        "Energiezustand"
+      ],
+      "en": [
+        "Power Status"
+      ],
+      "es": [
+        "Estado de energía"
+      ],
+      "fr": [
+        "État de l'alimentation"
+      ],
+      "ja": [
+        "電源状態"
+      ],
+      "ko": [
+        "전원 상태"
+      ],
+      "pt": [
+        "Status de energia"
+      ],
+      "ru": [
+        "Состояние питания"
+      ],
+      "tr": [
+        "Güç Durumu"
+      ],
+      "zh-Hans": [
+        "电源状态"
+      ],
+      "zh-Hant": [
+        "電源狀態"
+      ]
+    },
+    "useCases": [
+      {
+        "id": "primary-use",
+        "title": "@productStrings.display-name"
+      }
+    ],
+    "goalCategories": [
+      "monitoring"
+    ],
+    "relatedPluginIDs": [
+      "device-battery",
+      "system-status"
+    ],
+    "alternativePluginIDs": []
+  },
+  "requirements": {
+    "minimumMacOSVersion": "14.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "hardware": [],
+    "applications": [],
+    "executables": [],
+    "permissionIDs": [],
+    "setupComplexity": "none",
+    "requiresRelaunch": false
+  },
+  "privacy": {
+    "dataObserved": [
+      "power-telemetry"
+    ],
+    "dataPersisted": [],
+    "retention": {
+      "policy": "user-controlled"
+    },
+    "networkUse": "none",
+    "networkDomains": [],
+    "allowsUserConfiguredDomains": false,
+    "telemetry": "none",
+    "processesSensitiveUserContent": false,
+    "diagnosticExportsContainUserData": false
+  },
+  "setup": {
+    "steps": [],
+    "optionalSurfaces": []
+  },
+  "relationships": {
+    "relatedPluginIDs": [
+      "device-battery",
+      "system-status"
+    ],
+    "includedPackIDs": [],
+    "suggestedRecipeIDs": [],
+    "supersedesPluginIDs": []
+  }
+}

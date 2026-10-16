@@ -18341,6 +18341,231 @@
     {
       "capabilities": {
         "panelItems": [
+          "widget"
+        ],
+        "settings": "none"
+      },
+      "category": "monitoring",
+      "displayName": "电源状态",
+      "id": "power-status",
+      "localizedMetadata": {
+        "ar": {
+          "displayName": "حالة الطاقة",
+          "summary": "عرض استهلاك الطاقة وحالة البطارية ومعلومات الشحن في الوقت الفعلي."
+        },
+        "de": {
+          "displayName": "Energiezustand",
+          "summary": "Live-Anzeige von Energieverbrauch, Batteriestatus und Ladeinformationen."
+        },
+        "en": {
+          "displayName": "Power Status",
+          "summary": "View live system power consumption, battery status, and charging details."
+        },
+        "es": {
+          "displayName": "Estado de energía",
+          "summary": "Consulta el consumo de energía del sistema, el estado de la batería y los detalles de carga en vivo."
+        },
+        "fr": {
+          "displayName": "État de l'alimentation",
+          "summary": "Affichez la consommation d'énergie, l'état de la batterie et les détails de charge en direct."
+        },
+        "ja": {
+          "displayName": "電源状態",
+          "summary": "システムの電力消費、バッテリー状態、充電情報をリアルタイムで表示します。"
+        },
+        "ko": {
+          "displayName": "전원 상태",
+          "summary": "시스템 전력 소비, 배터리 상태 및 충전 정보를 실시간으로 확인하세요."
+        },
+        "pt": {
+          "displayName": "Status de energia",
+          "summary": "Veja o consumo de energia do sistema, o estado da bateria e os detalhes de carregamento ao vivo."
+        },
+        "ru": {
+          "displayName": "Состояние питания",
+          "summary": "Просмотр энергопотребления системы, состояния батареи и информации о зарядке в реальном времени."
+        },
+        "tr": {
+          "displayName": "Güç Durumu",
+          "summary": "Sistem güç tüketimini, pil durumunu ve şarj bilgilerini canlı olarak görüntüleyin."
+        },
+        "zh-Hans": {
+          "displayName": "电源状态",
+          "summary": "实时查看系统功耗、电池状态和充电信息"
+        },
+        "zh-Hant": {
+          "displayName": "電源狀態",
+          "summary": "即時查看系統功耗、電池狀態和充電資訊"
+        }
+      },
+      "openInMacToolsURL": "mactools://app/settings/plugins/marketplace/power-status",
+      "product": {
+        "actions": null,
+        "discovery": {
+          "alternativePluginIDs": [],
+          "goalCategories": [
+            "monitoring"
+          ],
+          "keywords": [
+            "power",
+            "battery",
+            "charging",
+            "thermal",
+            "wattage"
+          ],
+          "localizedSynonyms": {
+            "ar": [
+              "حالة الطاقة"
+            ],
+            "de": [
+              "Energiezustand"
+            ],
+            "en": [
+              "Power Status"
+            ],
+            "es": [
+              "Estado de energía"
+            ],
+            "fr": [
+              "État de l'alimentation"
+            ],
+            "ja": [
+              "電源状態"
+            ],
+            "ko": [
+              "전원 상태"
+            ],
+            "pt": [
+              "Status de energia"
+            ],
+            "ru": [
+              "Состояние питания"
+            ],
+            "tr": [
+              "Güç Durumu"
+            ],
+            "zh-Hans": [
+              "电源状态"
+            ],
+            "zh-Hant": [
+              "電源狀態"
+            ]
+          },
+          "relatedPluginIDs": [
+            "device-battery",
+            "system-status"
+          ],
+          "useCases": [
+            {
+              "id": "primary-use",
+              "title": {
+                "ar": "حالة الطاقة",
+                "de": "Energiezustand",
+                "en": "Power Status",
+                "es": "Estado de energía",
+                "fr": "État de l'alimentation",
+                "ja": "電源状態",
+                "ko": "전원 상태",
+                "pt": "Status de energia",
+                "ru": "Состояние питания",
+                "tr": "Güç Durumu",
+                "zh-Hans": "电源状态",
+                "zh-Hant": "電源狀態"
+              }
+            }
+          ]
+        },
+        "presentation": {
+          "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+          "examples": [
+            {
+              "id": "primary-use",
+              "text": {
+                "ar": "عرض استهلاك الطاقة وحالة البطارية ومعلومات الشحن في الوقت الفعلي.",
+                "de": "Live-Anzeige von Energieverbrauch, Batteriestatus und Ladeinformationen.",
+                "en": "View live system power consumption, battery status, and charging details.",
+                "es": "Consulta el consumo de energía del sistema, el estado de la batería y los detalles de carga en vivo.",
+                "fr": "Affichez la consommation d'énergie, l'état de la batterie et les détails de charge en direct.",
+                "ja": "システムの電力消費、バッテリー状態、充電情報をリアルタイムで表示します。",
+                "ko": "시스템 전력 소비, 배터리 상태 및 충전 정보를 실시간으로 확인하세요.",
+                "pt": "Veja o consumo de energia do sistema, o estado da bateria e os detalhes de carregamento ao vivo.",
+                "ru": "Просмотр энергопотребления системы, состояния батареи и информации о зарядке в реальном времени.",
+                "tr": "Sistem güç tüketimini, pil durumunu ve şarj bilgilerini canlı olarak görüntüleyin.",
+                "zh-Hans": "实时查看系统功耗、电池状态和充电信息",
+                "zh-Hant": "即時查看系統功耗、電池狀態和充電資訊"
+              }
+            }
+          ],
+          "license": "GPL-3.0-only",
+          "longDescription": {
+            "ar": "عرض استهلاك الطاقة وحالة البطارية ومعلومات الشحن في الوقت الفعلي.",
+            "de": "Live-Anzeige von Energieverbrauch, Batteriestatus und Ladeinformationen.",
+            "en": "View live system power consumption, battery status, and charging details.",
+            "es": "Consulta el consumo de energía del sistema, el estado de la batería y los detalles de carga en vivo.",
+            "fr": "Affichez la consommation d'énergie, l'état de la batterie et les détails de charge en direct.",
+            "ja": "システムの電力消費、バッテリー状態、充電情報をリアルタイムで表示します。",
+            "ko": "시스템 전력 소비, 배터리 상태 및 충전 정보를 실시간으로 확인하세요.",
+            "pt": "Veja o consumo de energia do sistema, o estado da bateria e os detalhes de carregamento ao vivo.",
+            "ru": "Просмотр энергопотребления системы, состояния батареи и информации о зарядке в реальном времени.",
+            "tr": "Sistem güç tüketimini, pil durumunu ve şarj bilgilerini canlı olarak görüntüleyin.",
+            "zh-Hans": "实时查看系统功耗、电池状态和充电信息",
+            "zh-Hant": "即時查看系統功耗、電池狀態和充電資訊"
+          },
+          "publisher": "MacTools",
+          "screenshots": [],
+          "supportURL": "https://github.com/ggbond268/MacTools/issues"
+        },
+        "privacy": {
+          "allowsUserConfiguredDomains": false,
+          "dataObserved": [
+            "power-telemetry"
+          ],
+          "dataPersisted": [],
+          "diagnosticExportsContainUserData": false,
+          "networkDomains": [],
+          "networkUse": "none",
+          "processesSensitiveUserContent": false,
+          "retention": {
+            "policy": "user-controlled"
+          },
+          "telemetry": "none"
+        },
+        "relationships": {
+          "includedPackIDs": [],
+          "relatedPluginIDs": [
+            "device-battery",
+            "system-status"
+          ],
+          "suggestedRecipeIDs": [],
+          "supersedesPluginIDs": []
+        },
+        "requirements": {
+          "applications": [],
+          "architectures": [
+            "arm64",
+            "x86_64"
+          ],
+          "executables": [],
+          "hardware": [],
+          "minimumMacOSVersion": "14.0",
+          "permissionIDs": [],
+          "requiresRelaunch": false,
+          "setupComplexity": "none"
+        },
+        "setup": {
+          "optionalSurfaces": [],
+          "steps": []
+        }
+      },
+      "releaseChannel": null,
+      "releaseNotesURL": null,
+      "route": "/plugins/power-status/",
+      "summary": "实时查看系统功耗、电池状态和充电信息",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
+        "panelItems": [
           "row",
           "widget"
         ],
