@@ -81,10 +81,11 @@ actor VisionRecognition {
             request.usesLanguageCorrection = true
             request.recognitionLanguages = Self.languages
             try handler.perform([request])
-            let lines = (request.results ?? [])
-                .sorted { $0.boundingBox.minY > $1.boundingBox.minY }
-                .compactMap { $0.topCandidates(1).first?.string }
-            result = RecognitionResult(lines: lines)
+            let fragments = (request.results ?? []).compactMap { observation -> TextLayout.Fragment? in
+                guard let text = observation.topCandidates(1).first?.string else { return nil }
+                return TextLayout.Fragment(text: text, box: observation.boundingBox)
+            }
+            result = RecognitionResult(lines: TextLayout.lines(from: fragments))
         case .barcode:
             let request = VNDetectBarcodesRequest()
             try handler.perform([request])
@@ -97,13 +98,14 @@ actor VisionRecognition {
     }
 
     func warmUp() async {
-        guard let ctx = CGContext(data: nil, width: 120, height: 40, bitsPerComponent: 8, bytesPerRow: 0,
+        guard let ctx = CGContext(data: nil, width: 200, height: 40, bitsPerComponent: 8, bytesPerRow: 0,
                                   space: CGColorSpaceCreateDeviceRGB(),
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
         else { return }
         ctx.setFillColor(CGColor.white)
-        ctx.fill(CGRect(x: 0, y: 0, width: 120, height: 40))
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "Warm up", attributes: [
+        ctx.fill(CGRect(x: 0, y: 0, width: 200, height: 40))
+        // Include Chinese so the first Chinese recognition does not load its model on demand.
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: "预热 Warm up", attributes: [
             .font: NSFont.systemFont(ofSize: 20), .foregroundColor: NSColor.black,
         ]))
         ctx.textPosition = CGPoint(x: 6, y: 12)

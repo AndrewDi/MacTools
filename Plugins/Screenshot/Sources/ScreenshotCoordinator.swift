@@ -13,9 +13,14 @@ final class ScreenshotCoordinator {
     private let overlayPool: CaptureOverlayPool
     private var controller: CaptureController?
     private var recorder: AnyObject?
+    /// A recorder whose capture has ended while its auto-zoom movie renders. It does not block other modes.
+    private var processingRecorder: AnyObject?
     private var scrollSession: ScrollSession?
     private var exportTask: Task<Void, Never>?
     private var generation: UInt64 = 0
+    /// Changes only when the plugin cancels all work. A recording can finish while a later screenshot
+    /// is in progress, so its messages must not depend on `generation`.
+    private(set) var sessionToken: UInt64 = 0
 
     init(environment: ScreenshotEnvironment) {
         self.environment = environment
@@ -62,13 +67,17 @@ final class ScreenshotCoordinator {
 
     func cancel() {
         generation &+= 1
+        sessionToken &+= 1
         exportTask?.cancel()
         exportTask = nil
         controller?.onFinish = nil
         controller?.dismiss()
         controller = nil
         scrollSession?.cancel()
-        if #available(macOS 15, *), let recorder = recorder as? Recorder { recorder.cancel() }
+        if #available(macOS 15, *) {
+            (recorder as? Recorder)?.cancel()
+            (processingRecorder as? Recorder)?.cancel()
+        }
         environment.closeAll()
         overlayPool.release()
         onStateChange?()
@@ -79,28 +88,56 @@ final class ScreenshotCoordinator {
             report(environment.string("record.requiresNewerSystem", "录屏需要 macOS 15 或更高版本"))
             return
         }
-        let requestGeneration = generation
+        guard processingRecorder == nil else {
+            report(environment.string("record.processingBusy", "正在生成自动缩放视频，请稍后再录制"))
+            return
+        }
+        let requestSession = sessionToken
         let session = Recorder(region: request, environment: environment)
         recorder = session
-        session.onFinish = { [weak self, weak session] result in
+        session.onProcessing = { [weak self, weak session] in
             guard let self, let session, recorder === session else { return }
             recorder = nil
+            processingRecorder = session
             onStateChange?()
-            guard generation == requestGeneration else { return }
-            switch result {
-            case .success(let url):
-                let folderName = FileManager.default.displayName(atPath: url.deletingLastPathComponent().path)
-                environment.showToast(environment.format("record.saved", "录屏已保存到「%@」", folderName))
-            case .failure(let error):
-                guard !(error is CancellationError) else { return }
-                let message = error is RecordingError
-                    ? environment.string("record.unsupportedResolution", "当前区域超出硬件编码能力，请缩小录制范围")
-                    : environment.captureErrorDescription(error)
-                report(environment.format("record.failed", "录屏失败：%@", message))
-            }
+        }
+        session.onFinish = { [weak self, weak session] result in
+            guard let self, let session else { return }
+            if recorder === session { recorder = nil }
+            else if processingRecorder === session { processingRecorder = nil }
+            else { return }
+            onStateChange?()
+            recordingFinished(result, session: requestSession)
         }
         onStateChange?()
         session.start()
+    }
+
+    /// Reports a finished recording unless the plugin cancelled its session.
+    func recordingFinished(_ result: Result<URL, Error>, session: UInt64) {
+        guard session == sessionToken else { return }
+        switch result {
+        case .success(let url):
+            let folderName = FileManager.default.displayName(atPath: url.deletingLastPathComponent().path)
+            environment.showToast(environment.format("record.saved", "录屏已保存到「%@」", folderName))
+        case .failure(let error as RecordingProcessingError):
+            let name = error.original.lastPathComponent
+            environment.showToast(error.cause is CancellationError
+                ? environment.format("record.processingCancelled", "已保留原始录像：%@", name)
+                : environment.format("record.processingFailed", "自动缩放生成失败，已保留原始录像：%@", name))
+        case .failure(let error):
+            guard !(error is CancellationError) else { return }
+            let message: String
+            switch error {
+            case is RecordingError:
+                message = environment.string("record.unsupportedResolution", "当前区域超出硬件编码能力，请缩小录制范围")
+            case is RecordingZoomError:
+                message = environment.string("record.pointerMonitorUnavailable", "无法读取鼠标操作，请重试或关闭自动缩放")
+            default:
+                message = environment.captureErrorDescription(error)
+            }
+            report(environment.format("record.failed", "录屏失败：%@", message))
+        }
     }
 
     private func startScroll(_ request: CaptureRegion) {
