@@ -109,6 +109,9 @@ final class AutoInputPlugin: MacToolsPlugin, PluginApplicationActivityStateHandl
             functionKeyController: functionKeyController ?? SystemAutoInputFunctionKeyController(),
             switchErrorMessage: {
                 localization.string("error.switchFailed", defaultValue: "无法切换输入法")
+            },
+            keyboardModeErrorMessage: {
+                localization.string("error.keyboardModeFailed", defaultValue: "无法更改顶部按键用途")
             }
         )
         self.localization = localization
@@ -126,7 +129,9 @@ final class AutoInputPlugin: MacToolsPlugin, PluginApplicationActivityStateHandl
             isEnabled: true,
             isAvailable: true,
             detail: nil,
-            errorMessage: persistenceErrorMessage ?? controller.errorMessage
+            errorMessage: persistenceErrorMessage
+                ?? controller.keyboardModeError
+                ?? controller.errorMessage
         )
     }
 

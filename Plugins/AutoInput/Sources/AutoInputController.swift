@@ -168,6 +168,7 @@ private struct AutoInputHUDReminderPreferences: Equatable {
 final class AutoInputController: ObservableObject {
     @Published private(set) var sources: [AutoInputSource] = []
     @Published private(set) var errorMessage: String?
+    @Published private(set) var keyboardModeError: String?
     @Published private(set) var isAccessibilityGranted: Bool
 
     var onStateChange: (() -> Void)?
@@ -182,6 +183,7 @@ final class AutoInputController: ObservableObject {
     private let functionKeyController: AutoInputFunctionKeyControlling
     private let applicationNotificationCenter: NotificationCenter
     private let switchErrorMessage: () -> String
+    private let keyboardModeErrorMessage: () -> String
     private let now: () -> TimeInterval
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -219,7 +221,8 @@ final class AutoInputController: ObservableObject {
         functionKeyController: AutoInputFunctionKeyControlling = SystemAutoInputFunctionKeyController(),
         applicationNotificationCenter: NotificationCenter = .default,
         now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
-        switchErrorMessage: @escaping () -> String = { "无法切换输入法" }
+        switchErrorMessage: @escaping () -> String = { "无法切换输入法" },
+        keyboardModeErrorMessage: @escaping () -> String = { "无法更改顶部按键用途" }
     ) {
         self.store = store
         self.sourceController = sourceController
@@ -232,6 +235,7 @@ final class AutoInputController: ObservableObject {
         self.applicationNotificationCenter = applicationNotificationCenter
         self.now = now
         self.switchErrorMessage = switchErrorMessage
+        self.keyboardModeErrorMessage = keyboardModeErrorMessage
         self.sources = sourceController.sources
         self.isAccessibilityGranted = accessibilityCheck.isTrusted
         self.appliedHUDReminderPreferences = AutoInputHUDReminderPreferences(
@@ -269,7 +273,6 @@ final class AutoInputController: ObservableObject {
         guard isStarted else { return }
         operationGeneration += 1
         restoreStandardFunctionKeysIfNeeded()
-        restoreStandardFunctionKeys = nil
         stopFocusMonitoring()
         stopApplicationMonitoring()
         stopSourceMonitoring()
@@ -611,24 +614,45 @@ final class AutoInputController: ObservableObject {
             restoreStandardFunctionKeys = functionKeyController.isStandardFunctionKeysEnabled
         }
         guard appliedStandardFunctionKeys != isEnabled else { return }
-        appliedStandardFunctionKeys = isEnabled
-        if !functionKeyController.setStandardFunctionKeysEnabled(isEnabled) {
-            logger.error("Failed to update the standard function key preference")
+        guard functionKeyController.setStandardFunctionKeysEnabled(isEnabled) else {
+            logger.error("Failed to apply the standard function key mode")
+            if appliedStandardFunctionKeys == nil {
+                // Nothing was applied, so the next attempt captures a fresh baseline.
+                restoreStandardFunctionKeys = nil
+            }
+            keyboardModeError = keyboardModeErrorMessage()
+            onStateChange?()
+            return
         }
+        appliedStandardFunctionKeys = isEnabled
+        clearKeyboardModeErrorIfNeeded()
     }
 
     /// Returns the top row to the value it had before the plugin started managing it.
     private func restoreStandardFunctionKeysIfNeeded() {
-        if appliedStandardFunctionKeys != nil {
-            appliedStandardFunctionKeys = nil
-            if let restoreStandardFunctionKeys,
-               functionKeyController.isStandardFunctionKeysEnabled != restoreStandardFunctionKeys,
-               !functionKeyController.setStandardFunctionKeysEnabled(restoreStandardFunctionKeys) {
-                logger.error("Failed to restore the standard function key preference")
-            }
+        guard appliedStandardFunctionKeys != nil, let originalValue = restoreStandardFunctionKeys
+        else {
+            // Nothing is being managed, so any earlier failure is no longer actionable.
+            clearKeyboardModeErrorIfNeeded()
+            return
         }
-        // While unmanaged, keep returning to the user's current System Settings choice.
-        restoreStandardFunctionKeys = functionKeyController.isStandardFunctionKeysEnabled
+        if functionKeyController.isStandardFunctionKeysEnabled != originalValue,
+           !functionKeyController.setStandardFunctionKeysEnabled(originalValue) {
+            // Keep the original value so a later refresh can retry the restore.
+            logger.error("Failed to restore the standard function key preference")
+            keyboardModeError = keyboardModeErrorMessage()
+            onStateChange?()
+            return
+        }
+        appliedStandardFunctionKeys = nil
+        restoreStandardFunctionKeys = nil
+        clearKeyboardModeErrorIfNeeded()
+    }
+
+    private func clearKeyboardModeErrorIfNeeded() {
+        guard keyboardModeError != nil else { return }
+        keyboardModeError = nil
+        onStateChange?()
     }
 
     private func handleEditableFocusChanged(_ focus: AutoInputEditableFocus?) {
