@@ -19,6 +19,8 @@ struct KeyStatsComponentView: View {
     @Environment(\.pluginComponentTheme) private var theme
     @State private var hoveredKeyDate: String?
     @State private var hoveredTrackpadDate: String?
+    @State private var keyHoverPoint: CGPoint?
+    @State private var trackpadHoverPoint: CGPoint?
 
     private var today: KeyStatsDailyStats {
         controller.todayStats
@@ -149,13 +151,15 @@ struct KeyStatsComponentView: View {
                 title: localization.string("chart.keys.title", defaultValue: "按键趋势"),
                 value: \.totalKeyPresses,
                 color: theme.dataSeries.primary,
-                hoveredDate: $hoveredKeyDate
+                hoveredDate: $hoveredKeyDate,
+                hoverLocation: $keyHoverPoint
             )
             miniChart(
                 title: localization.string("chart.trackpad.title", defaultValue: "触控板趋势"),
                 value: \.trackpadUses,
                 color: theme.dataSeries.secondary,
-                hoveredDate: $hoveredTrackpadDate
+                hoveredDate: $hoveredTrackpadDate,
+                hoverLocation: $trackpadHoverPoint
             )
         }
     }
@@ -164,7 +168,8 @@ struct KeyStatsComponentView: View {
         title: String,
         value: KeyPath<KeyStatsDailyStats, Int>,
         color: Color,
-        hoveredDate: Binding<String?>
+        hoveredDate: Binding<String?>,
+        hoverLocation: Binding<CGPoint?>
     ) -> some View {
         let hasData = days.contains { $0[keyPath: value] > 0 }
         let hoveredDay = days.first { $0.date == hoveredDate.wrappedValue }
@@ -178,19 +183,6 @@ struct KeyStatsComponentView: View {
                     .font(PluginTypography.caption.font)
                     .foregroundStyle(theme.text.secondary)
                     .lineLimit(1)
-
-                Spacer(minLength: 4)
-
-                if let hoveredDay,
-                   let hoveredDateValue = date(from: hoveredDay.date) {
-                    Text(
-                        "\(KeyStatsFormatting.compactMonthDay(hoveredDateValue)) "
-                            + KeyStatsFormatting.decimal(hoveredDay[keyPath: value])
-                    )
-                    .font(PluginTypography.caption.font.monospacedDigit())
-                    .foregroundStyle(theme.text.primary)
-                    .lineLimit(1)
-                }
             }
 
             ZStack {
@@ -226,7 +218,11 @@ struct KeyStatsComponentView: View {
                 .chartYAxis(.hidden)
                 .chartOverlay { proxy in
                     if hasData {
-                        chartHoverOverlay(proxy: proxy, hoveredDate: hoveredDate)
+                        chartHoverOverlay(
+                            proxy: proxy,
+                            hoveredDate: hoveredDate,
+                            hoverLocation: hoverLocation
+                        )
                     }
                 }
 
@@ -237,12 +233,37 @@ struct KeyStatsComponentView: View {
                 }
             }
             .frame(height: 54)
+            .overlay {
+                if let hoveredDay, let point = hoverLocation.wrappedValue {
+                    GeometryReader { geometry in
+                        Text(KeyStatsFormatting.decimal(hoveredDay[keyPath: value]))
+                            .font(PluginTypography.caption.font.monospacedDigit())
+                            .foregroundStyle(theme.text.primary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(
+                                theme.surfaces.backplate,
+                                in: RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            )
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                    .strokeBorder(theme.surfaces.track, lineWidth: 1)
+                            }
+                            .position(
+                                x: min(max(point.x, 28), max(geometry.size.width - 28, 28)),
+                                y: max(point.y - 14, 12)
+                            )
+                    }
+                    .allowsHitTesting(false)
+                }
+            }
         }
     }
 
     private func chartHoverOverlay(
         proxy: ChartProxy,
-        hoveredDate: Binding<String?>
+        hoveredDate: Binding<String?>,
+        hoverLocation: Binding<CGPoint?>
     ) -> some View {
         GeometryReader { geometry in
             Rectangle()
@@ -272,8 +293,10 @@ struct KeyStatsComponentView: View {
                         }
 
                         hoveredDate.wrappedValue = closest
+                        hoverLocation.wrappedValue = closest == nil ? nil : location
                     case .ended:
                         hoveredDate.wrappedValue = nil
+                        hoverLocation.wrappedValue = nil
                     }
                 }
         }
