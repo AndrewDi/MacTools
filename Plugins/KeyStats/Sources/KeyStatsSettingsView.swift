@@ -184,15 +184,13 @@ struct KeyStatsSettingsView: View {
             historyChart(
                 title: localization.string("chart.keys.title", defaultValue: "按键趋势"),
                 value: \.totalKeyPresses,
-                color: .accentColor,
-                height: 120
+                color: .accentColor
             )
 
             historyChart(
                 title: localization.string("chart.trackpad.title", defaultValue: "触控板趋势"),
                 value: \.trackpadUses,
-                color: Color(nsColor: .systemTeal),
-                height: 72
+                color: Color(nsColor: .systemTeal)
             )
         }
         .padding(PluginSettingsTheme.Spacing.cardContent)
@@ -202,8 +200,7 @@ struct KeyStatsSettingsView: View {
     private func historyChart(
         title: String,
         value: KeyPath<KeyStatsDailyStats, Int>,
-        color: Color,
-        height: CGFloat
+        color: Color
     ) -> some View {
         let hasData = days.contains { $0[keyPath: value] > 0 }
 
@@ -221,7 +218,7 @@ struct KeyStatsSettingsView: View {
                 Chart {
                     ForEach(hasData ? days : []) { day in
                         BarMark(
-                            x: .value("Day", dayLabel(day.date)),
+                            x: .value("Day", day.date),
                             y: .value("Count", day[keyPath: value])
                         )
                         .foregroundStyle(color)
@@ -242,10 +239,10 @@ struct KeyStatsSettingsView: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .automatic) { mark in
+                    AxisMarks(values: days.map(\.date)) { mark in
                         AxisValueLabel {
                             if let label = mark.as(String.self) {
-                                Text(label)
+                                Text(KeyStatsFormatting.monthDay(date(from: label)))
                                     .font(PluginSettingsTheme.Typography.rowDescription)
                                     .foregroundStyle(.secondary)
                             }
@@ -259,7 +256,7 @@ struct KeyStatsSettingsView: View {
                         .foregroundStyle(.tertiary)
                 }
             }
-            .frame(height: height)
+            .frame(height: 120)
         }
     }
 
@@ -404,22 +401,6 @@ struct KeyStatsSettingsView: View {
         }
     }
 
-    private func dayLabel(_ dateKey: String) -> String {
-        let todayKey = today.date
-        let date = date(from: dateKey)
-
-        if dateKey == todayKey {
-            return localization.string("date.today", defaultValue: "今天")
-        }
-
-        if let previous = Calendar.autoupdatingCurrent.date(byAdding: .day, value: -1, to: Date()),
-           dateKey == dateKeyString(previous) {
-            return localization.string("date.yesterday", defaultValue: "昨天")
-        }
-
-        return KeyStatsFormatting.weekday(date)
-    }
-
     private func date(from dateKey: String) -> Date {
         let components = dateKey.split(separator: "-").compactMap { Int($0) }
         guard components.count == 3 else {
@@ -431,15 +412,5 @@ struct KeyStatsSettingsView: View {
         dateComponents.month = components[1]
         dateComponents.day = components[2]
         return Calendar.autoupdatingCurrent.date(from: dateComponents) ?? Date()
-    }
-
-    private func dateKeyString(_ date: Date) -> String {
-        let components = Calendar.autoupdatingCurrent.dateComponents([.year, .month, .day], from: date)
-        return String(
-            format: "%04d-%02d-%02d",
-            components.year ?? 0,
-            components.month ?? 0,
-            components.day ?? 0
-        )
     }
 }

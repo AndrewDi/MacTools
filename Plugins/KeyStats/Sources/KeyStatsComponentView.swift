@@ -146,14 +146,12 @@ struct KeyStatsComponentView: View {
             miniChart(
                 title: localization.string("chart.keys.title", defaultValue: "按键趋势"),
                 value: \.totalKeyPresses,
-                color: theme.dataSeries.primary,
-                height: 68
+                color: theme.dataSeries.primary
             )
             miniChart(
                 title: localization.string("chart.trackpad.title", defaultValue: "触控板趋势"),
                 value: \.trackpadUses,
-                color: theme.dataSeries.secondary,
-                height: 36
+                color: theme.dataSeries.secondary
             )
         }
     }
@@ -161,8 +159,7 @@ struct KeyStatsComponentView: View {
     private func miniChart(
         title: String,
         value: KeyPath<KeyStatsDailyStats, Int>,
-        color: Color,
-        height: CGFloat
+        color: Color
     ) -> some View {
         let hasData = days.contains { $0[keyPath: value] > 0 }
 
@@ -181,7 +178,7 @@ struct KeyStatsComponentView: View {
                 Chart {
                     ForEach(hasData ? days : []) { day in
                         BarMark(
-                            x: .value("Day", weekdayLabel(day.date)),
+                            x: .value("Day", day.date),
                             y: .value("Count", day[keyPath: value])
                         )
                         .foregroundStyle(color)
@@ -189,10 +186,11 @@ struct KeyStatsComponentView: View {
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .automatic) { mark in
+                    AxisMarks(values: days.map(\.date)) { mark in
                         AxisValueLabel {
-                            if let label = mark.as(String.self) {
-                                Text(label)
+                            if let label = mark.as(String.self),
+                               let date = date(from: label) {
+                                Text(KeyStatsFormatting.compactMonthDay(date))
                                     .font(PluginTypography.caption.font)
                                     .foregroundStyle(theme.text.tertiary)
                             }
@@ -207,7 +205,7 @@ struct KeyStatsComponentView: View {
                         .foregroundStyle(theme.text.tertiary)
                 }
             }
-            .frame(height: height)
+            .frame(height: 54)
         }
     }
 
@@ -237,13 +235,6 @@ struct KeyStatsComponentView: View {
                 style: .continuous
             )
         )
-    }
-
-    private func weekdayLabel(_ dateKey: String) -> String {
-        guard let date = date(from: dateKey) else {
-            return dateKey
-        }
-        return KeyStatsFormatting.weekday(date)
     }
 
     private func date(from dateKey: String) -> Date? {

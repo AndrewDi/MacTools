@@ -87,10 +87,17 @@ enum KeyStatsFormatting {
         return String(format: "%.1fk", locale: PluginRuntimeLocalization.locale, scaled)
     }
 
-    static func weekday(_ date: Date, locale: Locale = PluginRuntimeLocalization.locale) -> String {
+    static func monthDay(_ date: Date, locale: Locale = PluginRuntimeLocalization.locale) -> String {
         let formatter = DateFormatter()
         formatter.locale = locale
-        formatter.dateFormat = "E"
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
+        return formatter.string(from: date)
+    }
+
+    static func compactMonthDay(_ date: Date, locale: Locale = PluginRuntimeLocalization.locale) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = locale
+        formatter.setLocalizedDateFormatFromTemplate("Md")
         return formatter.string(from: date)
     }
 }
