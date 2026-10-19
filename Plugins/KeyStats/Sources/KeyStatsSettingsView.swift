@@ -7,6 +7,8 @@ struct KeyStatsSettingsView: View {
     let localization: PluginLocalization
 
     @State private var showsResetConfirmation = false
+    @State private var hoveredKeyDate: String?
+    @State private var hoveredTrackpadDate: String?
 
     private var today: KeyStatsDailyStats {
         controller.todayStats
@@ -184,13 +186,15 @@ struct KeyStatsSettingsView: View {
             historyChart(
                 title: localization.string("chart.keys.title", defaultValue: "按键趋势"),
                 value: \.totalKeyPresses,
-                color: .accentColor
+                color: .accentColor,
+                hoveredDate: $hoveredKeyDate
             )
 
             historyChart(
                 title: localization.string("chart.trackpad.title", defaultValue: "触控板趋势"),
                 value: \.trackpadUses,
-                color: Color(nsColor: .systemTeal)
+                color: Color(nsColor: .systemTeal),
+                hoveredDate: $hoveredTrackpadDate
             )
         }
         .padding(PluginSettingsTheme.Spacing.cardContent)
@@ -200,11 +204,12 @@ struct KeyStatsSettingsView: View {
     private func historyChart(
         title: String,
         value: KeyPath<KeyStatsDailyStats, Int>,
-        color: Color
+        color: Color,
+        hoveredDate: Binding<String?>
     ) -> some View {
         let hasData = days.contains { $0[keyPath: value] > 0 }
 
-        return VStack(alignment: .leading, spacing: 6) {
+        return VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 6) {
                 Circle()
                     .fill(color)
@@ -217,12 +222,29 @@ struct KeyStatsSettingsView: View {
             ZStack {
                 Chart {
                     ForEach(hasData ? days : []) { day in
+                        let count = day[keyPath: value]
+                        let isHovered = hoveredDate.wrappedValue == day.date
+
                         BarMark(
                             x: .value("Day", day.date),
-                            y: .value("Count", day[keyPath: value])
+                            y: .value("Count", count)
                         )
                         .foregroundStyle(color)
                         .cornerRadius(2)
+
+                        RuleMark(x: .value("Day", day.date))
+                            .foregroundStyle(color.opacity(isHovered ? 0.45 : 0))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                            .annotation(
+                                position: .top,
+                                spacing: 0,
+                                overflowResolution: .init(x: .fit(to: .chart), y: .disabled)
+                            ) {
+                                if isHovered {
+                                    chartTooltip(date: day.date, count: count)
+                                        .offset(y: 24)
+                                }
+                            }
                     }
                 }
                 .chartYAxis {
@@ -249,6 +271,14 @@ struct KeyStatsSettingsView: View {
                         }
                     }
                 }
+                .chartOverlay { proxy in
+                    if hasData {
+                        chartHoverOverlay(
+                            proxy: proxy,
+                            hoveredDate: hoveredDate
+                        )
+                    }
+                }
 
                 if !hasData {
                     Text(localization.string("chart.empty", defaultValue: "暂无数据"))
@@ -257,6 +287,64 @@ struct KeyStatsSettingsView: View {
                 }
             }
             .frame(height: 120)
+        }
+    }
+
+    private func chartTooltip(date dateKey: String, count: Int) -> some View {
+        HStack(spacing: 6) {
+            Text(KeyStatsFormatting.monthDay(date(from: dateKey)))
+                .foregroundStyle(.secondary)
+
+            Text(KeyStatsFormatting.decimal(count))
+                .fontWeight(.semibold)
+                .monospacedDigit()
+        }
+        .font(PluginSettingsTheme.Typography.rowDescription)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control, style: .continuous)
+                .strokeBorder(PluginSettingsTheme.Palette.cardBorder, lineWidth: PluginSettingsTheme.Stroke.hairline)
+        }
+    }
+
+    private func chartHoverOverlay(
+        proxy: ChartProxy,
+        hoveredDate: Binding<String?>
+    ) -> some View {
+        GeometryReader { geometry in
+            Rectangle()
+                .fill(.clear)
+                .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    switch phase {
+                    case let .active(location):
+                        guard let plotFrame = proxy.plotFrame else {
+                            return
+                        }
+
+                        let frame = geometry[plotFrame]
+                        let x = location.x - frame.origin.x
+                        var closest: String?
+                        var closestDistance = CGFloat.infinity
+
+                        for day in days {
+                            guard let position = proxy.position(forX: day.date) else {
+                                continue
+                            }
+                            let distance = abs(position - x)
+                            if distance < closestDistance {
+                                closestDistance = distance
+                                closest = day.date
+                            }
+                        }
+
+                        hoveredDate.wrappedValue = closest
+                    case .ended:
+                        hoveredDate.wrappedValue = nil
+                    }
+                }
         }
     }
 

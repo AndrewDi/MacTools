@@ -17,6 +17,8 @@ struct KeyStatsComponentView: View {
     let onContentHeightChange: (CGFloat) -> Void
 
     @Environment(\.pluginComponentTheme) private var theme
+    @State private var hoveredKeyDate: String?
+    @State private var hoveredTrackpadDate: String?
 
     private var today: KeyStatsDailyStats {
         controller.todayStats
@@ -146,12 +148,14 @@ struct KeyStatsComponentView: View {
             miniChart(
                 title: localization.string("chart.keys.title", defaultValue: "按键趋势"),
                 value: \.totalKeyPresses,
-                color: theme.dataSeries.primary
+                color: theme.dataSeries.primary,
+                hoveredDate: $hoveredKeyDate
             )
             miniChart(
                 title: localization.string("chart.trackpad.title", defaultValue: "触控板趋势"),
                 value: \.trackpadUses,
-                color: theme.dataSeries.secondary
+                color: theme.dataSeries.secondary,
+                hoveredDate: $hoveredTrackpadDate
             )
         }
     }
@@ -159,11 +163,13 @@ struct KeyStatsComponentView: View {
     private func miniChart(
         title: String,
         value: KeyPath<KeyStatsDailyStats, Int>,
-        color: Color
+        color: Color,
+        hoveredDate: Binding<String?>
     ) -> some View {
         let hasData = days.contains { $0[keyPath: value] > 0 }
+        let hoveredDay = days.first { $0.date == hoveredDate.wrappedValue }
 
-        return VStack(alignment: .leading, spacing: 3) {
+        return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 5) {
                 Circle()
                     .fill(color)
@@ -172,17 +178,37 @@ struct KeyStatsComponentView: View {
                     .font(PluginTypography.caption.font)
                     .foregroundStyle(theme.text.secondary)
                     .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                if let hoveredDay,
+                   let hoveredDateValue = date(from: hoveredDay.date) {
+                    Text(
+                        "\(KeyStatsFormatting.compactMonthDay(hoveredDateValue)) "
+                            + KeyStatsFormatting.decimal(hoveredDay[keyPath: value])
+                    )
+                    .font(PluginTypography.caption.font.monospacedDigit())
+                    .foregroundStyle(theme.text.primary)
+                    .lineLimit(1)
+                }
             }
 
             ZStack {
                 Chart {
                     ForEach(hasData ? days : []) { day in
+                        let count = day[keyPath: value]
+                        let isHovered = hoveredDate.wrappedValue == day.date
+
                         BarMark(
                             x: .value("Day", day.date),
-                            y: .value("Count", day[keyPath: value])
+                            y: .value("Count", count)
                         )
                         .foregroundStyle(color)
                         .cornerRadius(2)
+
+                        RuleMark(x: .value("Day", day.date))
+                            .foregroundStyle(color.opacity(isHovered ? 0.45 : 0))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     }
                 }
                 .chartXAxis {
@@ -198,6 +224,11 @@ struct KeyStatsComponentView: View {
                     }
                 }
                 .chartYAxis(.hidden)
+                .chartOverlay { proxy in
+                    if hasData {
+                        chartHoverOverlay(proxy: proxy, hoveredDate: hoveredDate)
+                    }
+                }
 
                 if !hasData {
                     Text(localization.string("chart.empty", defaultValue: "暂无数据"))
@@ -206,6 +237,45 @@ struct KeyStatsComponentView: View {
                 }
             }
             .frame(height: 54)
+        }
+    }
+
+    private func chartHoverOverlay(
+        proxy: ChartProxy,
+        hoveredDate: Binding<String?>
+    ) -> some View {
+        GeometryReader { geometry in
+            Rectangle()
+                .fill(.clear)
+                .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    switch phase {
+                    case let .active(location):
+                        guard let plotFrame = proxy.plotFrame else {
+                            return
+                        }
+
+                        let frame = geometry[plotFrame]
+                        let x = location.x - frame.origin.x
+                        var closest: String?
+                        var closestDistance = CGFloat.infinity
+
+                        for day in days {
+                            guard let position = proxy.position(forX: day.date) else {
+                                continue
+                            }
+                            let distance = abs(position - x)
+                            if distance < closestDistance {
+                                closestDistance = distance
+                                closest = day.date
+                            }
+                        }
+
+                        hoveredDate.wrappedValue = closest
+                    case .ended:
+                        hoveredDate.wrappedValue = nil
+                    }
+                }
         }
     }
 
