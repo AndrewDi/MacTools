@@ -14283,6 +14283,249 @@
     {
       "capabilities": {
         "panelItems": [
+          "row",
+          "widget"
+        ],
+        "settings": "workspace"
+      },
+      "category": "monitoring",
+      "displayName": "按键统计",
+      "id": "key-stats",
+      "localizedMetadata": {
+        "ar": {
+          "displayName": "إحصاءات المفاتيح",
+          "summary": "تتبع استخدام كل مفتاح ولوحة التتبع مع الاحتفاظ ببيانات سبعة أيام."
+        },
+        "de": {
+          "displayName": "Tastenstatistik",
+          "summary": "Verfolgen Sie die Nutzung jeder Taste und des Trackpads über sieben Tage."
+        },
+        "en": {
+          "displayName": "Key Stats",
+          "summary": "Track usage for every key and your trackpad, keeping the last seven days."
+        },
+        "es": {
+          "displayName": "Estadísticas de teclas",
+          "summary": "Registra el uso de cada tecla y del panel táctil durante los últimos siete días."
+        },
+        "fr": {
+          "displayName": "Statistiques de touches",
+          "summary": "Suivez l’utilisation de chaque touche et du pavé tactile sur les sept derniers jours."
+        },
+        "ja": {
+          "displayName": "キー統計",
+          "summary": "各キーとトラックパッドの使用回数を記録し、直近 7 日分を保存します。"
+        },
+        "ko": {
+          "displayName": "키 통계",
+          "summary": "모든 키와 트랙패드 사용 횟수를 기록하고 최근 7일간 보관합니다."
+        },
+        "pt": {
+          "displayName": "Estatísticas de teclas",
+          "summary": "Acompanhe o uso de cada tecla e do trackpad nos últimos sete dias."
+        },
+        "ru": {
+          "displayName": "Статистика клавиш",
+          "summary": "Отслеживайте использование каждой клавиши и трекпада за последние семь дней."
+        },
+        "tr": {
+          "displayName": "Tuş İstatistikleri",
+          "summary": "Her tuşun ve izleme dörtgeninin kullanımını son yedi gün boyunca izleyin."
+        },
+        "zh-Hans": {
+          "displayName": "按键统计",
+          "summary": "统计每个按键与触控板的使用次数，保留近七天数据"
+        },
+        "zh-Hant": {
+          "displayName": "按鍵統計",
+          "summary": "統計每個按鍵與觸控板的使用次數，保留近七天資料"
+        }
+      },
+      "openInMacToolsURL": "mactools://app/settings/plugins/marketplace/key-stats",
+      "product": {
+        "actions": null,
+        "discovery": {
+          "alternativePluginIDs": [],
+          "goalCategories": [
+            "monitoring"
+          ],
+          "keywords": [
+            "keyboard",
+            "key stats",
+            "keystrokes",
+            "trackpad",
+            "input",
+            "statistics"
+          ],
+          "localizedSynonyms": {
+            "ar": [
+              "إحصاءات المفاتيح",
+              "إحصاءات لوحة المفاتيح"
+            ],
+            "de": [
+              "Tastenstatistik",
+              "Tastaturstatistik"
+            ],
+            "en": [
+              "Key Stats",
+              "Keyboard Statistics"
+            ],
+            "es": [
+              "Estadísticas de teclas",
+              "Estadísticas de teclado"
+            ],
+            "fr": [
+              "Statistiques de touches",
+              "Statistiques du clavier"
+            ],
+            "ja": [
+              "キー統計",
+              "キーボード統計"
+            ],
+            "ko": [
+              "키 통계",
+              "키보드 통계"
+            ],
+            "pt": [
+              "Estatísticas de teclas",
+              "Estatísticas do teclado"
+            ],
+            "ru": [
+              "Статистика клавиш",
+              "Статистика клавиатуры"
+            ],
+            "tr": [
+              "Tuş İstatistikleri",
+              "Klavye İstatistikleri"
+            ],
+            "zh-Hans": [
+              "按键统计",
+              "键盘统计",
+              "触控板统计",
+              "输入统计"
+            ],
+            "zh-Hant": [
+              "按鍵統計",
+              "鍵盤統計",
+              "觸控板統計",
+              "輸入統計"
+            ]
+          },
+          "relatedPluginIDs": [],
+          "useCases": [
+            {
+              "id": "primary-use",
+              "title": {
+                "ar": "إحصاءات المفاتيح",
+                "de": "Tastenstatistik",
+                "en": "Key Stats",
+                "es": "Estadísticas de teclas",
+                "fr": "Statistiques de touches",
+                "ja": "キー統計",
+                "ko": "키 통계",
+                "pt": "Estatísticas de teclas",
+                "ru": "Статистика клавиш",
+                "tr": "Tuş İstatistikleri",
+                "zh-Hans": "按键统计",
+                "zh-Hant": "按鍵統計"
+              }
+            }
+          ]
+        },
+        "presentation": {
+          "documentationURL": "https://github.com/ggbond268/MacTools#plugins-and-settings",
+          "examples": [
+            {
+              "id": "primary-use",
+              "text": {
+                "ar": "تتبع استخدام كل مفتاح ولوحة التتبع مع الاحتفاظ ببيانات سبعة أيام.",
+                "de": "Verfolgen Sie die Nutzung jeder Taste und des Trackpads über sieben Tage.",
+                "en": "Track usage for every key and your trackpad, keeping the last seven days.",
+                "es": "Registra el uso de cada tecla y del panel táctil durante los últimos siete días.",
+                "fr": "Suivez l’utilisation de chaque touche et du pavé tactile sur les sept derniers jours.",
+                "ja": "各キーとトラックパッドの使用回数を記録し、直近 7 日分を保存します。",
+                "ko": "모든 키와 트랙패드 사용 횟수를 기록하고 최근 7일간 보관합니다.",
+                "pt": "Acompanhe o uso de cada tecla e do trackpad nos últimos sete dias.",
+                "ru": "Отслеживайте использование каждой клавиши и трекпада за последние семь дней.",
+                "tr": "Her tuşun ve izleme dörtgeninin kullanımını son yedi gün boyunca izleyin.",
+                "zh-Hans": "统计每个按键与触控板的使用次数，保留近七天数据",
+                "zh-Hant": "統計每個按鍵與觸控板的使用次數，保留近七天資料"
+              }
+            }
+          ],
+          "license": "GPL-3.0-only",
+          "longDescription": {
+            "ar": "تتبع استخدام كل مفتاح ولوحة التتبع مع الاحتفاظ ببيانات سبعة أيام.",
+            "de": "Verfolgen Sie die Nutzung jeder Taste und des Trackpads über sieben Tage.",
+            "en": "Track usage for every key and your trackpad, keeping the last seven days.",
+            "es": "Registra el uso de cada tecla y del panel táctil durante los últimos siete días.",
+            "fr": "Suivez l’utilisation de chaque touche et du pavé tactile sur les sept derniers jours.",
+            "ja": "各キーとトラックパッドの使用回数を記録し、直近 7 日分を保存します。",
+            "ko": "모든 키와 트랙패드 사용 횟수를 기록하고 최근 7일간 보관합니다.",
+            "pt": "Acompanhe o uso de cada tecla e do trackpad nos últimos sete dias.",
+            "ru": "Отслеживайте использование каждой клавиши и трекпада за последние семь дней.",
+            "tr": "Her tuşun ve izleme dörtgeninin kullanımını son yedi gün boyunca izleyin.",
+            "zh-Hans": "统计每个按键与触控板的使用次数，保留近七天数据",
+            "zh-Hant": "統計每個按鍵與觸控板的使用次數，保留近七天資料"
+          },
+          "publisher": "MacTools",
+          "screenshots": [],
+          "supportURL": "https://github.com/ggbond268/MacTools/issues"
+        },
+        "privacy": {
+          "allowsUserConfiguredDomains": false,
+          "dataObserved": [
+            "input-events",
+            "usage-statistics"
+          ],
+          "dataPersisted": [
+            "plugin-configuration",
+            "usage-statistics"
+          ],
+          "diagnosticExportsContainUserData": false,
+          "networkDomains": [],
+          "networkUse": "none",
+          "processesSensitiveUserContent": false,
+          "retention": {
+            "policy": "user-controlled"
+          },
+          "telemetry": "none"
+        },
+        "relationships": {
+          "includedPackIDs": [],
+          "relatedPluginIDs": [],
+          "suggestedRecipeIDs": [],
+          "supersedesPluginIDs": []
+        },
+        "requirements": {
+          "applications": [],
+          "architectures": [
+            "arm64",
+            "x86_64"
+          ],
+          "executables": [],
+          "hardware": [],
+          "minimumMacOSVersion": "14.0",
+          "permissionIDs": [
+            "inputMonitoring"
+          ],
+          "requiresRelaunch": false,
+          "setupComplexity": "none"
+        },
+        "setup": {
+          "optionalSurfaces": [],
+          "steps": []
+        }
+      },
+      "releaseChannel": null,
+      "releaseNotesURL": null,
+      "route": "/plugins/key-stats/",
+      "summary": "统计每个按键与触控板的使用次数，保留近七天数据",
+      "version": "1.0.0"
+    },
+    {
+      "capabilities": {
+        "panelItems": [
           "row"
         ],
         "settings": "workspace"
