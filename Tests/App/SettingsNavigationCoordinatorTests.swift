@@ -4,6 +4,70 @@ import MacToolsPluginKit
 
 @MainActor
 final class SettingsNavigationCoordinatorTests: XCTestCase {
+    func testSettingsOpensIndependentlyOfUnfinishedOnboarding() {
+        let suite = "OnboardingNavigationTests-\(UUID().uuidString)"
+        let host = makePluginHostForTests(plugins: [], suiteName: suite, loadDynamicPluginsOnInit: false)
+        defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
+        XCTAssertTrue(host.starterPacks.needsOnboarding)
+        host.starterPacks.selectPack(.windows, isSelected: true)
+
+        let navigation = SettingsNavigationCoordinator(pluginHost: host)
+        XCTAssertEqual(navigation.destination, .general)
+        navigation.navigate(to: .plugins(.marketplace))
+        XCTAssertTrue(host.starterPacks.needsOnboarding)
+        XCTAssertEqual(host.starterPacks.selectedPacks, [.everyday, .windows])
+    }
+
+    func testStarterPackReviewParticipatesInHistoryWithoutAddingSidebarDestinations() {
+        let coordinator = SettingsNavigationCoordinator(initialDestination: .plugins(.marketplace))
+        coordinator.navigate(to: .starterPacks(.choose))
+        coordinator.navigate(to: .starterPacks(.review))
+        coordinator.navigate(to: .marketplaceDetail(.init(pluginID: "keep-awake")))
+        coordinator.goBack()
+        XCTAssertEqual(coordinator.destination, .starterPacks(.review))
+        XCTAssertEqual(coordinator.destination.sidebarDestination, .plugins(.marketplace))
+        coordinator.goBack()
+        XCTAssertEqual(coordinator.destination, .starterPacks(.choose))
+        coordinator.goBack()
+        XCTAssertEqual(coordinator.destination, .plugins(.marketplace))
+    }
+
+    func testStarterPackPresentationRequestsResultsOrSelectionInTheDedicatedWindow() {
+        let settings = SettingsNavigationCoordinator()
+        let onboarding = SettingsNavigationCoordinator(initialDestination: .starterPacks(.review))
+        settings.presentOnboarding = { step in
+            onboarding.navigate(to: .starterPacks(step))
+            return true
+        }
+        settings.presentStarterPacks(.results)
+        XCTAssertEqual(onboarding.destination, .starterPacks(.results))
+        XCTAssertEqual(settings.destination, .general)
+        settings.presentStarterPacks(.choose)
+        XCTAssertEqual(onboarding.destination, .starterPacks(.choose))
+        settings.presentOnboarding = nil
+        settings.presentStarterPacks(.results)
+        XCTAssertEqual(settings.destination, .starterPacks(.results))
+    }
+
+    func testStarterPackSearchReusesOnboardingAndFallsBackToSettingsForExistingUsers() {
+        let settings = SettingsNavigationCoordinator()
+        let onboarding = SettingsNavigationCoordinator(initialDestination: .starterPacks(.choose))
+        settings.presentOnboarding = { _ in
+            onboarding.navigate(to: .starterPacks(.results))
+            return true
+        }
+        settings.presentUnifiedSearch(origin: .keyboard)
+
+        XCTAssertTrue(settings.navigateFromSearch(to: .starterPacks(.choose), target: nil))
+        XCTAssertFalse(settings.isUnifiedSearchPresented)
+        XCTAssertEqual(settings.destination, .general)
+        XCTAssertEqual(settings.history, [.general])
+        XCTAssertEqual(onboarding.destination, .starterPacks(.results))
+
+        settings.presentOnboarding = { _ in false }
+        XCTAssertTrue(settings.navigateFromSearch(to: .starterPacks(.choose), target: nil))
+        XCTAssertEqual(settings.destination, .starterPacks(.choose))
+    }
 
     func testDirectPluginSettingsNavigationEndsPreviousVisibilityBeforeStartingNext() {
         XCTAssertEqual(
@@ -185,6 +249,22 @@ final class SettingsNavigationCoordinatorTests: XCTestCase {
         coordinator.presentUnifiedSearch(origin: .keyboard)
         XCTAssertFalse(coordinator.navigateFromSearch(to: destination, target: nil))
         XCTAssertTrue(coordinator.isUnifiedSearchPresented)
+        XCTAssertEqual(coordinator.destination, .general)
+    }
+
+    func testCurrentDetailRetainsUnavailableStateWhileHistorySkipsRetiredTargets() {
+        let detail = SettingsNavigationDestination.marketplaceDetail(.init(pluginID: "catalog-tool"))
+        var isAvailable = true
+        let coordinator = SettingsNavigationCoordinator(isMarketplaceDetailAvailable: { _ in isAvailable })
+        coordinator.navigate(to: detail)
+        isAvailable = false
+
+        coordinator.reconcileCurrentDestinationAvailability()
+        XCTAssertEqual(coordinator.destination, detail)
+        coordinator.navigate(to: .about)
+        coordinator.goBack()
+        XCTAssertEqual(coordinator.destination, .general)
+        coordinator.navigate(to: detail)
         XCTAssertEqual(coordinator.destination, .general)
     }
 

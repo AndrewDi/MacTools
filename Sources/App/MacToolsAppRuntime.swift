@@ -121,6 +121,9 @@ final class MacToolsAppRuntime {
 
         startCLIHostIfAvailable()
         bootstrapDynamicPlugins()
+        if pluginHost.starterPacks.needsOnboarding {
+            windowRouter.showOnboarding()
+        }
     }
 
     func showSettings() -> Bool {
@@ -236,7 +239,7 @@ final class MacToolsAppRuntime {
                 self?.pluginHost.hasPluginSettings(pluginID: pluginID) == true
             },
             isMarketplaceDetailAvailable: { [weak self] target in
-                self?.pluginHost.hasMarketplaceDetail(target: target) == true
+                self?.pluginHost.canPresentMarketplaceDetail(target: target) == true
             },
             actionIdentityResolver: { [weak self] request in
                 self?.pluginHost.actionRunLinkService.resolve(request)

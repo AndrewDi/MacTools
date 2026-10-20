@@ -18,6 +18,7 @@ enum SettingsPresentationRequest: Equatable {
     case about
     case appUpdate
     case pluginMarketplace
+    case starterPacks(StarterPack? = nil)
     case pluginMarketplaceDetail(MarketplacePluginDetailTarget)
     case pluginConfiguration(String)
     case automationWorkflow(UUID)
@@ -378,6 +379,19 @@ final class PluginHost: ObservableObject {
     private let shortcutStore: ShortcutStore
     private let pluginOrderingStore: PluginOrderingStore
     let menuBarPanelStore: MenuBarPanelStore
+    private let hadStarterPackSetup: Bool
+    @Published private(set) var isImportingPreferences = false
+    var isCatalogMutationActive: Bool { hasActiveMarketplaceOperation || isImportingPreferences }
+    lazy var starterPacks = StarterPackController(
+        defaults: shortcutStore.userDefaults,
+        hasExistingSetup: hadStarterPackSetup,
+        services: starterPackServices()
+    )
+    var preferencesImportUnavailableMessage: String? {
+        if starterPacks.isRunning { return FeatureL10n.string("请等待工具组合设置完成后再恢复备份。") }
+        if isImportingPreferences { return FeatureL10n.string("正在恢复备份，请稍后重试。") }
+        return nil
+    }
     let menuBarIconCoordinator: PluginMenuBarIconCoordinator
     @Published private(set) var menuBarPanels: [MenuBarPanelDefinition] = []
     private var visibleMenuBarPanelID: String?
@@ -601,6 +615,9 @@ final class PluginHost: ObservableObject {
     ) {
         let preferencesBackupChangeReporter = providedPreferencesBackupChangeReporter
             ?? PreferencesBackupChangeReporter()
+        hadStarterPackSetup = StarterPackController.hasExistingPreferences(in: shortcutStore.userDefaults)
+            || !(dynamicPluginManager?.installedPackageVersionsByID().isEmpty ?? true)
+            || !plugins.isEmpty
         shortcutStore.preferencesBackupChangeReporter = preferencesBackupChangeReporter
         pluginOrderingStore.preferencesBackupChangeReporter =
             preferencesBackupChangeReporter
@@ -1099,6 +1116,12 @@ final class PluginHost: ObservableObject {
         selection: PreferencesBackupSelection? = nil,
         progress: (PreferencesImportProgress) -> Void = { _ in }
     ) async throws -> PreferencesImportResult {
+        guard !starterPacks.isRunning, !isImportingPreferences, !hasActiveMarketplaceOperation,
+              !automaticPluginUpdateStatus.isActive,
+              didLoadDynamicPlugins || !hasInstalledDynamicPlugins
+        else { throw PluginMarketplaceOperationError.operationInProgress }
+        isImportingPreferences = true
+        defer { isImportingPreferences = false }
         let preview = try preferencesImportPreview(for: backup, selection: selection)
         let installablePluginIDs = Set(preview.installablePlugins.map(\.id))
         let pluginIDs = requestedPluginIDs.intersection(installablePluginIDs).sorted()
@@ -1132,7 +1155,7 @@ final class PluginHost: ObservableObject {
             .filter { $0.state == .restartRequired }
             .map(\.id))
             .subtracting(activePlugins.map { $0.metadata.id })
-        let importedResult = try importPreferences(backup, selection: selection)
+        let importedResult = try restorePreferences(backup, selection: selection)
         var shortcutErrors = importedResult.shortcutErrors
         let deferredPluginPreferenceIDs = installedPluginIDs.filter { pluginID in
             guard pluginIDsAwaitingRestart.contains(pluginID) else { return false }
@@ -1225,7 +1248,8 @@ final class PluginHost: ObservableObject {
         _ backup: PreferencesBackup,
         selection requestedSelection: PreferencesBackupSelection? = nil
     ) throws -> PreferencesImportResult {
-        try restorePreferences(backup, selection: requestedSelection)
+        guard !starterPacks.isRunning, !isImportingPreferences else { throw StarterPackError.busy }
+        return try restorePreferences(backup, selection: requestedSelection)
     }
 
     private func restorePreferences(
@@ -2127,6 +2151,10 @@ final class PluginHost: ObservableObject {
         appPresentationHandler?(.settings(.pluginMarketplace))
     }
 
+    func presentStarterPacks() {
+        appPresentationHandler?(.settings(.starterPacks()))
+    }
+
     func presentPermissionCenter() {
         rebuildDerivedState()
         appPresentationHandler?(.settings(.permissions))
@@ -2163,6 +2191,13 @@ final class PluginHost: ObservableObject {
             isPreparingRuntime: isPreparingPlugins,
             hasSettings: hasPluginSettings(pluginID: pluginID)
         )
+    }
+
+    func canPresentMarketplaceDetail(target: MarketplacePluginDetailTarget) -> Bool {
+        guard pluginManagementItems.contains(where: { $0.id == target.pluginID }) else {
+            return pluginCatalogStatus.lastUpdatedAt == nil
+        }
+        return hasMarketplaceDetail(target: target)
     }
 
     func hasMarketplaceDetail(target: MarketplacePluginDetailTarget) -> Bool {
@@ -2428,7 +2463,12 @@ final class PluginHost: ObservableObject {
     }
 
     func refreshPluginCatalog() async {
-        let installedMetadata = await pluginCatalogManager?.refreshCatalog()
+        guard let pluginCatalogManager else { return }
+        var status = pluginCatalogManager.status
+        status.isRefreshing = true
+        status.errorMessage = nil
+        pluginCatalogStatus = status
+        let installedMetadata = await pluginCatalogManager.refreshCatalog()
         syncPluginManagementState(installedMetadata: installedMetadata)
     }
 
@@ -2479,8 +2519,7 @@ final class PluginHost: ObservableObject {
             message: nil
         )
 
-        await pluginCatalogManager.refreshCatalog()
-        syncPluginManagementState()
+        await refreshPluginCatalog()
 
         if let errorMessage = pluginCatalogManager.status.errorMessage {
             automaticPluginUpdateStatus = PluginAutomaticUpdateStatus(
@@ -2552,11 +2591,24 @@ final class PluginHost: ObservableObject {
         return automaticPluginUpdateStatus.phase == .completed
     }
 
-    func installPluginFromCatalog(pluginID: String) async throws {
-        try await performMarketplaceOperation(pluginID: pluginID, kind: .install)
+    func installPluginFromCatalog(pluginID: String, applyInitialPlacements: Bool = true) async throws {
+        guard !starterPacks.isRunning || !applyInitialPlacements,
+              applyInitialPlacements || (!hasActiveMarketplaceOperation && !automaticPluginUpdateStatus.isActive)
+        else { throw StarterPackError.busy }
+        if !applyInitialPlacements { menuBarPanelStore.suppressInitialPlacement(for: pluginID) }
+        do {
+            try await performMarketplaceOperation(pluginID: pluginID, kind: .install)
+        } catch {
+            if !applyInitialPlacements,
+               dynamicPluginManager?.installedPackageVersionsByID()[pluginID] == nil {
+                menuBarPanelStore.cancelInitialPlacementSuppression(for: pluginID)
+            }
+            throw error
+        }
     }
 
     func updatePluginFromCatalog(pluginID: String) async throws {
+        guard !starterPacks.isRunning else { throw StarterPackError.busy }
         try await performMarketplaceOperation(pluginID: pluginID, kind: .update)
     }
 
@@ -2609,6 +2661,7 @@ final class PluginHost: ObservableObject {
     func updateAvailablePluginsFromCatalog(
         progress: ((PluginCatalogUpdateProgress) -> Void)? = nil
     ) async throws {
+        guard !starterPacks.isRunning else { throw StarterPackError.busy }
         guard !hasActiveMarketplaceOperation else {
             throw PluginMarketplaceOperationError.operationInProgress
         }
@@ -2633,6 +2686,7 @@ final class PluginHost: ObservableObject {
     }
 
     func installPluginPackage(from sourceURL: URL) throws {
+        guard !starterPacks.isRunning else { throw StarterPackError.busy }
         guard !isUpdatingAvailablePlugins else {
             throw PluginMarketplaceOperationError.operationInProgress
         }
@@ -2643,6 +2697,7 @@ final class PluginHost: ObservableObject {
     }
 
     func updatePluginPackage(from sourceURL: URL) throws {
+        guard !starterPacks.isRunning else { throw StarterPackError.busy }
         guard !isUpdatingAvailablePlugins else {
             throw PluginMarketplaceOperationError.operationInProgress
         }
@@ -2659,6 +2714,7 @@ final class PluginHost: ObservableObject {
     }
 
     func uninstallDynamicPlugin(pluginID: String, removeData: Bool = false) throws {
+        guard !starterPacks.isRunning else { throw StarterPackError.busy }
         guard !isUpdatingAvailablePlugins else {
             throw PluginMarketplaceOperationError.operationInProgress
         }
@@ -3098,6 +3154,103 @@ final class PluginHost: ObservableObject {
 
     private func corePlugin(for pluginID: String) -> (any MacToolsPlugin)? {
         activePlugins.first(where: { $0.metadata.id == pluginID })
+    }
+
+    private func starterPackServices() -> StarterPackServices {
+        StarterPackServices(
+            installedIDs: { [weak self] in
+                guard let self else { return [] }
+                return Set(self.pluginManagementItems.filter(\.canUninstall).map(\.id))
+                    .union(self.builtInPlugins.map { $0.metadata.id })
+            },
+            isUsable: { [weak self] in self?.corePlugin(for: $0) != nil },
+            isCatalogReady: { [weak self] in self?.pluginCatalogStatus.lastUpdatedAt != nil },
+            install: { [weak self] id in
+                guard let self else { throw StarterPackError.notReady }
+                try await self.installPluginFromCatalog(pluginID: id, applyInitialPlacements: false)
+            },
+            layout: { [weak self] in self?.menuBarPanelStore.configuration ?? .init() },
+            addPlacement: { [weak self] in self?.addPanelItem($0, to: $1) ?? false },
+            gridState: { [weak self] in self?.starterPackGridState ?? .unavailable },
+            seedGrid: { [weak self] in self?.seedStarterPackGrid($0) ?? false },
+            hasGridShortcut: { [weak self] in
+                self?.shortcutAssignmentService.assignment(for: Self.starterGridReference) != nil
+            },
+            assignGridShortcut: { [weak self] in
+                self?.setActionShortcutBindingAndReturnError(
+                    ShortcutBinding(keyCode: 49, modifiers: [.control, .option]),
+                    for: Self.starterGridReference
+                ) ?? nil
+            },
+            readinessMessage: { [weak self] id in
+                guard let item = self?.pluginManagementItems.first(where: { $0.id == id }) else {
+                    return StarterPackError.notReady.localizedDescription
+                }
+                switch item.state {
+                case let .failed(reason), let .incompatible(reason): return reason
+                case .restartRequired: return item.statusText
+                default: return StarterPackError.notReady.localizedDescription
+                }
+            },
+            canBeginSetup: { [weak self] in
+                guard let self else { return false }
+                return !self.isImportingPreferences && !self.hasActiveMarketplaceOperation
+                    && !self.isPreparingPlugins
+            }
+        )
+    }
+
+    private static var starterGridReference: ActionReference {
+        .init(key: .init(providerID: "action-grid", actionID: "show"))
+    }
+
+    var starterPackGridPreview: [StarterPackGridPreviewItem] {
+        let storage = UserDefaultsPluginStorage(pluginID: "action-grid", userDefaults: shortcutStore.userDefaults)
+        guard let data = storage.object(forKey: "layout.v1") as? Data, data.count <= 64 * 1_024,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let entries = object["entries"] as? [[String: Any]], entries.count <= 9 else { return [] }
+        var slots = Set<Int>()
+        return entries.enumerated().compactMap { offset, entry in
+            let slot = entry["slot"] as? Int ?? offset
+            guard (0..<9).contains(slot), slots.insert(slot).inserted else { return nil }
+            let customTitle = entry["customTitle"] as? String
+            if let folder = entry["folder"] as? [String: Any] {
+                return .init(slot: slot, title: customTitle ?? FeatureL10n.string("文件夹"),
+                             symbol: folder["systemImage"] as? String ?? "folder")
+            }
+            let item = (entry["reference"] as? [String: Any]).flatMap { value -> ActionSurfaceCatalogItem? in
+                guard let data = try? JSONSerialization.data(withJSONObject: value),
+                      let reference = try? JSONDecoder().decode(ActionReference.self, from: data) else { return nil }
+                return actionSurfaceItem(for: reference)
+            }
+            return .init(slot: slot, title: customTitle ?? item?.title ?? FeatureL10n.string("不可用操作"),
+                         symbol: item?.systemImage ?? "questionmark.square")
+        }
+    }
+
+    /// Inspect the persisted grid as well as portable preferences: a portable
+    /// export may omit local-only entries, which must still be preserved.
+    private var starterPackGridState: StarterPackGridState {
+        let storage = UserDefaultsPluginStorage(pluginID: "action-grid", userDefaults: shortcutStore.userDefaults)
+        guard let value = storage.object(forKey: "layout.v1") else { return .empty }
+        guard let data = value as? Data,
+              let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let version = envelope["formatVersion"] as? Int, (1...3).contains(version),
+              let entries = envelope["entries"] as? [[String: Any]] else { return .unavailable }
+        return entries.isEmpty ? .empty : .occupied
+    }
+
+    private func seedStarterPackGrid(_ references: [ActionReference]) -> Bool {
+        guard starterPackGridState == .empty,
+              let plugin = corePlugin(for: "action-grid"),
+              let preferences = plugin as? any PluginPortablePreferencesProviding,
+              let current = guardedOptionalValue(for: plugin, operation: "inspect starter grid", preferences.makePortablePreferencesBackup()),
+              let object = try? JSONSerialization.jsonObject(with: current) as? [String: Any],
+              let entries = object["entries"] as? [[String: Any]], entries.isEmpty,
+              references.allSatisfy({ actionRegistry.definition(for: $0.key) != nil }),
+              let data = try? JSONEncoder().encode(StarterPackGridPreferences(references: references))
+        else { return false }
+        return restorePortablePluginPreferences(["action-grid": data]).contains("action-grid")
     }
 
     private func configureCallbacks(for plugins: [any MacToolsPlugin]) {

@@ -10,6 +10,7 @@ enum SettingsNavigationDestination: Hashable {
     case about
     case plugins(FeatureSettingsPane)
     case marketplaceDetail(MarketplacePluginDetailTarget)
+    case starterPacks(StarterPackStep)
 
     var settingsDestination: SettingsDestination {
         switch self {
@@ -21,7 +22,7 @@ enum SettingsNavigationDestination: Hashable {
             .pluginConfiguration
         case .about:
             .about
-        case .plugins, .marketplaceDetail:
+        case .plugins, .marketplaceDetail, .starterPacks:
             .pluginConfiguration
         }
     }
@@ -235,6 +236,8 @@ final class SettingsNavigationCoordinator: ObservableObject {
     private static let maximumHistoryCount = 128
 
     @Published private(set) var destination: SettingsNavigationDestination
+    @Published var preferencesImportRequestID: UUID?
+    var presentOnboarding: ((StarterPackStep) -> Bool)?
     @Published private(set) var searchFocusRequest: SettingsSearchFocusRequest?
     @Published private(set) var aboutUpdateActionRequest: AboutUpdateActionRequest?
     @Published private(set) var isUnifiedSearchPresented = false
@@ -273,6 +276,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
         sidebarPreferences: SettingsSidebarPreferencesStore? = nil
     ) {
         self.init(
+            initialDestination: .general,
             sidebarOrder: {
                 let settingsItems = pluginHost.pluginSettingsItems
                 let orderItems = settingsItems.map {
@@ -304,7 +308,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
                 )
             },
             isMarketplaceDetailAvailable: { target in
-                pluginHost.hasMarketplaceDetail(target: target)
+                pluginHost.canPresentMarketplaceDetail(target: target)
             },
             isAutomationWorkflowAvailable: { workflowID in
                 pluginHost.automationController.workflows.contains { $0.id == workflowID }
@@ -379,6 +383,15 @@ final class SettingsNavigationCoordinator: ObservableObject {
         }
         historyIndex = history.count - 1
         activate(destination)
+    }
+
+    func requestPreferencesImport() {
+        preferencesImportRequestID = UUID()
+        _ = navigateFromSearch(to: .general, target: .general(.preferencesBackup))
+    }
+
+    func presentStarterPacks(_ step: StarterPackStep) {
+        if presentOnboarding?(step) != true { navigate(to: .starterPacks(step)) }
     }
 
     @discardableResult
@@ -492,7 +505,11 @@ final class SettingsNavigationCoordinator: ObservableObject {
         }
 
         dismissUnifiedSearch()
-        navigate(to: destination)
+        if case let .starterPacks(step) = destination {
+            presentStarterPacks(step)
+        } else {
+            navigate(to: destination)
+        }
 
         guard let target else {
             searchRevealRequest = nil
@@ -552,6 +569,9 @@ final class SettingsNavigationCoordinator: ObservableObject {
     }
 
     func reconcileCurrentDestinationAvailability() {
+        // Informational details own their loading and unavailable states. Keep
+        // the current page visible when catalog resolution changes availability.
+        if case .marketplaceDetail = destination { return }
         guard !isAvailable(destination) else {
             return
         }
@@ -693,7 +713,7 @@ final class SettingsNavigationCoordinator: ObservableObject {
     }
 
     private func activate(_ destination: SettingsNavigationDestination) {
-        if case .marketplaceDetail = destination {
+        if destination.sidebarDestination == .plugins(.marketplace) {
             _ = selectPluginSettingsPane(.marketplace)
         } else if let pane = destination.featureSettingsPane {
             _ = selectPluginSettingsPane(pane)
@@ -705,9 +725,11 @@ final class SettingsNavigationCoordinator: ObservableObject {
 
 extension SettingsNavigationDestination {
     var sidebarDestination: SettingsNavigationDestination {
-        if case .marketplaceDetail = self {
+        switch self {
+        case .marketplaceDetail, .starterPacks:
             return .plugins(.marketplace)
+        default:
+            return self
         }
-        return self
     }
 }
