@@ -1541,156 +1541,79 @@
         }
       }
     },
-    "settings.keys.empty": {
-      "extractionState": "manual",
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Start typing and every key count will appear here."
-          }
-        },
-        "ar": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ابدأ الكتابة وستظهر هنا أعداد كل مفتاح."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sobald Sie tippen, erscheinen hier die Zähler jeder Taste."
-          }
-        },
-        "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Empieza a escribir y aquí aparecerá el recuento de cada tecla."
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Commencez à taper et le nombre d’utilisations de chaque touche apparaîtra ici."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "キー入力を始めると、各キーの回数がここに表示されます。"
-          }
-        },
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "키 입력을 시작하면 각 키의 사용 횟수가 여기에 표시됩니다."
-          }
-        },
-        "pt": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Comece a escrever e o número de cada tecla aparecerá aqui."
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Начните печатать, и здесь появится счётчик каждой клавиши."
-          }
-        },
-        "tr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Yazmaya başlayın; her tuşun sayısı burada görünecek."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "开始使用键盘后，这里会显示每个按键的次数。"
-          }
-        },
-        "zh-Hant": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "開始使用鍵盤後，這裡會顯示每個按鍵的次數。"
-          }
-        }
-      }
-    },
     "settings.keys.hint": {
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ keys"
+            "value": "%@ keys used"
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ مفتاح"
+            "value": "%@ مفتاح مستخدم"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ Tasten"
+            "value": "%@ Tasten verwendet"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ teclas"
+            "value": "%@ teclas usadas"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ touches"
+            "value": "%@ touches utilisées"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ キー"
+            "value": "%@ キーを使用"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "키 %@개"
+            "value": "키 %@개 사용"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ teclas"
+            "value": "%@ teclas usadas"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Клавиш: %@"
+            "value": "Использовано клавиш: %@"
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ tuş"
+            "value": "%@ tuş kullanıldı"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "共 %@ 个按键"
+            "value": "已使用 %@ 个按键"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "共 %@ 個按鍵"
+            "value": "已使用 %@ 個按鍵"
           }
         }
       }

@@ -363,7 +363,7 @@ struct KeyStatsSettingsView: View {
                 Text(
                     localization.format(
                         "settings.keys.hint",
-                        defaultValue: "共 %@ 个按键",
+                        defaultValue: "已使用 %@ 个按键",
                         KeyStatsFormatting.decimal(today.sortedKeys.count)
                     )
                 )
@@ -371,20 +371,7 @@ struct KeyStatsSettingsView: View {
                 .foregroundStyle(.secondary)
             }
 
-            if today.sortedKeys.isEmpty {
-                Text(
-                    localization.string(
-                        "settings.keys.empty",
-                        defaultValue: "开始使用键盘后，这里会显示每个按键的次数。"
-                    )
-                )
-                .font(PluginSettingsTheme.Typography.rowDescription)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 8)
-            } else {
-                keyCloud
-            }
+            KeyStatsKeyboardLayoutView(counts: today.keyPressCounts)
 
             Text(
                 localization.string(
@@ -397,47 +384,6 @@ struct KeyStatsSettingsView: View {
         }
         .padding(PluginSettingsTheme.Spacing.cardContent)
         .pluginSettingsCardBackground()
-    }
-
-    private var keyCloud: some View {
-        let keys = today.sortedKeys
-        let maxCount = max(keys.first?.count ?? 1, 1)
-
-        return LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 78), spacing: 8)],
-            alignment: .leading,
-            spacing: 8
-        ) {
-            ForEach(keys, id: \.name) { key in
-                let ratio = Double(key.count) / Double(maxCount)
-
-                VStack(spacing: 3) {
-                    Text(key.name)
-                        .font(PluginSettingsTheme.Typography.rowTitle)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.65)
-
-                    Text(KeyStatsFormatting.decimal(key.count))
-                        .font(PluginSettingsTheme.Typography.rowDescription.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 7)
-                .background(
-                    Color.accentColor.opacity(0.06 + 0.20 * ratio),
-                    in: RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control, style: .continuous)
-                )
-                .overlay {
-                    RoundedRectangle(cornerRadius: PluginSettingsTheme.Radius.control, style: .continuous)
-                        .strokeBorder(PluginSettingsTheme.Palette.cardBorder, lineWidth: PluginSettingsTheme.Stroke.hairline)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(key.name)
-                .accessibilityValue(KeyStatsFormatting.decimal(key.count))
-            }
-        }
     }
 
     private var footerCard: some View {
