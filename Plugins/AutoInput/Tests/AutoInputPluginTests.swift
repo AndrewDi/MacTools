@@ -54,6 +54,39 @@ final class AutoInputStoreTests: XCTestCase {
         XCTAssertEqual(store.rules[0].inputSourceID, "zh")
     }
 
+    func testKeyboardModeDefaultsToSystemAndPersists() {
+        let storage = AutoInputMemoryStorage()
+        let store = AutoInputStore(storage: storage)
+        store.upsertRule(makeRule(bundleID: "com.example.editor", sourceID: "en"))
+        XCTAssertEqual(store.rule(for: "com.example.editor")?.keyboardMode, .system)
+        XCTAssertFalse(store.hasKeyboardModeRules)
+
+        store.updateRuleKeyboardMode(
+            bundleIdentifier: "com.example.editor",
+            keyboardMode: .standardFunctionKeys
+        )
+
+        XCTAssertTrue(store.hasKeyboardModeRules)
+        let reloaded = AutoInputStore(storage: storage)
+        XCTAssertEqual(
+            reloaded.rule(for: "com.example.editor")?.keyboardMode,
+            .standardFunctionKeys
+        )
+    }
+
+    func testLegacyRulesWithoutKeyboardModeFollowSystem() {
+        let storage = AutoInputMemoryStorage()
+        let legacyRules = """
+        [{"bundleIdentifier":"com.example.legacy","displayName":"Legacy","inputSourceID":"en"}]
+        """
+        storage.setRawValue(Data(legacyRules.utf8), forKey: "rules")
+
+        let store = AutoInputStore(storage: storage)
+
+        XCTAssertEqual(store.rules.count, 1)
+        XCTAssertEqual(store.rule(for: "com.example.legacy")?.keyboardMode, .system)
+    }
+
     func testRejectedWritesDoNotPublishBooleanOrRuleCandidates() {
         let storage = AutoInputMemoryStorage()
         storage.blockedSetKeys = [
@@ -236,6 +269,178 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.applications.stopCount, 0)
     }
 
+    func testKeyboardModeAppliesForRuleWhileAppIsFrontmost() {
+        let fixture = makeFixture(currentSourceID: "en")
+        fixture.store.upsertRule(makeRule(
+            bundleID: fixture.app.bundleIdentifier,
+            sourceID: "zh",
+            keyboardMode: .standardFunctionKeys
+        ))
+
+        fixture.controller.start()
+
+        XCTAssertEqual(fixture.functionKeys.writes, [true])
+        XCTAssertTrue(fixture.functionKeys.isStandardFunctionKeysEnabled)
+    }
+
+    func testKeyboardModeAppliesWithoutAutomaticSwitching() {
+        let fixture = makeFixture(currentSourceID: "en")
+        fixture.store.setAutoSwitchEnabled(false)
+        fixture.store.setInputHUDEnabled(false)
+        fixture.store.upsertRule(makeRule(
+            bundleID: fixture.app.bundleIdentifier,
+            sourceID: "zh",
+            keyboardMode: .standardFunctionKeys
+        ))
+
+        fixture.controller.start()
+
+        XCTAssertEqual(fixture.functionKeys.writes, [true])
+        XCTAssertTrue(fixture.sources.selectedIDs.isEmpty)
+    }
+
+    func testKeyboardModeRestoresForAppWithoutRule() {
+        let fixture = makeFixture(currentSourceID: "en")
+        fixture.functionKeys.isStandardFunctionKeysEnabled = true
+        fixture.store.upsertRule(makeRule(
+            bundleID: fixture.app.bundleIdentifier,
+            sourceID: "zh",
+            keyboardMode: .mediaShortcuts
+        ))
+
+        fixture.controller.start()
+        XCTAssertEqual(fixture.functionKeys.writes, [false])
+
+        fixture.applications.activate(AutoInputApplication(
+            bundleIdentifier: "com.example.other",
+            displayName: "Other",
+            bundleURL: nil,
+            processIdentifier: 202
+        ))
+
+        XCTAssertEqual(fixture.functionKeys.writes, [false, true])
+        XCTAssertTrue(fixture.functionKeys.isStandardFunctionKeysEnabled)
+    }
+
+    func testStopRestoresKeyboardMode() {
+        let fixture = makeFixture(currentSourceID: "en")
+        fixture.store.upsertRule(makeRule(
+            bundleID: fixture.app.bundleIdentifier,
+            sourceID: "zh",
+            keyboardMode: .standardFunctionKeys
+        ))
+        fixture.controller.start()
+        XCTAssertEqual(fixture.functionKeys.writes, [true])
+
+        fixture.controller.stop()
+
+        XCTAssertEqual(fixture.functionKeys.writes, [true, false])
+        XCTAssertFalse(fixture.functionKeys.isStandardFunctionKeysEnabled)
+    }
+
+    func testKeyboardModeRestoresTheLatestSystemSetting() {
+        let fixture = makeFixture(currentSourceID: "en")
+        fixture.store.upsertRule(makeRule(
+            bundleID: fixture.app.bundleIdentifier,
+            sourceID: "zh",
+            keyboardMode: .standardFunctionKeys
+        ))
+        let other = makeApplication(bundleIdentifier: "com.example.other", processIdentifier: 202)
+
+        fixture.controller.start()
+        XCTAssertTrue(fixture.functionKeys.isStandardFunctionKeysEnabled)
+
+        fixture.applications.activate(other)
+        XCTAssertFalse(fixture.functionKeys.isStandardFunctionKeysEnabled)
+
+        // Change the system setting while no rule is active.
+        fixture.functionKeys.isStandardFunctionKeysEnabled = true
+
+        fixture.applications.activate(fixture.app)
+        fixture.applications.activate(other)
+
+        XCTAssertTrue(fixture.functionKeys.isStandardFunctionKeysEnabled)
+        XCTAssertEqual(fixture.functionKeys.writes, [true, false, true])
+    }
+
+    func testKeyboardModeKeepsTheOriginalValueAcrossRules() {
+        let fixture = makeFixture(currentSourceID: "en")
+        let other = makeApplication(bundleIdentifier: "com.example.other", processIdentifier: 202)
+        fixture.store.upsertRule(makeRule(
+            bundleID: fixture.app.bundleIdentifier,
+            sourceID: "zh",
+            keyboardMode: .standardFunctionKeys
+        ))
+        fixture.store.upsertRule(makeRule(
+            bundleID: other.bundleIdentifier,
+            sourceID: "zh",
+            keyboardMode: .mediaShortcuts
+        ))
+
+        fixture.controller.start()
+        XCTAssertTrue(fixture.functionKeys.isStandardFunctionKeysEnabled)
+
+        fixture.applications.activate(other)
+        XCTAssertFalse(fixture.functionKeys.isStandardFunctionKeysEnabled)
+
+        fixture.applications.activate(fixture.app)
+        XCTAssertTrue(fixture.functionKeys.isStandardFunctionKeysEnabled)
+
+        fixture.controller.stop()
+
+        XCTAssertFalse(fixture.functionKeys.isStandardFunctionKeysEnabled)
+        XCTAssertEqual(fixture.functionKeys.writes, [true, false, true, false])
+    }
+
+    func testKeyboardModeApplyFailureIsRetried() {
+        let fixture = makeFixture(currentSourceID: "en")
+        fixture.store.upsertRule(makeRule(
+            bundleID: fixture.app.bundleIdentifier,
+            sourceID: "zh",
+            keyboardMode: .standardFunctionKeys
+        ))
+        fixture.functionKeys.writeResult = false
+
+        fixture.controller.start()
+
+        XCTAssertFalse(fixture.functionKeys.isStandardFunctionKeysEnabled)
+        XCTAssertNotNil(fixture.controller.keyboardModeError)
+
+        fixture.functionKeys.writeResult = true
+        fixture.controller.refresh()
+
+        XCTAssertTrue(fixture.functionKeys.isStandardFunctionKeysEnabled)
+        XCTAssertNil(fixture.controller.keyboardModeError)
+        XCTAssertEqual(fixture.functionKeys.writes, [true, true])
+    }
+
+    func testKeyboardModeRestoreFailureIsRetried() {
+        let fixture = makeFixture(currentSourceID: "en")
+        fixture.functionKeys.isStandardFunctionKeysEnabled = true
+        fixture.store.upsertRule(makeRule(
+            bundleID: fixture.app.bundleIdentifier,
+            sourceID: "zh",
+            keyboardMode: .mediaShortcuts
+        ))
+        let other = makeApplication(bundleIdentifier: "com.example.other", processIdentifier: 202)
+
+        fixture.controller.start()
+        XCTAssertFalse(fixture.functionKeys.isStandardFunctionKeysEnabled)
+
+        fixture.functionKeys.writeResult = false
+        fixture.applications.activate(other)
+
+        XCTAssertFalse(fixture.functionKeys.isStandardFunctionKeysEnabled)
+        XCTAssertNotNil(fixture.controller.keyboardModeError)
+
+        fixture.functionKeys.writeResult = true
+        fixture.controller.refresh()
+
+        XCTAssertTrue(fixture.functionKeys.isStandardFunctionKeysEnabled)
+        XCTAssertNil(fixture.controller.keyboardModeError)
+        XCTAssertEqual(fixture.functionKeys.writes, [false, true, true])
+    }
+
     private func makeFixture(
         currentSourceID: String,
         accessibilityGranted: Bool = false,
@@ -262,6 +467,7 @@ final class AutoInputControllerTests: XCTestCase {
         let focusObserver = FakeAutoInputFocusObserver()
         let hud = FakeInputSourceHUDPresenter()
         let accessibility = FakeAutoInputAccessibilityCheck(isTrusted: accessibilityGranted)
+        let functionKeys = FakeAutoInputFunctionKeyController()
         let applicationNotificationCenter = NotificationCenter()
         let controller = AutoInputController(
             store: store,
@@ -271,6 +477,7 @@ final class AutoInputControllerTests: XCTestCase {
             hudPresenter: hud,
             hudLabelResolver: hudLabelResolver,
             accessibilityCheck: accessibility,
+            functionKeyController: functionKeys,
             applicationNotificationCenter: applicationNotificationCenter,
             now: now
         )
@@ -281,6 +488,7 @@ final class AutoInputControllerTests: XCTestCase {
             focusObserver: focusObserver,
             hud: hud,
             accessibility: accessibility,
+            functionKeys: functionKeys,
             applicationNotificationCenter: applicationNotificationCenter,
             controller: controller,
             app: app
@@ -296,7 +504,8 @@ final class AutoInputPluginPanelTests: XCTestCase {
         let plugin = AutoInputPlugin(
             context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
             sourceController: FakeAutoInputSourceController(sources: [], currentSourceID: nil),
-            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil),
+            functionKeyController: FakeAutoInputFunctionKeyController()
         )
         let reference = try XCTUnwrap(plugin.actionCatalogEntries.last?.reference)
 
@@ -315,7 +524,8 @@ final class AutoInputPluginPanelTests: XCTestCase {
         let plugin = AutoInputPlugin(
             context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
             sourceController: sources,
-            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil),
+            functionKeyController: FakeAutoInputFunctionKeyController()
         )
         let reference = try XCTUnwrap(plugin.actionCatalogEntries.last?.reference)
 
@@ -349,7 +559,8 @@ final class AutoInputPluginPanelTests: XCTestCase {
         let plugin = AutoInputPlugin(
             context: PluginRuntimeContext(pluginID: "auto-input", storage: storage),
             sourceController: sources,
-            applicationMonitor: applications
+            applicationMonitor: applications,
+            functionKeyController: FakeAutoInputFunctionKeyController()
         )
         plugin.activate(context: PluginRuntimeContext(pluginID: "auto-input"))
 
@@ -384,7 +595,8 @@ final class AutoInputPluginPanelTests: XCTestCase {
                 storage: AutoInputMemoryStorage()
             ),
             sourceController: sources,
-            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil)
+            applicationMonitor: FakeAutoInputApplicationMonitor(frontmostApplication: nil),
+            functionKeyController: FakeAutoInputFunctionKeyController()
         )
         plugin.activate(context: PluginRuntimeContext(pluginID: "auto-input"))
         let reference = try XCTUnwrap(plugin.actionCatalogEntries.first {
@@ -409,12 +621,29 @@ final class AutoInputPluginPanelTests: XCTestCase {
 
 }
 
-private func makeRule(bundleID: String, sourceID: String) -> AutoInputRule {
+private func makeRule(
+    bundleID: String,
+    sourceID: String,
+    keyboardMode: AutoInputKeyboardMode = .system
+) -> AutoInputRule {
     AutoInputRule(
         bundleIdentifier: bundleID,
         displayName: bundleID,
         bundleURL: nil,
-        inputSourceID: sourceID
+        inputSourceID: sourceID,
+        keyboardMode: keyboardMode
+    )
+}
+
+private func makeApplication(
+    bundleIdentifier: String,
+    processIdentifier: pid_t
+) -> AutoInputApplication {
+    AutoInputApplication(
+        bundleIdentifier: bundleIdentifier,
+        displayName: bundleIdentifier,
+        bundleURL: nil,
+        processIdentifier: processIdentifier
     )
 }
 
@@ -426,6 +655,7 @@ private struct AutoInputFixture {
     let focusObserver: FakeAutoInputFocusObserver
     let hud: FakeInputSourceHUDPresenter
     let accessibility: FakeAutoInputAccessibilityCheck
+    let functionKeys: FakeAutoInputFunctionKeyController
     let applicationNotificationCenter: NotificationCenter
     let controller: AutoInputController
     let app: AutoInputApplication
@@ -576,6 +806,25 @@ private final class FakeAutoInputAccessibilityCheck: AutoInputAccessibilityCheck
         if prompt { requestCount += 1 }
         isTrusted = requestResult
         return isTrusted
+    }
+}
+
+@MainActor
+private final class FakeAutoInputFunctionKeyController: AutoInputFunctionKeyControlling {
+    var isStandardFunctionKeysEnabled: Bool
+    var writes: [Bool] = []
+    var writeResult = true
+
+    init(isStandardFunctionKeysEnabled: Bool = false) {
+        self.isStandardFunctionKeysEnabled = isStandardFunctionKeysEnabled
+    }
+
+    @discardableResult
+    func setStandardFunctionKeysEnabled(_ isEnabled: Bool) -> Bool {
+        writes.append(isEnabled)
+        guard writeResult else { return false }
+        isStandardFunctionKeysEnabled = isEnabled
+        return true
     }
 }
 

@@ -93,7 +93,8 @@ final class AutoInputPlugin: MacToolsPlugin, PluginApplicationActivityStateHandl
         focusObserver: AutoInputFocusObserving? = nil,
         hudPresenter: InputSourceHUDPresenting? = nil,
         hudLabelResolver: InputSourceHUDLabelResolving? = nil,
-        accessibilityCheck: AutoInputAccessibilityChecking? = nil
+        accessibilityCheck: AutoInputAccessibilityChecking? = nil,
+        functionKeyController: AutoInputFunctionKeyControlling? = nil
     ) {
         let localization = PluginLocalization(bundle: context.resourceBundle)
         let store = AutoInputStore(storage: context.storage)
@@ -105,8 +106,12 @@ final class AutoInputPlugin: MacToolsPlugin, PluginApplicationActivityStateHandl
             hudPresenter: hudPresenter ?? InputSourceHUDController(),
             hudLabelResolver: hudLabelResolver ?? StandardInputSourceHUDLabelResolver(),
             accessibilityCheck: accessibilityCheck ?? SystemAutoInputAccessibilityCheck(),
+            functionKeyController: functionKeyController ?? SystemAutoInputFunctionKeyController(),
             switchErrorMessage: {
                 localization.string("error.switchFailed", defaultValue: "无法切换输入法")
+            },
+            keyboardModeErrorMessage: {
+                localization.string("error.keyboardModeFailed", defaultValue: "无法更改顶部按键用途")
             }
         )
         self.localization = localization
@@ -124,7 +129,9 @@ final class AutoInputPlugin: MacToolsPlugin, PluginApplicationActivityStateHandl
             isEnabled: true,
             isAvailable: true,
             detail: nil,
-            errorMessage: persistenceErrorMessage ?? controller.errorMessage
+            errorMessage: persistenceErrorMessage
+                ?? controller.keyboardModeError
+                ?? controller.errorMessage
         )
     }
 
@@ -202,6 +209,10 @@ final class AutoInputPlugin: MacToolsPlugin, PluginApplicationActivityStateHandl
                     localization.string(
                         "action.selectSource.parameterTitle",
                         defaultValue: "输入法"
+                    ),
+                    localization.string(
+                        "settings.rules.keyboardMode.title",
+                        defaultValue: "键盘模式"
                     ),
                 ],
                 systemImage: "app.badge.checkmark"
