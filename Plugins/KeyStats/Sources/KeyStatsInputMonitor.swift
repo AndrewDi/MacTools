@@ -18,6 +18,11 @@ final class KeyStatsInputMonitor: KeyStatsInputMonitoring {
     private var runLoopSource: CFRunLoopSource?
     private let decoder = KeyStatsKeyNameDecoder()
 
+    /// Physical modifier key codes that are currently held down. `flagsChanged`
+    /// fires for both presses and releases, so this state is required to count
+    /// each modifier press exactly once.
+    private var pressedModifierKeyCodes: Set<Int> = []
+
     var status: KeyStatsInputMonitorStatus = .idle
     var onEvent: ((KeyStatsInputEvent) -> Void)?
 
@@ -103,6 +108,7 @@ final class KeyStatsInputMonitor: KeyStatsInputMonitoring {
 
         eventTap = nil
         runLoopSource = nil
+        pressedModifierKeyCodes.removeAll()
         status = .idle
     }
 
@@ -113,7 +119,7 @@ final class KeyStatsInputMonitor: KeyStatsInputMonitoring {
         CGEvent.tapEnable(tap: eventTap, enable: true)
     }
 
-    private func handle(
+    func handle(
         type: CGEventType,
         keyCode: Int,
         keyboardType: UInt32,
@@ -122,12 +128,7 @@ final class KeyStatsInputMonitor: KeyStatsInputMonitoring {
     ) {
         switch type {
         case .flagsChanged:
-            if keyCode == 57 {
-                onEvent?(.keyPress(name: "Caps"))
-            } else if let modifier = KeyStatsKeyNameDecoder.modifierKey(for: keyCode),
-                      flags.contains(modifier.flag) {
-                onEvent?(.keyPress(name: modifier.name))
-            }
+            handleModifierFlagsChanged(keyCode: keyCode, flags: flags)
 
         case .keyDown:
             guard !isAutoRepeat else {
@@ -136,10 +137,51 @@ final class KeyStatsInputMonitor: KeyStatsInputMonitoring {
             guard !KeyStatsKeyNameDecoder.isModifierKeyCode(keyCode) else {
                 return
             }
-            onEvent?(.keyPress(name: decoder.keyName(for: keyCode, keyboardType: keyboardType)))
+            onEvent?(
+                .keyPress(
+                    keyCode: keyCode,
+                    name: decoder.keyName(for: keyCode, keyboardType: keyboardType)
+                )
+            )
 
         default:
             break
         }
+    }
+
+    private func handleModifierFlagsChanged(keyCode: Int, flags: CGEventFlags) {
+        // Caps Lock is a toggle: every `flagsChanged` event is a distinct press
+        // because there is no separate key-up event to pair with it.
+        if keyCode == KeyStatsKeyNameDecoder.capsLockKeyCode {
+            onEvent?(.keyPress(keyCode: keyCode, name: "Caps"))
+            return
+        }
+
+        // Fn is reported as 63 on most keyboards and 179 on some hardware.
+        // Canonicalize both to one physical identity.
+        let identityKeyCode = KeyStatsKeyNameDecoder.functionKeyCodes.contains(keyCode) ? 63 : keyCode
+        guard let modifier = KeyStatsKeyNameDecoder.modifierKey(for: identityKeyCode) else {
+            return
+        }
+
+        if isModifierPressed(keyCode: identityKeyCode, flags: flags) {
+            guard pressedModifierKeyCodes.insert(identityKeyCode).inserted else {
+                return
+            }
+            onEvent?(.keyPress(keyCode: identityKeyCode, name: modifier.name))
+        } else {
+            pressedModifierKeyCodes.remove(identityKeyCode)
+        }
+    }
+
+    private func isModifierPressed(keyCode: Int, flags: CGEventFlags) -> Bool {
+        if keyCode == 63 {
+            return flags.contains(.maskSecondaryFn)
+        }
+
+        return KeyboardKeyTapEventTransition.isModifierPress(
+            keyCode: UInt16(keyCode),
+            flags: flags
+        )
     }
 }

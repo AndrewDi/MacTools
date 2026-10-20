@@ -48,8 +48,15 @@ final class KeyStatsStore: ObservableObject {
         self.dateProvider = dateProvider
         self.persistenceDelay = persistenceDelay
         let loaded = Self.loadDays(storage: storage, decoder: decoder)
-        self.days = Self.prunedDays(loaded.days)
+        self.days = loaded.days
         self.loadError = loaded.error
+
+        // Drop records outside the calendar-day window and persist the cleanup
+        // even when the user has not pressed a key since the last launch.
+        pruneExpiredDays()
+        if hasPendingChanges {
+            persistPendingChanges()
+        }
     }
 
     deinit {
@@ -81,21 +88,34 @@ final class KeyStatsStore: ObservableObject {
 
     func record(_ event: KeyStatsInputEvent) {
         switch event {
-        case let .keyPress(name):
-            recordKeyPress(name)
+        case let .keyPress(keyCode, name):
+            recordKeyPress(keyCode: keyCode, name: name)
         case .trackpadUse:
             recordTrackpadUse()
         }
     }
 
-    func recordKeyPress(_ name: String) {
+    func recordKeyPress(keyCode: Int, name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return
         }
 
         mutateToday { day in
-            day.keyPressCounts[trimmed, default: 0] += 1
+            if let index = day.keyPresses.firstIndex(where: { $0.keyCode == keyCode }) {
+                day.keyPresses[index].count += 1
+                day.keyPresses[index].name = trimmed
+            } else if let index = day.keyPresses.firstIndex(where: {
+                $0.keyCode == nil && $0.name == trimmed
+            }) {
+                // Upgrade a legacy name-only record to a stable key code.
+                day.keyPresses[index].keyCode = keyCode
+                day.keyPresses[index].count += 1
+            } else {
+                day.keyPresses.append(
+                    KeyStatsKeyPress(keyCode: keyCode, name: trimmed, count: 1)
+                )
+            }
         }
     }
 
@@ -121,7 +141,7 @@ final class KeyStatsStore: ObservableObject {
         var candidateDays = days
         let key = dateKey(for: dateProvider())
         candidateDays[key] = KeyStatsDailyStats(date: key)
-        candidateDays = Self.prunedDays(candidateDays)
+        candidateDays = prunedDays(candidateDays)
 
         guard let candidateData = try? encoder.encode(candidateDays) else {
             return nil
@@ -222,11 +242,10 @@ final class KeyStatsStore: ObservableObject {
         guard loadError == nil else {
             return
         }
+        pruneExpiredDays()
         guard force || hasPendingChanges else {
             return
         }
-
-        days = Self.prunedDays(days)
 
         do {
             let data = try encoder.encode(days)
@@ -241,11 +260,12 @@ final class KeyStatsStore: ObservableObject {
 
     private func reloadFromStorage() {
         let loaded = Self.loadDays(storage: storage, decoder: decoder)
-        days = Self.prunedDays(loaded.days)
+        days = loaded.days
         loadError = loaded.error
         hasPendingChanges = false
         persistenceTask?.cancel()
         persistenceTask = nil
+        pruneExpiredDays()
     }
 
     private func restoreStorageValue(_ value: Any?, forKey key: String) -> Bool {
@@ -288,14 +308,40 @@ final class KeyStatsStore: ObservableObject {
         }
     }
 
-    private static func prunedDays(
-        _ days: [String: KeyStatsDailyStats]
-    ) -> [String: KeyStatsDailyStats] {
-        guard days.count > Persistence.retainedDayCount else {
-            return days
+    /// Removes days that fall outside the retained calendar window.
+    ///
+    /// Retention is based on the current calendar date rather than on record
+    /// count, so stale entries disappear even when the user stops typing.
+    @discardableResult
+    private func pruneExpiredDays() -> Bool {
+        guard loadError == nil else {
+            return false
         }
 
-        let retainedKeys = Set(days.keys.sorted().suffix(Persistence.retainedDayCount))
-        return days.filter { retainedKeys.contains($0.key) }
+        let candidate = prunedDays(days)
+        guard candidate.count != days.count else {
+            return false
+        }
+
+        days = candidate
+        hasPendingChanges = true
+        return true
+    }
+
+    private func prunedDays(
+        _ days: [String: KeyStatsDailyStats]
+    ) -> [String: KeyStatsDailyStats] {
+        let cutoff = pruningCutoffKey()
+        return days.filter { $0.key >= cutoff }
+    }
+
+    private func pruningCutoffKey() -> String {
+        let today = dateProvider()
+        let cutoffDate = calendar.date(
+            byAdding: .day,
+            value: -(Persistence.retainedDayCount - 1),
+            to: today
+        ) ?? today
+        return dateKey(for: cutoffDate)
     }
 }

@@ -20,4 +20,12 @@ final class KeyStatsKeyNameDecoderTests: XCTestCase {
         XCTAssertTrue(KeyStatsKeyNameDecoder.isModifierKeyCode(57))
         XCTAssertFalse(KeyStatsKeyNameDecoder.isModifierKeyCode(0))
     }
+
+    func testLegacyNamesMapBackToPhysicalKeyCodes() {
+        XCTAssertEqual(KeyStatsKeyNameDecoder.keyCode(forName: "A"), 0)
+        XCTAssertEqual(KeyStatsKeyNameDecoder.keyCode(forName: "Space"), 49)
+        XCTAssertEqual(KeyStatsKeyNameDecoder.keyCode(forName: "⇧L"), 56)
+        XCTAssertEqual(KeyStatsKeyNameDecoder.keyCode(forName: "Fn"), 63)
+        XCTAssertNil(KeyStatsKeyNameDecoder.keyCode(forName: "Ф"))
+    }
 }

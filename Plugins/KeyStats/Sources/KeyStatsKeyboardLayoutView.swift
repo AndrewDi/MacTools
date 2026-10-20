@@ -2,7 +2,8 @@ import SwiftUI
 import MacToolsPluginKit
 
 struct KeyStatsKeyboardLayoutView: View {
-    let counts: [String: Int]
+    let stats: KeyStatsDailyStats
+    var otherKeysTitle: String = ""
 
     private let totalUnits: CGFloat = 15
     private let keySpacing: CGFloat = 4
@@ -11,23 +12,46 @@ struct KeyStatsKeyboardLayoutView: View {
     private let rowHeight: CGFloat = 40
 
     var body: some View {
-        GeometryReader { geometry in
-            let unit = max(
-                0,
-                (geometry.size.width - keySpacing * (totalUnits - 1)) / totalUnits
-            )
+        VStack(alignment: .leading, spacing: 10) {
+            GeometryReader { geometry in
+                let unit = max(
+                    0,
+                    (geometry.size.width - keySpacing * (totalUnits - 1)) / totalUnits
+                )
 
-            VStack(spacing: rowSpacing) {
-                keyRow(Self.functionRow, unit: unit, height: functionRowHeight)
-                keyRow(Self.numberRow, unit: unit, height: rowHeight)
-                keyRow(Self.tabRow, unit: unit, height: rowHeight)
-                keyRow(Self.capsRow, unit: unit, height: rowHeight)
-                keyRow(Self.shiftRow, unit: unit, height: rowHeight)
-                bottomRow(unit: unit, height: rowHeight)
+                VStack(spacing: rowSpacing) {
+                    keyRow(Self.functionRow, unit: unit, height: functionRowHeight)
+                    keyRow(Self.numberRow, unit: unit, height: rowHeight)
+                    keyRow(Self.tabRow, unit: unit, height: rowHeight)
+                    keyRow(Self.capsRow, unit: unit, height: rowHeight)
+                    keyRow(Self.shiftRow, unit: unit, height: rowHeight)
+                    bottomRow(unit: unit, height: rowHeight)
+                }
+            }
+            .frame(height: totalHeight)
+            .accessibilityElement(children: .contain)
+
+            if !otherPresses.isEmpty {
+                otherKeys
             }
         }
-        .frame(height: totalHeight)
-        .accessibilityElement(children: .contain)
+    }
+
+    private var counts: [Int: Int] {
+        stats.keyPressCounts
+    }
+
+    /// Keys that are counted but have no cap in the MacBook Pro diagram, such
+    /// as keypad keys, navigation keys, and legacy name-only records.
+    private var otherPresses: [KeyStatsKeyPress] {
+        let diagramKeyCodes = Set(Self.allKeys.compactMap(\.keyCode))
+
+        return stats.sortedPresses.filter { press in
+            guard let keyCode = press.keyCode else {
+                return true
+            }
+            return !diagramKeyCodes.contains(keyCode)
+        }
     }
 
     private var totalHeight: CGFloat {
@@ -35,12 +59,7 @@ struct KeyStatsKeyboardLayoutView: View {
     }
 
     private var maxCount: Int {
-        Self.allKeys.reduce(0) { result, key in
-            guard let statName = key.statName else {
-                return result
-            }
-            return max(result, counts[statName] ?? 0)
-        }
+        counts.values.max() ?? 0
     }
 
     private func keyRow(
@@ -94,7 +113,7 @@ struct KeyStatsKeyboardLayoutView: View {
     }
 
     private func keyCap(_ key: KeyStatsKeyboardKey, compact: Bool = false) -> some View {
-        let count = key.statName.map { counts[$0] ?? 0 }
+        let count = key.keyCode.map { counts[$0] ?? 0 }
         let ratio = maxCount > 0 ? Double(count ?? 0) / Double(maxCount) : 0
         let fill: AnyShapeStyle = (count ?? 0) > 0
             ? AnyShapeStyle(Color.accentColor.opacity(0.08 + 0.28 * ratio))
@@ -136,6 +155,66 @@ struct KeyStatsKeyboardLayoutView: View {
         .accessibilityValue(Text(count.map(KeyStatsFormatting.decimal) ?? ""))
     }
 
+    private var otherKeys: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if !otherKeysTitle.isEmpty {
+                Text(otherKeysTitle)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.secondary)
+            }
+
+            LazyVGrid(
+                columns: [
+                    GridItem(
+                        .adaptive(minimum: 82),
+                        spacing: keySpacing,
+                        alignment: .leading
+                    )
+                ],
+                alignment: .leading,
+                spacing: keySpacing
+            ) {
+                ForEach(otherPresses, id: \.self) { press in
+                    otherKeyChip(press)
+                }
+            }
+        }
+    }
+
+    private func otherKeyChip(_ press: KeyStatsKeyPress) -> some View {
+        let shape = RoundedRectangle(
+            cornerRadius: PluginSettingsTheme.Radius.field,
+            style: .continuous
+        )
+
+        return HStack(spacing: 4) {
+            Text(press.name)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+
+            Spacer(minLength: 0)
+
+            Text(KeyStatsFormatting.decimal(press.count))
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+        }
+        .font(PluginSettingsTheme.Typography.statusBadge)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(PluginSettingsTheme.Palette.keycapBackground, in: shape)
+        .overlay {
+            shape.strokeBorder(
+                PluginSettingsTheme.Palette.cardBorder,
+                lineWidth: PluginSettingsTheme.Stroke.hairline
+            )
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(press.name))
+        .accessibilityValue(Text(KeyStatsFormatting.decimal(press.count)))
+    }
+
     @ViewBuilder
     private func keyLabel(_ key: KeyStatsKeyboardKey) -> some View {
         if let systemImage = key.systemImage {
@@ -160,15 +239,16 @@ struct KeyStatsKeyboardLayoutView: View {
             .minimumScaleFactor(0.65)
     }
 
-    nonisolated private static func letterKey(_ letter: String) -> KeyStatsKeyboardKey {
-        key("letter-\(letter.lowercased())", letter, stat: letter)
+    nonisolated private static func letterKey(_ letter: String, code: Int) -> KeyStatsKeyboardKey {
+        key("letter-\(letter.lowercased())", letter, code: code)
     }
 
     private static let functionRow: [KeyStatsKeyboardKey] = {
-        var keys = [key("esc", "esc", stat: "Esc", width: 1.5)]
+        var keys = [key("esc", "esc", code: 53, width: 1.5)]
         let functionKeyWidth: CGFloat = 11.5 / 12
-        keys += (1...12).map { index in
-            key("f\(index)", "F\(index)", stat: "F\(index)", width: functionKeyWidth)
+        let functionRowCodes = [122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111]
+        keys += functionRowCodes.enumerated().map { index, code in
+            key("f\(index + 1)", "F\(index + 1)", code: code, width: functionKeyWidth)
         }
         keys.append(
             key(
@@ -183,67 +263,74 @@ struct KeyStatsKeyboardLayoutView: View {
     }()
 
     private static let numberRow: [KeyStatsKeyboardKey] = {
-        var keys = [key("grave", "`", stat: "`")]
-        keys += (1...9).map { index in
-            key("number-\(index)", "\(index)", stat: "\(index)")
+        var keys = [key("grave", "`", code: 50)]
+        let numberCodes = [18, 19, 20, 21, 23, 22, 26, 28, 25]
+        keys += numberCodes.enumerated().map { index, code in
+            key("number-\(index + 1)", "\(index + 1)", code: code)
         }
         keys += [
-            key("number-0", "0", stat: "0"),
-            key("minus", "-", stat: "-"),
-            key("equal", "=", stat: "="),
-            key("delete", "", stat: "Delete", width: 2, image: "delete.left", accessibility: "Delete"),
+            key("number-0", "0", code: 29),
+            key("minus", "-", code: 27),
+            key("equal", "=", code: 24),
+            key("delete", "", code: 51, width: 2, image: "delete.left", accessibility: "Delete"),
         ]
         return keys
     }()
 
     private static let tabRow: [KeyStatsKeyboardKey] = {
-        var keys = [key("tab", "tab", stat: "Tab", width: 2)]
-        keys += ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"].map(letterKey)
+        var keys = [key("tab", "tab", code: 48, width: 2)]
+        let letterCodes = [12, 13, 14, 15, 17, 16, 32, 34, 31, 35]
+        keys += zip(["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"], letterCodes)
+            .map { letter, code in letterKey(letter, code: code) }
         keys += [
-            key("left-bracket", "[", stat: "["),
-            key("right-bracket", "]", stat: "]"),
-            key("backslash", "\\", stat: "\\"),
+            key("left-bracket", "[", code: 33),
+            key("right-bracket", "]", code: 30),
+            key("backslash", "\\", code: 42),
         ]
         return keys
     }()
 
     private static let capsRow: [KeyStatsKeyboardKey] = {
-        var keys = [key("caps-lock", "caps lock", stat: "Caps", width: 2)]
-        keys += ["A", "S", "D", "F", "G", "H", "J", "K", "L"].map(letterKey)
+        var keys = [key("caps-lock", "caps lock", code: 57, width: 2)]
+        let letterCodes = [0, 1, 2, 3, 5, 4, 38, 40, 37]
+        keys += zip(["A", "S", "D", "F", "G", "H", "J", "K", "L"], letterCodes)
+            .map { letter, code in letterKey(letter, code: code) }
         keys += [
-            key("semicolon", ";", stat: ";"),
-            key("quote", "'", stat: "'"),
-            key("return", "return", stat: "Return", width: 2),
+            key("semicolon", ";", code: 41),
+            key("quote", "'", code: 39),
+            key("return", "return", code: 36, width: 2),
         ]
         return keys
     }()
 
     private static let shiftRow: [KeyStatsKeyboardKey] = {
-        var keys = [key("left-shift", "shift", stat: "⇧L", width: 2)]
-        keys += ["Z", "X", "C", "V", "B", "N", "M"].map(letterKey)
+        var keys = [key("left-shift", "shift", code: 56, width: 2)]
+        let letterCodes = [6, 7, 8, 9, 11, 45, 46]
+        keys += zip(["Z", "X", "C", "V", "B", "N", "M"], letterCodes)
+            .map { letter, code in letterKey(letter, code: code) }
         keys += [
-            key("comma", ",", stat: ","),
-            key("period", ".", stat: "."),
-            key("slash", "/", stat: "/"),
-            key("right-shift", "shift", stat: "⇧R", width: 3),
+            key("comma", ",", code: 43),
+            key("period", ".", code: 47),
+            key("slash", "/", code: 44),
+            key("right-shift", "shift", code: 60, width: 3),
         ]
         return keys
     }()
 
     private static let bottomKeys: [KeyStatsKeyboardKey] = [
-        key("fn", "fn", stat: "Fn"),
-        key("left-control", "⌃", stat: "⌃L", accessibility: "Left Control"),
-        key("left-option", "⌥", stat: "⌥L", width: 1.25, accessibility: "Left Option"),
-        key("left-command", "⌘", stat: "⌘L", width: 1.25, accessibility: "Left Command"),
-        key("space", "space", stat: "Space", width: 4.75),
-        key("right-command", "⌘", stat: "⌘R", width: 1.25, accessibility: "Right Command"),
-        key("right-option", "⌥", stat: "⌥R", width: 1.25, accessibility: "Right Option"),
+        key("fn", "fn", code: 63),
+        key("left-control", "⌃", code: 59, accessibility: "Left Control"),
+        key("left-option", "⌥", code: 58, width: 1.25, accessibility: "Left Option"),
+        key("left-command", "⌘", code: 55, width: 1.25, accessibility: "Left Command"),
+        key("space", "space", code: 49, width: 4.75),
+        key("right-command", "⌘", code: 54, width: 1.25, accessibility: "Right Command"),
+        key("right-option", "⌥", code: 61, width: 1.25, accessibility: "Right Option"),
     ]
 
-    private static let arrowLeft = key("arrow-left", "←", stat: "←")
-    private static let arrowUp = key("arrow-up", "↑", stat: "↑")
-    private static let arrowDown = key("arrow-down", "↓", stat: "↓")
-    private static let arrowRight = key("arrow-right", "→", stat: "→")
+    private static let arrowLeft = key("arrow-left", "←", code: 123)
+    private static let arrowUp = key("arrow-up", "↑", code: 126)
+    private static let arrowDown = key("arrow-down", "↓", code: 125)
+    private static let arrowRight = key("arrow-right", "→", code: 124)
 
     private static let allKeys =
         functionRow + numberRow + tabRow + capsRow + shiftRow + bottomKeys +
@@ -255,7 +342,7 @@ private struct KeyStatsKeyboardKey: Identifiable {
     let label: String
     let systemImage: String?
     let accessibilityLabel: String
-    let statName: String?
+    let keyCode: Int?
     let widthUnits: CGFloat
 
     init(
@@ -263,14 +350,14 @@ private struct KeyStatsKeyboardKey: Identifiable {
         label: String,
         systemImage: String? = nil,
         accessibilityLabel: String? = nil,
-        statName: String?,
+        keyCode: Int?,
         widthUnits: CGFloat = 1
     ) {
         self.id = id
         self.label = label
         self.systemImage = systemImage
         self.accessibilityLabel = accessibilityLabel ?? label
-        self.statName = statName
+        self.keyCode = keyCode
         self.widthUnits = widthUnits
     }
 }
@@ -278,7 +365,7 @@ private struct KeyStatsKeyboardKey: Identifiable {
 private func key(
     _ id: String,
     _ label: String,
-    stat: String? = nil,
+    code: Int? = nil,
     width: CGFloat = 1,
     image: String? = nil,
     accessibility: String? = nil
@@ -288,7 +375,7 @@ private func key(
         label: label,
         systemImage: image,
         accessibilityLabel: accessibility,
-        statName: stat,
+        keyCode: code,
         widthUnits: width
     )
 }

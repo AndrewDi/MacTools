@@ -364,14 +364,20 @@ struct KeyStatsSettingsView: View {
                     localization.format(
                         "settings.keys.hint",
                         defaultValue: "已使用 %@ 个按键",
-                        KeyStatsFormatting.decimal(today.sortedKeys.count)
+                        KeyStatsFormatting.decimal(today.usedKeyCount)
                     )
                 )
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)
             }
 
-            KeyStatsKeyboardLayoutView(counts: today.keyPressCounts)
+            KeyStatsKeyboardLayoutView(
+                stats: today,
+                otherKeysTitle: localization.string(
+                    "settings.keys.other",
+                    defaultValue: "其他按键"
+                )
+            )
 
             Text(
                 localization.string(
