@@ -81,6 +81,9 @@ struct PowerStatusComponentView: View {
 
             // Battery and electrical telemetry, grouped
             telemetrySection
+
+            // Applications drawing the most power
+            energyAppsSection
         }
         .padding(.vertical, PowerStatusLayout.cardVerticalPadding)
         .frame(maxWidth: .infinity)
@@ -215,7 +218,26 @@ struct PowerStatusComponentView: View {
         .padding(.bottom, PowerStatusLayout.section)
     }
 
-    // MARK: - Battery section
+    // MARK: - Energy-consuming apps
+
+    /// The five heaviest applications in the current sampling window. Empty
+    /// until the second sample establishes a baseline.
+    @ViewBuilder
+    private var energyAppsSection: some View {
+        let apps = viewModel.snapshot.topEnergyApps
+        if !apps.isEmpty {
+            detailGroup(title: localization.string("energyApps.title", defaultValue: "高耗电应用")) {
+                VStack(spacing: PowerStatusLayout.rowVertical) {
+                    ForEach(apps) { app in
+                        PowerStatusAppEnergyRow(app: app)
+                    }
+                }
+            }
+            .help(localization.string("energyApps.help", defaultValue: "最近一次采样间隔内的平均功耗"))
+            .padding(.horizontal, PowerStatusLayout.horizontalPadding)
+            .padding(.top, PowerStatusLayout.section)
+        }
+    }
 
     // MARK: - Telemetry
 
@@ -477,6 +499,7 @@ enum PowerStatusLayout {
     static let metricRowHeight: CGFloat = 17
     static let batteryBarHeight: CGFloat = 26
     static let miniMetricRowHeight: CGFloat = 31
+    static let appEnergyRowHeight: CGFloat = 20
     static let detailGroupHeaderHeight: CGFloat = 15
     static let emptyContentHeight: CGFloat = 122
 
@@ -496,6 +519,7 @@ enum PowerStatusLayout {
         diagramRowCount: Int,
         capacityTileCount: Int,
         voltageCurrentTileCount: Int,
+        energyAppCount: Int = 0,
         isDataAvailable: Bool
     ) -> CGFloat {
         guard isDataAvailable else {
@@ -508,6 +532,7 @@ enum PowerStatusLayout {
         let powerFlow = CGFloat(rows) * metricRowHeight
             + CGFloat(max(rows - 1, 0)) * rowVertical
             + section
+        let energyApps = energyAppsHeight(rowCount: energyAppCount)
         // The capacity group always renders; it carries the battery level bar.
         let capacity = groupHeight(
             barHeight: batteryBarHeight + rowVertical,
@@ -515,7 +540,16 @@ enum PowerStatusLayout {
         )
         let voltageCurrent = groupHeight(barHeight: 0, tileCount: voltageCurrentTileCount)
         let padding = cardVerticalPadding * 2
-        return header + diagram + powerFlow + capacity + voltageCurrent + padding
+        return header + diagram + powerFlow + energyApps + capacity + voltageCurrent + padding
+    }
+
+    /// One row per application, under the same group header as the telemetry
+    /// groups but in a single column.
+    private static func energyAppsHeight(rowCount: Int) -> CGFloat {
+        guard rowCount > 0 else { return 0 }
+        return section + detailGroupHeaderHeight + sectionHeaderContent
+            + CGFloat(rowCount) * appEnergyRowHeight
+            + CGFloat(max(rowCount - 1, 0)) * rowVertical
     }
 
     /// One telemetry group: its own leading spacing, header, an optional
@@ -1006,6 +1040,45 @@ private struct PowerFlowJunctionLine: View {
             style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
         )
     }
+}
+
+private struct PowerStatusAppEnergyRow: View {
+    let app: PowerStatusAppEnergy
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                if let icon = app.icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                } else {
+                    Image(systemName: "app.dashed")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(theme.text.tertiary)
+                }
+            }
+            .frame(width: 16, height: 16)
+
+            Text(app.name)
+                .font(PluginTypography.detail.font)
+                .foregroundStyle(theme.text.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 8)
+
+            Text(PowerStatusValueText.energyWatts(app.watts))
+                .font(PluginTypography.detail.font.weight(.medium))
+                .foregroundStyle(theme.text.primary)
+                .monospacedDigit()
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(app.name) \(PowerStatusValueText.energyWatts(app.watts))")
+    }
+
+    @Environment(\.pluginComponentTheme) private var theme
 }
 
 private struct PowerStatusMetricRow: View {

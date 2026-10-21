@@ -644,6 +644,52 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(PowerStatusLayout.capacityTileCount(for: designOnly), 1)
     }
 
+    // MARK: - App energy readings
+
+    func testAppEnergyDeltaConvertsNanojoulesToWatts() {
+        let previous: [Int32: UInt64] = [
+            10: 1_000_000_000,
+            20: 500_000_000,
+            30: 2_000_000_000,
+        ]
+        let current: [Int32: UInt64] = [
+            10: 3_000_000_000, // +2 J over 2 s = 1 W
+            20: 400_000_000,   // counter went backwards (reused PID) = no reading
+            30: 2_500_000_000, // +0.5 J over 2 s = 0.25 W
+            40: 9_000_000_000, // no baseline yet
+        ]
+
+        let watts = PowerStatusAppEnergyMath.watts(previous: previous, current: current, elapsed: 2)
+
+        XCTAssertEqual(watts[10] ?? -1, 1.0, accuracy: 0.001)
+        XCTAssertNil(watts[20])
+        XCTAssertEqual(watts[30] ?? -1, 0.25, accuracy: 0.001)
+        XCTAssertNil(watts[40])
+    }
+
+    func testAppEnergyRankingKeepsFiveHeaviestAboveThreshold() {
+        let apps = [
+            PowerStatusAppEnergy(id: "a", name: "Alpha", icon: nil, watts: 0.05),
+            PowerStatusAppEnergy(id: "b", name: "Bravo", icon: nil, watts: 1.20),
+            PowerStatusAppEnergy(id: "c", name: "Charlie", icon: nil, watts: 0.30),
+            PowerStatusAppEnergy(id: "d", name: "Delta", icon: nil, watts: 0.90),
+            PowerStatusAppEnergy(id: "e", name: "Echo", icon: nil, watts: 0.60),
+            PowerStatusAppEnergy(id: "f", name: "Foxtrot", icon: nil, watts: 0.40),
+            PowerStatusAppEnergy(id: "g", name: "Golf", icon: nil, watts: 0.01),
+        ]
+
+        let ranked = PowerStatusAppEnergyMath.ranked(apps)
+
+        XCTAssertEqual(ranked.map(\.name), ["Bravo", "Delta", "Echo", "Foxtrot", "Charlie"])
+        XCTAssertFalse(ranked.contains { $0.id == "g" })
+    }
+
+    func testAppEnergyWattsFormattingUsesExtraPrecisionBelowOneWatt() {
+        XCTAssertEqual(PowerStatusValueText.energyWatts(1.24), "1.2 W")
+        XCTAssertEqual(PowerStatusValueText.energyWatts(0.126), "0.13 W")
+        XCTAssertEqual(PowerStatusValueText.energyWatts(nil), PowerStatusValueText.unavailable)
+    }
+
     // MARK: - Helpers
 
     private func makeSnapshot(

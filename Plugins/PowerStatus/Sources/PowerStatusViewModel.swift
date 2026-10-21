@@ -21,6 +21,8 @@ final class PowerStatusViewModel: ObservableObject {
     private static let emaAlpha = 0.065
     private var dischargeEMA: Double?
 
+    private let energyMonitor = PowerStatusAppEnergyMonitor()
+
     // MARK: - Panel visibility
 
     func setPanelVisible(_ visible: Bool) {
@@ -43,6 +45,7 @@ final class PowerStatusViewModel: ObservableObject {
 
     private func startMonitoring() {
         guard timer == nil else { return }
+        energyMonitor.reset()
         updateData()
         scheduleTimer()
         setupPowerSourceNotification()
@@ -103,6 +106,9 @@ final class PowerStatusViewModel: ObservableObject {
     private func updateData() {
         var newSnapshot = PowerStatusSampler.readSnapshot()
         newSnapshot.smoothedDischargePowerW = updateSmoothedDischargePower(from: newSnapshot)
+        if newSnapshot.isDataAvailable {
+            newSnapshot.topEnergyApps = energyMonitor.sample(now: newSnapshot.timestamp)
+        }
         guard newSnapshot != snapshot else { return }
         snapshot = newSnapshot
         onSnapshotChange?()

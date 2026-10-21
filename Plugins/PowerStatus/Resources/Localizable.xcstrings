@@ -576,6 +576,38 @@
         "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tahmini çalışma süresi" } },
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "مدة التشغيل المقدّرة" } }
       }
+    },
+    "energyApps.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "High Energy Apps" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高耗电应用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "高耗電應用" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "電力消費の多いアプリ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "에너지 사용이 많은 앱" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Hoher Energieverbrauch" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Fortes consommations" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Mayor consumo" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Maior consumo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Высокое энергопотребление" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Yüksek Enerji Kullanımı" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "التطبيقات عالية الاستهلاك" } }
+      }
+    },
+    "energyApps.help" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Average power draw over the latest sampling interval." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最近一次采样间隔内的平均功耗。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "最近一次取樣間隔內的平均功耗。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "直近のサンプリング間隔における平均消費電力。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "최근 샘플링 구간의 평균 전력 사용량입니다." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Durchschnittliche Leistungsaufnahme im letzten Messintervall." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Consommation moyenne sur le dernier intervalle d'échantillonnage." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Consumo medio durante el último intervalo de muestreo." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Consumo médio no último intervalo de amostragem." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Средняя потребляемая мощность за последний интервал измерения." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Son örnekleme aralığındaki ortalama güç tüketimi." } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "متوسط استهلاك الطاقة خلال آخر فترة قياس." } }
+      }
     }
   },
   "version" : "1.0"
