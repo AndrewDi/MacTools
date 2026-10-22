@@ -78,11 +78,26 @@ final class WindowLayoutService: WindowLayoutExecuting {
         case fullScreen(AccessibilityWindowHandle)
     }
 
+    private enum IncrementalResizeAxis {
+        case width
+        case height
+
+        func length(of frame: CGRect) -> CGFloat {
+            switch self {
+            case .width:
+                return frame.width
+            case .height:
+                return frame.height
+            }
+        }
+    }
+
     private struct PreparedPlacement {
         let window: AccessibilityWindowHandle
         let targetFrame: CGRect
         let shouldResize: Bool
         let halfCyclePlan: HalfCyclePlan?
+        let incrementalResizeAxis: IncrementalResizeAxis?
     }
 
     private struct HalfCyclePlan {
@@ -114,6 +129,12 @@ final class WindowLayoutService: WindowLayoutExecuting {
     private let waitForFrameSettlement: @MainActor @Sendable (Duration) async throws -> Void
     private let executionGate = WindowLayoutExecutionGate()
     private var halfCycleStates: [WindowIdentity: HalfCycleState] = [:]
+    private static let frameSettlementDelays: [Duration] = [
+        .milliseconds(16),
+        .milliseconds(34),
+        .milliseconds(75),
+        .milliseconds(125),
+    ]
 
     init(
         focusedWindowResolver: FocusedWindowResolving = SystemFocusedWindowResolver(),
@@ -282,6 +303,7 @@ final class WindowLayoutService: WindowLayoutExecuting {
         )
         let targetFrame: CGRect
         var halfCyclePlan: HalfCyclePlan? = nil
+        var incrementalResizeAxis: IncrementalResizeAxis?
         switch operation {
         case .moveToNextDisplay, .moveToPreviousDisplay:
             guard let destination = screenResolver.adjacentScreen(
@@ -333,6 +355,9 @@ final class WindowLayoutService: WindowLayoutExecuting {
                 visibleFrame: effectiveCurrentScreen.visibleFrame,
                 gap: options.gap
             )
+            incrementalResizeAxis = operation == .increaseHeight || operation == .decreaseHeight
+                ? .height
+                : .width
         default:
             if operation.requiresResize, !window.canResize {
                 throw WindowLayoutError.windowCannotResize
@@ -358,7 +383,8 @@ final class WindowLayoutService: WindowLayoutExecuting {
             window: window,
             targetFrame: targetFrame,
             shouldResize: targetFrame.size != currentFrame.size,
-            halfCyclePlan: halfCyclePlan
+            halfCyclePlan: halfCyclePlan,
+            incrementalResizeAxis: incrementalResizeAxis
         ))
     }
 
@@ -388,7 +414,8 @@ final class WindowLayoutService: WindowLayoutExecuting {
             window: window,
             targetFrame: targetFrame,
             shouldResize: targetFrame.size != currentFrame.size,
-            halfCyclePlan: nil
+            halfCyclePlan: nil,
+            incrementalResizeAxis: nil
         )
     }
 
@@ -424,13 +451,7 @@ final class WindowLayoutService: WindowLayoutExecuting {
             )
             observedFrame = try await frameReader.frame(of: currentWindow)
             var didRetryWrite = false
-            let settlementDelays: [Duration] = [
-                .milliseconds(16),
-                .milliseconds(34),
-                .milliseconds(75),
-                .milliseconds(125),
-            ]
-            for delay in settlementDelays where !approximatelyEqual(
+            for delay in Self.frameSettlementDelays where !approximatelyEqual(
                 observedFrame,
                 placement.targetFrame
             ) {
@@ -447,6 +468,18 @@ final class WindowLayoutService: WindowLayoutExecuting {
                     didRetryWrite = true
                     observedFrame = try await frameReader.frame(of: settledWindow)
                 }
+            }
+            if let axis = placement.incrementalResizeAxis {
+                // Incremental resizing recenters or anchors an edge before the size change.
+                // When that axis stays the same, put the window back so repeated attempts
+                // cannot walk it across the screen.
+                try await restorePositionIfIncrementalResizeWasIgnored(
+                    axis: axis,
+                    targetFrame: placement.targetFrame,
+                    originalFrame: currentFrame,
+                    observedFrame: observedFrame,
+                    window: currentWindow
+                )
             }
         } catch WindowEnhancedUIFrameGuard.Failure.restorationFailedAfterWrite {
             // Cleanup failed after the AX frame transaction committed, including
@@ -471,6 +504,96 @@ final class WindowLayoutService: WindowLayoutExecuting {
         if !approximatelyEqual(observedFrame.origin, placement.targetFrame.origin) {
             throw WindowLayoutError.frameWriteFailed
         }
+    }
+
+    private func restorePositionIfIncrementalResizeWasIgnored(
+        axis: IncrementalResizeAxis,
+        targetFrame: CGRect,
+        originalFrame: CGRect,
+        observedFrame: CGRect,
+        window: AccessibilityWindowHandle
+    ) async throws {
+        let requestedLength = axis.length(of: targetFrame)
+        let originalLength = axis.length(of: originalFrame)
+        guard !approximatelyEqual(requestedLength, originalLength),
+              approximatelyEqual(axis.length(of: observedFrame), originalLength) else {
+            return
+        }
+
+        try Task.checkCancellation()
+        let recoveryWindow: AccessibilityWindowHandle
+        do {
+            recoveryWindow = try await revalidatedWindow(matching: window.identity)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            preserveUndoAfterFailedRecovery(
+                originalFrame: originalFrame,
+                observedFrame: observedFrame,
+                window: window
+            )
+            throw error
+        }
+        guard await frameReader.isValid(recoveryWindow) else {
+            preserveUndoAfterFailedRecovery(
+                originalFrame: originalFrame,
+                observedFrame: observedFrame,
+                window: window
+            )
+            throw WindowLayoutError.windowUnavailable
+        }
+
+        let sizeUnchanged = approximatelyEqual(observedFrame.size, originalFrame.size)
+        do {
+            try Task.checkCancellation()
+            try await frameWriter.setFrame(
+                originalFrame,
+                of: recoveryWindow,
+                resize: !sizeUnchanged
+            )
+            var recoveredFrame = try await frameReader.frame(of: recoveryWindow)
+            for delay in Self.frameSettlementDelays where !approximatelyEqual(recoveredFrame, originalFrame) {
+                try await waitForFrameSettlement(delay)
+                try Task.checkCancellation()
+                let settledWindow = try await revalidatedWindow(matching: window.identity)
+                guard await frameReader.isValid(settledWindow) else {
+                    throw WindowLayoutError.windowUnavailable
+                }
+                recoveredFrame = try await frameReader.frame(of: settledWindow)
+            }
+            guard approximatelyEqual(recoveredFrame, originalFrame) else {
+                throw WindowLayoutError.frameWriteFailed
+            }
+        } catch WindowEnhancedUIFrameGuard.Failure.restorationFailedAfterWrite {
+            throw WindowEnhancedUIFrameGuard.Failure.restorationFailedAfterWrite
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as WindowLayoutError {
+            preserveUndoAfterFailedRecovery(
+                originalFrame: originalFrame,
+                observedFrame: observedFrame,
+                window: window
+            )
+            throw error
+        } catch {
+            preserveUndoAfterFailedRecovery(
+                originalFrame: originalFrame,
+                observedFrame: observedFrame,
+                window: window
+            )
+            throw WindowLayoutError.frameWriteFailed
+        }
+        throw WindowLayoutError.windowSizeConstrained
+    }
+
+    private func preserveUndoAfterFailedRecovery(
+        originalFrame: CGRect,
+        observedFrame: CGRect,
+        window: AccessibilityWindowHandle
+    ) {
+        guard !approximatelyEqual(observedFrame, originalFrame) else { return }
+        history.record(originalFrame, for: window)
+        halfCycleStates.removeValue(forKey: window.identity)
     }
 
     private func screen(
@@ -560,6 +683,10 @@ final class WindowLayoutService: WindowLayoutExecuting {
     private func approximatelyEqual(_ lhs: CGPoint, _ rhs: CGPoint) -> Bool {
         abs(lhs.x - rhs.x) <= WindowLayoutCalculator.geometryTolerance
             && abs(lhs.y - rhs.y) <= WindowLayoutCalculator.geometryTolerance
+    }
+
+    private func approximatelyEqual(_ lhs: CGFloat, _ rhs: CGFloat) -> Bool {
+        abs(lhs - rhs) <= WindowLayoutCalculator.geometryTolerance
     }
 }
 

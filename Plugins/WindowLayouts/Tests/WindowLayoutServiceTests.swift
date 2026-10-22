@@ -349,6 +349,318 @@ final class WindowLayoutServiceTests: XCTestCase {
         )
     }
 
+    func testIgnoredIncrementalResizeRestoresPositionAcrossActions() async {
+        let scenarios: [(WindowLayoutOperation, CGRect, SizeClamp)] = [
+            (.increaseWidth, CGRect(x: 300, y: 200, width: 400, height: 300), SizeClamp(maxWidth: 400)),
+            (.increaseHeight, CGRect(x: 300, y: 200, width: 400, height: 300), SizeClamp(maxHeight: 300)),
+            (.decreaseWidth, CGRect(x: 320, y: 260, width: 150, height: 180), SizeClamp(minWidth: 150)),
+            (.decreaseHeight, CGRect(x: 320, y: 260, width: 150, height: 180), SizeClamp(minHeight: 180)),
+        ]
+
+        for (operation, frame, clamp) in scenarios {
+            let window = makeWindow(token: operation.rawValue)
+            let frameAdapter = MockWindowFrameAdapter(
+                window: window,
+                frame: frame,
+                sizeClamp: clamp
+            )
+            let service = makeService(window: window, frameAdapter: frameAdapter)
+
+            assertFailure(
+                await service.execute(operation, options: options()),
+                equals: .windowSizeConstrained
+            )
+            assertFailure(
+                await service.execute(operation, options: options()),
+                equals: .windowSizeConstrained
+            )
+
+            XCTAssertEqual(frameAdapter.frames[window.identity], frame)
+            XCTAssertEqual(frameAdapter.writtenResizes.filter { !$0 }.count, 2)
+            XCTAssertEqual(frameAdapter.writtenResizes.last, false)
+        }
+    }
+
+    func testIgnoredIncrementalResizePreservesExistingUndoHistory() async {
+        let window = makeWindow()
+        let original = CGRect(x: 300, y: 200, width: 400, height: 300)
+        let seededUndo = CGRect(x: 20, y: 40, width: 500, height: 320)
+        let frameAdapter = MockWindowFrameAdapter(
+            window: window,
+            frame: original,
+            sizeClamp: SizeClamp(maxWidth: original.width, maxHeight: original.height)
+        )
+        let history = InMemoryWindowFrameHistory()
+        history.record(seededUndo, for: window)
+        let service = makeService(window: window, frameAdapter: frameAdapter, history: history)
+
+        assertFailure(
+            await service.execute(.increaseWidth, options: options()),
+            equals: .windowSizeConstrained
+        )
+        assertFailure(
+            await service.execute(.increaseWidth, options: options()),
+            equals: .windowSizeConstrained
+        )
+
+        XCTAssertEqual(frameAdapter.frames[window.identity], original)
+        XCTAssertEqual(history.previousFrame(for: window), seededUndo)
+    }
+
+    func testIncrementalResizeAnchorsRightAndBottomEdges() async {
+        let window = makeWindow()
+        let frameAdapter = MockWindowFrameAdapter(
+            window: window,
+            frame: CGRect(x: 1040, y: 600, width: 400, height: 300)
+        )
+        let service = makeService(window: window, frameAdapter: frameAdapter)
+
+        assertSuccess(await service.execute(.increaseWidth, options: options()))
+        XCTAssertEqual(
+            frameAdapter.frames[window.identity],
+            CGRect(x: 990, y: 600, width: 450, height: 300)
+        )
+
+        assertSuccess(await service.execute(.increaseHeight, options: options()))
+        XCTAssertEqual(
+            frameAdapter.frames[window.identity],
+            CGRect(x: 990, y: 550, width: 450, height: 350)
+        )
+        XCTAssertFalse(frameAdapter.writtenResizes.contains(false))
+    }
+
+    func testDeferredIncrementalResizeSettlesBeforeRecovery() async {
+        let window = makeWindow()
+        let frameAdapter = MockWindowFrameAdapter(
+            window: window,
+            frame: CGRect(x: 300, y: 200, width: 400, height: 300),
+            defersWritesUntilSettlement: true
+        )
+        let service = makeService(
+            window: window,
+            frameAdapter: frameAdapter,
+            waitForFrameSettlement: { _ in
+                frameAdapter.settlePendingWrite()
+            }
+        )
+
+        assertSuccess(await service.execute(.increaseWidth, options: options()))
+        XCTAssertEqual(
+            frameAdapter.frames[window.identity],
+            CGRect(x: 275, y: 200, width: 450, height: 300)
+        )
+        XCTAssertEqual(frameAdapter.writtenResizes, [true])
+    }
+
+    func testPartiallyAcceptedIncrementalResizeKeepsMovement() async {
+        let window = makeWindow()
+        let original = CGRect(x: 300, y: 200, width: 400, height: 300)
+        let frameAdapter = MockWindowFrameAdapter(
+            window: window,
+            frame: original,
+            sizeClamp: SizeClamp(maxWidth: 420)
+        )
+        let history = InMemoryWindowFrameHistory()
+        let service = makeService(window: window, frameAdapter: frameAdapter, history: history)
+
+        assertFailure(
+            await service.execute(.increaseWidth, options: options()),
+            equals: .windowSizeConstrained
+        )
+
+        XCTAssertEqual(
+            frameAdapter.frames[window.identity],
+            CGRect(x: 275, y: 200, width: 420, height: 300)
+        )
+        XCTAssertEqual(history.previousFrame(for: window), original)
+        XCTAssertFalse(frameAdapter.writtenResizes.contains(false))
+    }
+
+    func testIncrementalResizeRejectsWindowsThatCannotResizeWithoutWriting() async {
+        let window = makeWindow(canResize: false)
+        let frame = CGRect(x: 300, y: 200, width: 400, height: 300)
+        let frameAdapter = MockWindowFrameAdapter(window: window, frame: frame)
+        let service = makeService(window: window, frameAdapter: frameAdapter)
+        let operations: [WindowLayoutOperation] = [
+            .increaseWidth, .decreaseWidth, .increaseHeight, .decreaseHeight,
+        ]
+
+        for operation in operations {
+            assertFailure(
+                await service.execute(operation, options: options()),
+                equals: .windowCannotResize
+            )
+        }
+        XCTAssertTrue(frameAdapter.writtenFrames.isEmpty)
+        XCTAssertEqual(frameAdapter.frames[window.identity], frame)
+    }
+
+    func testConstrainedTileKeepsAcceptedPositionWhenSizeIsIgnored() async {
+        let window = makeWindow()
+        let original = CGRect(x: 100, y: 100, width: 600, height: 400)
+        let frameAdapter = MockWindowFrameAdapter(
+            window: window,
+            frame: original,
+            sizeClamp: SizeClamp(maxWidth: original.width, maxHeight: original.height)
+        )
+        let history = InMemoryWindowFrameHistory()
+        let service = makeService(window: window, frameAdapter: frameAdapter, history: history)
+
+        assertFailure(
+            await service.execute(.topRightQuarter, options: options()),
+            equals: .windowSizeConstrained
+        )
+
+        XCTAssertEqual(
+            frameAdapter.frames[window.identity],
+            CGRect(x: 720, y: 24, width: 600, height: 400)
+        )
+        XCTAssertEqual(history.previousFrame(for: window), original)
+        XCTAssertFalse(frameAdapter.writtenResizes.contains(false))
+    }
+
+    func testFailedPositionRestorationReportsWriteFailureAndKeepsUndo() async {
+        let window = makeWindow()
+        let original = CGRect(x: 300, y: 200, width: 400, height: 300)
+        let frameAdapter = MockWindowFrameAdapter(
+            window: window,
+            frame: original,
+            sizeClamp: SizeClamp(maxWidth: original.width),
+            positionOnlyWriteFailuresRemaining: 1
+        )
+        let history = InMemoryWindowFrameHistory()
+        let service = makeService(window: window, frameAdapter: frameAdapter, history: history)
+
+        assertFailure(
+            await service.execute(.increaseWidth, options: options()),
+            equals: .frameWriteFailed
+        )
+        XCTAssertEqual(
+            frameAdapter.frames[window.identity],
+            CGRect(x: 275, y: 200, width: 400, height: 300)
+        )
+        XCTAssertEqual(history.previousFrame(for: window), original)
+
+        assertSuccess(await service.execute(.restorePreviousFrame, options: options()))
+        XCTAssertEqual(frameAdapter.frames[window.identity], original)
+    }
+
+    func testIgnoredPositionRestorationReportsWriteFailureAndKeepsUndo() async {
+        let window = makeWindow()
+        let original = CGRect(x: 300, y: 200, width: 400, height: 300)
+        let frameAdapter = MockWindowFrameAdapter(
+            window: window,
+            frame: original,
+            sizeClamp: SizeClamp(maxWidth: original.width),
+            positionOnlyWritesIgnoredRemaining: 1
+        )
+        let history = InMemoryWindowFrameHistory()
+        let service = makeService(window: window, frameAdapter: frameAdapter, history: history)
+
+        assertFailure(
+            await service.execute(.increaseWidth, options: options()),
+            equals: .frameWriteFailed
+        )
+        XCTAssertEqual(
+            frameAdapter.frames[window.identity],
+            CGRect(x: 275, y: 200, width: 400, height: 300)
+        )
+        XCTAssertEqual(history.previousFrame(for: window), original)
+
+        assertSuccess(await service.execute(.restorePreviousFrame, options: options()))
+        XCTAssertEqual(frameAdapter.frames[window.identity], original)
+    }
+
+    func testIncrementalResizeRecoveryDoesNotWriteToReplacementWindow() async {
+        let originalWindow = makeWindow(token: "original")
+        let replacementWindow = makeWindow(token: "replacement")
+        let original = CGRect(x: 300, y: 200, width: 400, height: 300)
+        let resolver = MutableFocusedWindowResolver(window: originalWindow)
+        let frameAdapter = MockWindowFrameAdapter(
+            window: originalWindow,
+            frame: original,
+            sizeClamp: SizeClamp(maxWidth: original.width)
+        )
+        let history = InMemoryWindowFrameHistory()
+        let service = makeService(
+            window: originalWindow,
+            frameAdapter: frameAdapter,
+            history: history,
+            focusedWindowResolver: resolver,
+            waitForFrameSettlement: { _ in
+                frameAdapter.settlementCount += 1
+                // Arm the focus change for the frame read after this pass's identity check.
+                // Recovery then performs the next check and must not write to the new window.
+                if frameAdapter.settlementCount == 4 {
+                    frameAdapter.beforeRead = {
+                        frameAdapter.beforeRead = nil
+                        resolver.window = replacementWindow
+                    }
+                }
+            }
+        )
+
+        assertFailure(
+            await service.execute(.increaseWidth, options: options()),
+            equals: .windowUnavailable
+        )
+        XCTAssertEqual(frameAdapter.writtenResizes, [true, true])
+        XCTAssertEqual(frameAdapter.writtenIdentities, [originalWindow.identity, originalWindow.identity])
+        XCTAssertNil(frameAdapter.frames[replacementWindow.identity])
+        XCTAssertEqual(
+            frameAdapter.frames[originalWindow.identity],
+            CGRect(x: 275, y: 200, width: 400, height: 300)
+        )
+        XCTAssertEqual(history.previousFrame(for: originalWindow), original)
+    }
+
+    func testIncrementalResizeRecoverySkipsInvalidWindow() async {
+        let window = makeWindow()
+        let original = CGRect(x: 300, y: 200, width: 400, height: 300)
+        let frameAdapter = MockWindowFrameAdapter(
+            window: window,
+            frame: original,
+            sizeClamp: SizeClamp(maxWidth: original.width)
+        )
+        frameAdapter.invalidateWhenWriteCountReaches = 2
+        let history = InMemoryWindowFrameHistory()
+        let service = makeService(window: window, frameAdapter: frameAdapter, history: history)
+
+        assertFailure(
+            await service.execute(.increaseWidth, options: options()),
+            equals: .windowUnavailable
+        )
+        XCTAssertEqual(frameAdapter.writtenResizes, [true, true])
+        XCTAssertEqual(frameAdapter.writtenIdentities, [window.identity, window.identity])
+        XCTAssertEqual(
+            frameAdapter.frames[window.identity],
+            CGRect(x: 275, y: 200, width: 400, height: 300)
+        )
+        XCTAssertEqual(history.previousFrame(for: window), original)
+    }
+
+    func testSecondaryDimensionChangeRestoresOriginalFrame() async {
+        let window = makeWindow()
+        let original = CGRect(x: 300, y: 200, width: 400, height: 300)
+        let frameAdapter = MockWindowFrameAdapter(window: window, frame: original)
+        frameAdapter.resizeFrameOverride = { requested, current in
+            if requested == original {
+                return requested
+            }
+            let height = current.height == original.height ? current.height + 40 : current.height
+            return CGRect(x: requested.minX, y: requested.minY, width: current.width, height: height)
+        }
+        let service = makeService(window: window, frameAdapter: frameAdapter)
+
+        assertFailure(
+            await service.execute(.increaseWidth, options: options()),
+            equals: .windowSizeConstrained
+        )
+        XCTAssertEqual(frameAdapter.frames[window.identity], original)
+        XCTAssertEqual(frameAdapter.writtenResizes, [true, true, true])
+        XCTAssertEqual(frameAdapter.writtenFrames.last, original)
+    }
+
     private func makeWindow(
         token: String = "window",
         windowNumber: UInt32? = nil,
@@ -502,15 +814,45 @@ private final class MutableFocusedWindowResolver: FocusedWindowResolving {
     }
 }
 
+private struct SizeClamp {
+    var minWidth: CGFloat?
+    var maxWidth: CGFloat?
+    var minHeight: CGFloat?
+    var maxHeight: CGFloat?
+
+    func applying(to size: CGSize) -> CGSize {
+        CGSize(
+            width: clamp(size.width, min: minWidth, max: maxWidth),
+            height: clamp(size.height, min: minHeight, max: maxHeight)
+        )
+    }
+
+    private func clamp(_ value: CGFloat, min lower: CGFloat?, max upper: CGFloat?) -> CGFloat {
+        var value = value
+        if let lower { value = Swift.max(value, lower) }
+        if let upper { value = Swift.min(value, upper) }
+        return value
+    }
+}
+
 @MainActor
 private final class MockWindowFrameAdapter: WindowFrameReading, WindowFrameWriting {
     var frames: [WindowIdentity: CGRect]
     var validIdentities: Set<WindowIdentity>
     private(set) var writtenFrames: [CGRect] = []
+    private(set) var writtenResizes: [Bool] = []
+    private(set) var writtenIdentities: [WindowIdentity] = []
     var failsEnhancedUIRestoration = false
+    var beforeRead: (@MainActor () -> Void)?
+    var invalidateWhenWriteCountReaches: Int?
+    var settlementCount = 0
+    var resizeFrameOverride: (@MainActor (CGRect, CGRect) -> CGRect)?
     private let appliesWrites: Bool
     private var ignoredWritesRemaining: Int
     private let defersWritesUntilSettlement: Bool
+    private let sizeClamp: SizeClamp?
+    private var positionOnlyWriteFailuresRemaining: Int
+    private var positionOnlyWritesIgnoredRemaining: Int
     private var pendingWrite: (identity: WindowIdentity, frame: CGRect)?
 
     init(
@@ -518,16 +860,23 @@ private final class MockWindowFrameAdapter: WindowFrameReading, WindowFrameWriti
         frame: CGRect,
         appliesWrites: Bool = true,
         ignoredWrites: Int = 0,
-        defersWritesUntilSettlement: Bool = false
+        defersWritesUntilSettlement: Bool = false,
+        sizeClamp: SizeClamp? = nil,
+        positionOnlyWriteFailuresRemaining: Int = 0,
+        positionOnlyWritesIgnoredRemaining: Int = 0
     ) {
         self.frames = [window.identity: frame]
         self.validIdentities = [window.identity]
         self.appliesWrites = appliesWrites
         self.ignoredWritesRemaining = ignoredWrites
         self.defersWritesUntilSettlement = defersWritesUntilSettlement
+        self.sizeClamp = sizeClamp
+        self.positionOnlyWriteFailuresRemaining = positionOnlyWriteFailuresRemaining
+        self.positionOnlyWritesIgnoredRemaining = positionOnlyWritesIgnoredRemaining
     }
 
     func frame(of window: AccessibilityWindowHandle) async throws -> CGRect {
+        beforeRead?()
         guard let frame = frames[window.identity] else {
             throw WindowLayoutError.windowUnavailable
         }
@@ -544,15 +893,59 @@ private final class MockWindowFrameAdapter: WindowFrameReading, WindowFrameWriti
         resize: Bool
     ) async throws {
         writtenFrames.append(frame)
+        writtenResizes.append(resize)
+        writtenIdentities.append(window.identity)
+        if let invalidateWhenWriteCountReaches,
+           writtenFrames.count >= invalidateWhenWriteCountReaches {
+            validIdentities.remove(window.identity)
+        }
         guard appliesWrites else { return }
         if ignoredWritesRemaining > 0 {
             ignoredWritesRemaining -= 1
             return
         }
-        if defersWritesUntilSettlement {
-            pendingWrite = (window.identity, frame)
+        if !resize {
+            try applyPositionOnly(frame, to: window.identity)
             return
         }
+        let resolved = resolvedResizeFrame(frame, for: window.identity)
+        if defersWritesUntilSettlement {
+            pendingWrite = (window.identity, resolved)
+            return
+        }
+        try commit(resolved, to: window.identity)
+    }
+
+    func settlePendingWrite() {
+        guard let pendingWrite else { return }
+        frames[pendingWrite.identity] = pendingWrite.frame
+        self.pendingWrite = nil
+    }
+
+    private func applyPositionOnly(_ frame: CGRect, to identity: WindowIdentity) throws {
+        if positionOnlyWriteFailuresRemaining > 0 {
+            positionOnlyWriteFailuresRemaining -= 1
+            throw WindowLayoutError.frameWriteFailed
+        }
+        if positionOnlyWritesIgnoredRemaining > 0 {
+            positionOnlyWritesIgnoredRemaining -= 1
+            return
+        }
+        var existing = frames[identity] ?? frame
+        existing.origin = frame.origin
+        frames[identity] = existing
+    }
+
+    private func resolvedResizeFrame(_ requested: CGRect, for identity: WindowIdentity) -> CGRect {
+        let current = frames[identity] ?? requested
+        if let resizeFrameOverride {
+            return resizeFrameOverride(requested, current)
+        }
+        let size = sizeClamp?.applying(to: requested.size) ?? requested.size
+        return CGRect(origin: requested.origin, size: size)
+    }
+
+    private func commit(_ frame: CGRect, to identity: WindowIdentity) throws {
         if failsEnhancedUIRestoration {
             var enabled = true
             try WindowEnhancedUIFrameGuard.perform(
@@ -563,16 +956,10 @@ private final class MockWindowFrameAdapter: WindowFrameReading, WindowFrameWriti
                     enabled = false
                     return true
                 }
-            ) { frames[window.identity] = frame }
+            ) { frames[identity] = frame }
         } else {
-            frames[window.identity] = frame
+            frames[identity] = frame
         }
-    }
-
-    func settlePendingWrite() {
-        guard let pendingWrite else { return }
-        frames[pendingWrite.identity] = pendingWrite.frame
-        self.pendingWrite = nil
     }
 }
 
