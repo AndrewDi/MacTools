@@ -11,6 +11,25 @@ struct PowerStatusAppEnergy: Identifiable, Equatable {
     let watts: Double
 }
 
+/// A Sendable energy reading produced by the background sampler. Icons are
+/// attached on the main actor after ranking so the sampler never touches
+/// AppKit.
+struct PowerStatusAppEnergyReading: Sendable, Equatable {
+    let id: String
+    let name: String
+    let watts: Double
+}
+
+/// A point-in-time snapshot of a running application. Passing value types to
+/// the sampler keeps `NSRunningApplication` access and icon loading on the main
+/// actor.
+struct PowerStatusAppIdentity: Sendable, Equatable {
+    let pid: Int32
+    let bundleID: String
+    let name: String
+    let isRegular: Bool
+}
+
 /// Pure conversion and ranking helpers, kept separate from the sampling code so
 /// the energy math can be verified without touching live processes.
 enum PowerStatusAppEnergyMath {
@@ -39,17 +58,35 @@ enum PowerStatusAppEnergyMath {
     }
 
     /// Keeps the heaviest applications, dropping readings too small to matter.
-    static func ranked(
-        _ apps: [PowerStatusAppEnergy],
+    static func rankedReadings(
+        _ apps: [PowerStatusAppEnergyReading],
         limit: Int = 5,
         minimumWatts: Double = minimumReportedWatts
-    ) -> [PowerStatusAppEnergy] {
+    ) -> [PowerStatusAppEnergyReading] {
+        rank(
+            apps,
+            limit: limit,
+            minimumWatts: minimumWatts,
+            watts: { $0.watts },
+            name: { $0.name }
+        )
+    }
+
+    private static func rank<T>(
+        _ apps: [T],
+        limit: Int,
+        minimumWatts: Double,
+        watts: (T) -> Double,
+        name: (T) -> String
+    ) -> [T] {
         Array(
             apps
-                .filter { $0.watts >= minimumWatts }
+                .filter { watts($0) >= minimumWatts }
                 .sorted { lhs, rhs in
-                    if lhs.watts == rhs.watts { return lhs.name < rhs.name }
-                    return lhs.watts > rhs.watts
+                    let lhsWatts = watts(lhs)
+                    let rhsWatts = watts(rhs)
+                    if lhsWatts == rhsWatts { return name(lhs) < name(rhs) }
+                    return lhsWatts > rhsWatts
                 }
                 .prefix(max(0, limit))
         )
@@ -58,10 +95,10 @@ enum PowerStatusAppEnergyMath {
 
 /// Measures per-application energy use from the kernel's per-process energy
 /// counters, which are the same source Activity Monitor's energy figures are
-/// derived from. Main-actor isolated because it reads `NSRunningApplication`
-/// names and icons.
-@MainActor
-final class PowerStatusAppEnergyMonitor {
+/// derived from. The actor scans processes and aggregates their energy off the
+/// main actor. Callers pass a value snapshot of running apps, then attach icons
+/// to the returned top five.
+actor PowerStatusAppEnergyMonitor {
     private struct Baseline {
         let timestamp: Date
         let energyByPID: [Int32: UInt64]
@@ -77,16 +114,27 @@ final class PowerStatusAppEnergyMonitor {
 
     private var baseline: Baseline?
     private var smoothedWatts: [String: Double] = [:]
-
-    /// Drops the previous counters so the next sample starts a fresh window.
-    func reset() {
-        baseline = nil
-        smoothedWatts.removeAll()
-    }
+    private var sessionID: Int?
 
     /// Samples cumulative energy and returns the five heaviest applications
-    /// since the previous call. The first call only records a baseline.
-    func sample(now: Date = Date()) -> [PowerStatusAppEnergy] {
+    /// since the previous call. The first call in a session only records a
+    /// baseline. A newer session drops the previous counters so reopening the
+    /// panel cannot compare across an idle gap.
+    func sample(
+        identities: [PowerStatusAppIdentity],
+        now: Date = Date(),
+        sessionID: Int
+    ) -> [PowerStatusAppEnergyReading] {
+        guard !Task.isCancelled else { return [] }
+        if let currentSession = self.sessionID, sessionID < currentSession {
+            return []
+        }
+        if self.sessionID != sessionID {
+            self.sessionID = sessionID
+            baseline = nil
+            smoothedWatts.removeAll()
+        }
+
         let energies = Self.readCumulativeEnergy()
         defer { baseline = Baseline(timestamp: now, energyByPID: energies) }
 
@@ -104,25 +152,22 @@ final class PowerStatusAppEnergyMonitor {
         )
         guard !wattsByPID.isEmpty else { return [] }
 
-        var appsByPID: [Int32: NSRunningApplication] = [:]
-        for app in NSWorkspace.shared.runningApplications {
-            let pid = app.processIdentifier
-            if pid > 0 {
-                appsByPID[pid] = app
-            }
+        var appsByPID: [Int32: PowerStatusAppIdentity] = [:]
+        appsByPID.reserveCapacity(identities.count)
+        for app in identities where app.pid > 0 {
+            appsByPID[app.pid] = app
         }
         guard !appsByPID.isEmpty else { return [] }
 
         // Attribute helpers and child processes to the app that owns them, so
         // a browser's renderer and GPU helpers count toward the browser.
         var wattsByApp: [String: Double] = [:]
-        var appByID: [String: NSRunningApplication] = [:]
+        var appByID: [String: PowerStatusAppIdentity] = [:]
         for (pid, watts) in wattsByPID {
             guard let owner = Self.owningApp(for: pid, appsByPID: appsByPID),
-                  let id = owner.bundleIdentifier,
-                  !id.isEmpty else { continue }
-            wattsByApp[id, default: 0] += watts
-            appByID[id] = owner
+                  !owner.bundleID.isEmpty else { continue }
+            wattsByApp[owner.bundleID, default: 0] += watts
+            appByID[owner.bundleID] = owner
         }
         guard !wattsByApp.isEmpty else { return [] }
 
@@ -133,17 +178,15 @@ final class PowerStatusAppEnergyMonitor {
         }
         smoothedWatts = smoothed
 
-        let readings: [PowerStatusAppEnergy] = smoothed.map { element in
+        let readings: [PowerStatusAppEnergyReading] = smoothed.map { element in
             let (id, watts) = element
-            let app = appByID[id]
-            return PowerStatusAppEnergy(
+            return PowerStatusAppEnergyReading(
                 id: id,
-                name: app?.localizedName ?? app?.bundleIdentifier ?? id,
-                icon: app?.icon,
+                name: appByID[id]?.name ?? id,
                 watts: watts
             )
         }
-        return PowerStatusAppEnergyMath.ranked(readings)
+        return PowerStatusAppEnergyMath.rankedReadings(readings)
     }
 
     // MARK: - Process inspection
@@ -153,21 +196,21 @@ final class PowerStatusAppEnergyMonitor {
     /// the top keeps nested helpers with the app the user launched.
     private static func owningApp(
         for pid: Int32,
-        appsByPID: [Int32: NSRunningApplication]
-    ) -> NSRunningApplication? {
+        appsByPID: [Int32: PowerStatusAppIdentity]
+    ) -> PowerStatusAppIdentity? {
         var current = pid
         var visited = Set<Int32>()
-        var closestApp: NSRunningApplication?
-        var regularApp: NSRunningApplication?
+        var closestApp: PowerStatusAppIdentity?
+        var regularApp: PowerStatusAppIdentity?
 
         // Bounded so a malformed parent chain cannot spin forever.
         for _ in 0..<12 {
             guard current > 0, visited.insert(current).inserted else { break }
             if let app = appsByPID[current] {
                 if closestApp == nil { closestApp = app }
-                if app.activationPolicy == .regular { regularApp = app }
+                if app.isRegular { regularApp = app }
             }
-            guard let parent = parentPID(of: current) else { break }
+            guard let parent = parentPID(of: current), parent != current else { break }
             current = parent
         }
         return regularApp ?? closestApp

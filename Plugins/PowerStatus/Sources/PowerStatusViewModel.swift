@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import IOKit.ps
@@ -24,6 +25,10 @@ final class PowerStatusViewModel: ObservableObject {
     private var dischargeEMA: Double?
 
     private let energyMonitor = PowerStatusAppEnergyMonitor()
+    private nonisolated(unsafe) var energyTask: Task<Void, Never>?
+    private var energySession = 0
+    private var appIconCache: [String: NSImage] = [:]
+
     private let sensorMonitor = PowerStatusSensorMonitor()
     private nonisolated(unsafe) var sensorTask: Task<Void, Never>?
     private var sensorGeneration = 0
@@ -103,7 +108,13 @@ final class PowerStatusViewModel: ObservableObject {
 
     private func startMonitoring() {
         guard timer == nil else { return }
-        energyMonitor.reset()
+        energySession += 1
+        energyTask?.cancel()
+        energyTask = nil
+        if !snapshot.topEnergyApps.isEmpty {
+            snapshot.topEnergyApps = []
+            onSnapshotChange?()
+        }
         updateData()
         scheduleTimer()
         setupPowerSourceNotification()
@@ -112,6 +123,9 @@ final class PowerStatusViewModel: ObservableObject {
     private func stopMonitoring() {
         timer?.invalidate()
         timer = nil
+        energySession += 1
+        energyTask?.cancel()
+        energyTask = nil
         sensorGeneration += 1
         sensorTask?.cancel()
         sensorTask = nil
@@ -167,14 +181,76 @@ final class PowerStatusViewModel: ObservableObject {
     private func updateData() {
         var newSnapshot = PowerStatusSampler.readSnapshot()
         newSnapshot.smoothedDischargePowerW = updateSmoothedDischargePower(from: newSnapshot)
-        if newSnapshot.isDataAvailable {
-            newSnapshot.topEnergyApps = energyMonitor.sample(now: newSnapshot.timestamp)
-        }
+        // Keep the last list visible while a new background sample is in
+        // flight instead of clearing it every two seconds.
+        newSnapshot.topEnergyApps = newSnapshot.isDataAvailable ? snapshot.topEnergyApps : []
         if newSnapshot != snapshot {
             snapshot = newSnapshot
             onSnapshotChange?()
         }
+        updateEnergyAppsIfNeeded(timestamp: newSnapshot.timestamp)
         updateSensorsIfNeeded()
+    }
+
+    // MARK: - App energy
+
+    private func updateEnergyAppsIfNeeded(timestamp: Date) {
+        guard isPanelVisible, snapshot.isDataAvailable, energyTask == nil else { return }
+
+        let session = energySession
+        let identities = Self.runningAppIdentities()
+        energyTask = Task { [weak self] in
+            guard let self else { return }
+            let readings = await self.energyMonitor.sample(
+                identities: identities,
+                now: timestamp,
+                sessionID: session
+            )
+            guard self.energySession == session else { return }
+            self.energyTask = nil
+            guard self.isPanelVisible, self.snapshot.isDataAvailable else { return }
+
+            self.snapshot.topEnergyApps = readings.map { reading in
+                PowerStatusAppEnergy(
+                    id: reading.id,
+                    name: reading.name,
+                    icon: self.appIcon(for: reading.id),
+                    watts: reading.watts
+                )
+            }
+            self.onSnapshotChange?()
+        }
+    }
+
+    private static func runningAppIdentities() -> [PowerStatusAppIdentity] {
+        NSWorkspace.shared.runningApplications.compactMap { app in
+            let pid = app.processIdentifier
+            guard pid > 0,
+                  let bundleID = app.bundleIdentifier,
+                  !bundleID.isEmpty else {
+                return nil
+            }
+            return PowerStatusAppIdentity(
+                pid: pid,
+                bundleID: bundleID,
+                name: app.localizedName ?? bundleID,
+                isRegular: app.activationPolicy == .regular
+            )
+        }
+    }
+
+    /// Loads and caches icons only for the ranked apps, after sampling has
+    /// finished off the main actor.
+    private func appIcon(for bundleID: String) -> NSImage? {
+        if let cached = appIconCache[bundleID] {
+            return cached
+        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        appIconCache[bundleID] = icon
+        return icon
     }
 
     /// Smooths instantaneous discharge power for time estimates; resets when
@@ -208,6 +284,7 @@ final class PowerStatusViewModel: ObservableObject {
 
     deinit {
         timer?.invalidate()
+        energyTask?.cancel()
         sensorTask?.cancel()
         if let notifier = powerSourceNotifier {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), notifier, .commonModes)

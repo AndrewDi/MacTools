@@ -214,6 +214,25 @@ enum PowerStatusSensorMath {
         }
         return result
     }
+
+    /// Resolves memory power from the Energy Model first and the SMC DRAM
+    /// fallback second. A zero or unavailable source is not a usable reading:
+    /// unified memory cannot draw no power while the machine is running, and
+    /// the Energy Model counter can be frozen without Apple's private
+    /// entitlement. Returning `nil` lets the panel show a dash instead of
+    /// `0.00 W`.
+    static func memoryPowerWatts(
+        energyModel: Double?,
+        smcFallback: Double?
+    ) -> Double? {
+        if let energyModel, energyModel.isFinite, energyModel > 0 {
+            return energyModel
+        }
+        if let smcFallback, smcFallback.isFinite, smcFallback > 0 {
+            return smcFallback
+        }
+        return nil
+    }
 }
 
 /// Samples the SMC temperature sensors and the IOReport energy model off the
@@ -589,8 +608,11 @@ private final class PowerStatusComponentPowerReader {
             }
         }
 
-        if (instant[.memory] ?? 0) <= 0, let dramWatts = readSMCDRAMPower() {
-            instant[.memory] = dramWatts
+        if (instant[.memory] ?? 0) <= 0 {
+            instant[.memory] = PowerStatusSensorMath.memoryPowerWatts(
+                energyModel: instant[.memory],
+                smcFallback: readSMCDRAMPower()
+            )
         }
 
         var smoothed: [PowerStatusSensorComponent: Double] = [:]
@@ -681,7 +703,7 @@ private final class PowerStatusComponentPowerReader {
             total += value
             foundValue = true
         }
-        return foundValue ? total : nil
+        return foundValue && total > 0 ? total : nil
     }
 
     private static func append(_ additions: CFArray, to channels: CFMutableDictionary) {

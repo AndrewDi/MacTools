@@ -669,16 +669,16 @@ final class PowerStatusPluginTests: XCTestCase {
 
     func testAppEnergyRankingKeepsFiveHeaviestAboveThreshold() {
         let apps = [
-            PowerStatusAppEnergy(id: "a", name: "Alpha", icon: nil, watts: 0.05),
-            PowerStatusAppEnergy(id: "b", name: "Bravo", icon: nil, watts: 1.20),
-            PowerStatusAppEnergy(id: "c", name: "Charlie", icon: nil, watts: 0.30),
-            PowerStatusAppEnergy(id: "d", name: "Delta", icon: nil, watts: 0.90),
-            PowerStatusAppEnergy(id: "e", name: "Echo", icon: nil, watts: 0.60),
-            PowerStatusAppEnergy(id: "f", name: "Foxtrot", icon: nil, watts: 0.40),
-            PowerStatusAppEnergy(id: "g", name: "Golf", icon: nil, watts: 0.01),
+            PowerStatusAppEnergyReading(id: "a", name: "Alpha", watts: 0.05),
+            PowerStatusAppEnergyReading(id: "b", name: "Bravo", watts: 1.20),
+            PowerStatusAppEnergyReading(id: "c", name: "Charlie", watts: 0.30),
+            PowerStatusAppEnergyReading(id: "d", name: "Delta", watts: 0.90),
+            PowerStatusAppEnergyReading(id: "e", name: "Echo", watts: 0.60),
+            PowerStatusAppEnergyReading(id: "f", name: "Foxtrot", watts: 0.40),
+            PowerStatusAppEnergyReading(id: "g", name: "Golf", watts: 0.01),
         ]
 
-        let ranked = PowerStatusAppEnergyMath.ranked(apps)
+        let ranked = PowerStatusAppEnergyMath.rankedReadings(apps)
 
         XCTAssertEqual(ranked.map(\.name), ["Bravo", "Delta", "Echo", "Foxtrot", "Charlie"])
         XCTAssertFalse(ranked.contains { $0.id == "g" })
@@ -773,6 +773,21 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(watts[.cpu] ?? -1, 2.0, accuracy: 0.001)
         XCTAssertNil(watts[.memory])
         XCTAssertNil(watts[.gpu])
+    }
+
+    func testSensorMemoryPowerTreatsZeroAsUnavailable() {
+        XCTAssertEqual(
+            PowerStatusSensorMath.memoryPowerWatts(energyModel: 1.2, smcFallback: 0.8) ?? -1,
+            1.2,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            PowerStatusSensorMath.memoryPowerWatts(energyModel: 0, smcFallback: 0.8) ?? -1,
+            0.8,
+            accuracy: 0.001
+        )
+        XCTAssertNil(PowerStatusSensorMath.memoryPowerWatts(energyModel: 0, smcFallback: nil))
+        XCTAssertNil(PowerStatusSensorMath.memoryPowerWatts(energyModel: nil, smcFallback: 0))
     }
 
     func testSensorLayoutHeightGrowsWithExpandedRows() {
