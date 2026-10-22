@@ -8,6 +8,8 @@ import MacToolsPluginKit
 final class PowerStatusViewModel: ObservableObject {
     @Published private(set) var snapshot: PowerStatusSnapshot = .empty
     @Published private(set) var isPanelVisible: Bool = false
+    @Published private(set) var sensorSnapshot: PowerStatusSensorSnapshot = .empty
+    @Published private(set) var isSensorsExpanded: Bool = false
 
     var onSnapshotChange: (() -> Void)?
 
@@ -22,6 +24,62 @@ final class PowerStatusViewModel: ObservableObject {
     private var dischargeEMA: Double?
 
     private let energyMonitor = PowerStatusAppEnergyMonitor()
+    private let sensorMonitor = PowerStatusSensorMonitor()
+    private nonisolated(unsafe) var sensorTask: Task<Void, Never>?
+    private var sensorGeneration = 0
+
+    // MARK: - Sensor section
+
+    /// Expands or collapses the component temperature and power table. Sampling
+    /// only runs while the section is open; collapsing drops the readings so a
+    /// later expansion cannot show stale values.
+    func setSensorsExpanded(_ expanded: Bool) {
+        guard expanded != isSensorsExpanded else { return }
+        isSensorsExpanded = expanded
+        sensorGeneration += 1
+        sensorTask?.cancel()
+        sensorTask = nil
+
+        if expanded {
+            sampleSensors()
+        } else {
+            sensorSnapshot = .empty
+        }
+        onSnapshotChange?()
+    }
+
+    private func updateSensorsIfNeeded() {
+        guard isSensorsExpanded else { return }
+        sampleSensors()
+    }
+
+    private func sampleSensors() {
+        guard isSensorsExpanded, sensorTask == nil else { return }
+
+        let generation = sensorGeneration
+        let batteryTemperature = snapshot.batteryTemperatureC
+        let batteryPower = batteryPowerForSensors
+        sensorTask = Task { [weak self] in
+            guard let self else { return }
+            let readings = await self.sensorMonitor.sample(
+                batteryTemperatureC: batteryTemperature,
+                batteryPowerW: batteryPower
+            )
+            guard self.sensorGeneration == generation else { return }
+            self.sensorSnapshot = readings
+            self.sensorTask = nil
+        }
+    }
+
+    private var batteryPowerForSensors: Double? {
+        if snapshot.batteryChargeRateW > 0 {
+            return snapshot.batteryChargeRateW
+        }
+        if snapshot.batteryDischargeRateW > 0 {
+            return snapshot.batteryDischargeRateW
+        }
+        return nil
+    }
 
     // MARK: - Panel visibility
 
@@ -54,6 +112,9 @@ final class PowerStatusViewModel: ObservableObject {
     private func stopMonitoring() {
         timer?.invalidate()
         timer = nil
+        sensorGeneration += 1
+        sensorTask?.cancel()
+        sensorTask = nil
         if let notifier = powerSourceNotifier {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), notifier, .commonModes)
             powerSourceNotifier = nil
@@ -109,9 +170,11 @@ final class PowerStatusViewModel: ObservableObject {
         if newSnapshot.isDataAvailable {
             newSnapshot.topEnergyApps = energyMonitor.sample(now: newSnapshot.timestamp)
         }
-        guard newSnapshot != snapshot else { return }
-        snapshot = newSnapshot
-        onSnapshotChange?()
+        if newSnapshot != snapshot {
+            snapshot = newSnapshot
+            onSnapshotChange?()
+        }
+        updateSensorsIfNeeded()
     }
 
     /// Smooths instantaneous discharge power for time estimates; resets when
@@ -145,6 +208,7 @@ final class PowerStatusViewModel: ObservableObject {
 
     deinit {
         timer?.invalidate()
+        sensorTask?.cancel()
         if let notifier = powerSourceNotifier {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), notifier, .commonModes)
         }
