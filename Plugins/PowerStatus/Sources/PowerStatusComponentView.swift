@@ -81,6 +81,12 @@ struct PowerStatusComponentView: View {
 
             // Battery and electrical telemetry, grouped
             telemetrySection
+
+            // Collapsible temperatures and component power
+            sensorSection
+
+            // Applications drawing the most power
+            energyAppsSection
         }
         .padding(.vertical, PowerStatusLayout.cardVerticalPadding)
         .frame(maxWidth: .infinity)
@@ -215,7 +221,44 @@ struct PowerStatusComponentView: View {
         .padding(.bottom, PowerStatusLayout.section)
     }
 
-    // MARK: - Battery section
+    // MARK: - Component sensors
+
+    /// Temperatures and component power for the whole machine. The table is
+    /// collapsed by default and sampled only while it is open.
+    private var sensorSection: some View {
+        PowerStatusSensorSection(
+            isExpanded: viewModel.isSensorsExpanded,
+            readings: viewModel.sensorSnapshot.components,
+            isSampled: viewModel.sensorSnapshot.isSampled,
+            localization: localization,
+            onToggle: {
+                viewModel.setSensorsExpanded(!viewModel.isSensorsExpanded)
+            }
+        )
+        .padding(.horizontal, PowerStatusLayout.horizontalPadding)
+        .padding(.top, PowerStatusLayout.section)
+    }
+
+    // MARK: - Energy-consuming apps
+
+    /// The five heaviest applications in the current sampling window. Empty
+    /// until the second sample establishes a baseline.
+    @ViewBuilder
+    private var energyAppsSection: some View {
+        let apps = viewModel.snapshot.topEnergyApps
+        if !apps.isEmpty {
+            detailGroup(title: localization.string("energyApps.title", defaultValue: "高耗电应用")) {
+                VStack(spacing: PowerStatusLayout.rowVertical) {
+                    ForEach(apps) { app in
+                        PowerStatusAppEnergyRow(app: app)
+                    }
+                }
+            }
+            .help(localization.string("energyApps.help", defaultValue: "最近一次采样间隔内的平均功耗"))
+            .padding(.horizontal, PowerStatusLayout.horizontalPadding)
+            .padding(.top, PowerStatusLayout.section)
+        }
+    }
 
     // MARK: - Telemetry
 
@@ -477,6 +520,11 @@ enum PowerStatusLayout {
     static let metricRowHeight: CGFloat = 17
     static let batteryBarHeight: CGFloat = 26
     static let miniMetricRowHeight: CGFloat = 31
+    static let appEnergyRowHeight: CGFloat = 20
+    static let sensorHeaderHeight: CGFloat = 22
+    static let sensorTableHeaderHeight: CGFloat = 14
+    static let sensorRowHeight: CGFloat = 18
+    static let sensorRowSpacing: CGFloat = 4
     static let detailGroupHeaderHeight: CGFloat = 15
     static let emptyContentHeight: CGFloat = 122
 
@@ -496,6 +544,9 @@ enum PowerStatusLayout {
         diagramRowCount: Int,
         capacityTileCount: Int,
         voltageCurrentTileCount: Int,
+        energyAppCount: Int = 0,
+        sensorRowCount: Int = 0,
+        isSensorsExpanded: Bool = false,
         isDataAvailable: Bool
     ) -> CGFloat {
         guard isDataAvailable else {
@@ -508,6 +559,8 @@ enum PowerStatusLayout {
         let powerFlow = CGFloat(rows) * metricRowHeight
             + CGFloat(max(rows - 1, 0)) * rowVertical
             + section
+        let energyApps = energyAppsHeight(rowCount: energyAppCount)
+        let sensors = sensorsHeight(rowCount: sensorRowCount, isExpanded: isSensorsExpanded)
         // The capacity group always renders; it carries the battery level bar.
         let capacity = groupHeight(
             barHeight: batteryBarHeight + rowVertical,
@@ -515,7 +568,30 @@ enum PowerStatusLayout {
         )
         let voltageCurrent = groupHeight(barHeight: 0, tileCount: voltageCurrentTileCount)
         let padding = cardVerticalPadding * 2
-        return header + diagram + powerFlow + capacity + voltageCurrent + padding
+        return header + diagram + powerFlow + energyApps + sensors + capacity + voltageCurrent + padding
+    }
+
+    /// The collapsible header always renders; the table adds one header row and
+    /// one row per component. Before the first sample completes the view shows
+    /// a single placeholder row, which is mirrored here.
+    private static func sensorsHeight(rowCount: Int, isExpanded: Bool) -> CGFloat {
+        let header = section + sensorHeaderHeight
+        guard isExpanded else { return header }
+
+        let rows = max(rowCount, 1)
+        let table = sensorTableHeaderHeight + sensorRowSpacing
+            + CGFloat(rows) * sensorRowHeight
+            + CGFloat(max(rows - 1, 0)) * sensorRowSpacing
+        return header + sectionHeaderContent + table
+    }
+
+    /// One row per application, under the same group header as the telemetry
+    /// groups but in a single column.
+    private static func energyAppsHeight(rowCount: Int) -> CGFloat {
+        guard rowCount > 0 else { return 0 }
+        return section + detailGroupHeaderHeight + sectionHeaderContent
+            + CGFloat(rowCount) * appEnergyRowHeight
+            + CGFloat(max(rowCount - 1, 0)) * rowVertical
     }
 
     /// One telemetry group: its own leading spacing, header, an optional
@@ -1006,6 +1082,252 @@ private struct PowerFlowJunctionLine: View {
             style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
         )
     }
+}
+
+// MARK: - Component sensors
+
+private struct PowerStatusSensorSection: View {
+    let isExpanded: Bool
+    let readings: [PowerStatusComponentReading]
+    let isSampled: Bool
+    let localization: PluginLocalization
+    let onToggle: () -> Void
+
+    @Environment(\.pluginComponentTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private static let temperatureColumnWidth: CGFloat = 58
+    private static let powerColumnWidth: CGFloat = 54
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+
+            if isExpanded {
+                table
+                    .padding(.top, PowerStatusLayout.sectionHeaderContent)
+            }
+        }
+    }
+
+    private var header: some View {
+        Button(action: toggle) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(theme.text.tertiary)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .frame(width: 10)
+
+                Image(systemName: "thermometer.medium")
+                    .font(.system(size: 11, weight: .medium))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(theme.status.warning)
+                    .frame(width: 16)
+
+                Text(localization.string("sensors.title", defaultValue: "温度与功耗"))
+                    .font(PluginTypography.caption.font.weight(.semibold))
+                    .foregroundStyle(theme.text.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+            }
+            .frame(height: PowerStatusLayout.sensorHeaderHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(helpText)
+        .accessibilityLabel(localization.string("sensors.title", defaultValue: "温度与功耗"))
+        .accessibilityHint(isExpanded ? collapseHint : expandHint)
+    }
+
+    private var table: some View {
+        VStack(spacing: PowerStatusLayout.sensorRowSpacing) {
+            tableHeader
+
+            if readings.isEmpty {
+                placeholderRow
+            } else {
+                ForEach(readings) { reading in
+                    row(reading)
+                }
+            }
+        }
+    }
+
+    private var tableHeader: some View {
+        HStack(spacing: 6) {
+            Color.clear
+                .frame(width: 16)
+
+            Text(localization.string("sensors.component", defaultValue: "组件"))
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(localization.string("sensors.temperature", defaultValue: "温度"))
+                .frame(width: Self.temperatureColumnWidth, alignment: .trailing)
+
+            Text(localization.string("sensors.power", defaultValue: "功耗"))
+                .frame(width: Self.powerColumnWidth, alignment: .trailing)
+        }
+        .font(PluginTypography.caption.font)
+        .foregroundStyle(theme.text.tertiary)
+        .frame(height: PowerStatusLayout.sensorTableHeaderHeight)
+        .accessibilityHidden(true)
+    }
+
+    private func row(_ reading: PowerStatusComponentReading) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: reading.component.iconName)
+                .font(.system(size: 11, weight: .medium))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(theme.text.secondary)
+                .frame(width: 16)
+
+            Text(componentTitle(reading.component))
+                .font(PluginTypography.detail.font)
+                .foregroundStyle(theme.text.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+
+            Spacer(minLength: 4)
+
+            valueText(
+                reading.temperatureC.map(Self.temperatureText),
+                width: Self.temperatureColumnWidth
+            )
+
+            valueText(
+                reading.powerW.map(PowerStatusValueText.energyWatts),
+                width: Self.powerColumnWidth
+            )
+        }
+        .frame(height: PowerStatusLayout.sensorRowHeight)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel(for: reading))
+    }
+
+    private var placeholderRow: some View {
+        HStack(spacing: 6) {
+            Text(
+                localization.string(
+                    isSampled ? "sensors.empty" : "sensors.loading",
+                    defaultValue: isSampled ? "未发现传感器" : "正在读取传感器…"
+                )
+            )
+            .font(PluginTypography.detail.font)
+            .foregroundStyle(theme.text.tertiary)
+            .lineLimit(1)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 22)
+        .frame(height: PowerStatusLayout.sensorRowHeight)
+    }
+
+    private func valueText(_ text: String?, width: CGFloat) -> some View {
+        Text(text ?? PowerStatusValueText.unavailable)
+            .font(PluginTypography.detail.font.weight(.medium))
+            .foregroundStyle(text == nil ? theme.text.tertiary : theme.text.primary)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
+            .frame(width: width, alignment: .trailing)
+    }
+
+    private func componentTitle(_ component: PowerStatusSensorComponent) -> String {
+        localization.string(component.titleKey, defaultValue: component.defaultTitle)
+    }
+
+    private func accessibilityLabel(for reading: PowerStatusComponentReading) -> String {
+        var parts = [componentTitle(reading.component)]
+        if let temperature = reading.temperatureC {
+            parts.append(
+                "\(localization.string("sensors.temperature", defaultValue: "温度")) "
+                    + Self.temperatureText(temperature)
+            )
+        }
+        if let power = reading.powerW {
+            parts.append(
+                "\(localization.string("sensors.power", defaultValue: "功耗")) "
+                    + PowerStatusValueText.energyWatts(power)
+            )
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    private func toggle() {
+        if reduceMotion {
+            onToggle()
+        } else {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                onToggle()
+            }
+        }
+    }
+
+    private var helpText: String {
+        localization.string(
+            "sensors.help",
+            defaultValue: "温度取组件内最高读数，功耗来自硬件能耗计数器"
+        )
+    }
+
+    private var expandHint: String {
+        localization.string(
+            "sensors.expandHint",
+            defaultValue: "展开查看所有组件的温度与功耗"
+        )
+    }
+
+    private var collapseHint: String {
+        localization.string(
+            "sensors.collapseHint",
+            defaultValue: "收起温度与功耗"
+        )
+    }
+
+    private static func temperatureText(_ value: Double) -> String {
+        String(format: "%.1f°C", value)
+    }
+}
+
+private struct PowerStatusAppEnergyRow: View {
+    let app: PowerStatusAppEnergy
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Group {
+                if let icon = app.icon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .interpolation(.high)
+                } else {
+                    Image(systemName: "app.dashed")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(theme.text.tertiary)
+                }
+            }
+            .frame(width: 16, height: 16)
+
+            Text(app.name)
+                .font(PluginTypography.detail.font)
+                .foregroundStyle(theme.text.primary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+
+            Spacer(minLength: 8)
+
+            Text(PowerStatusValueText.energyWatts(app.watts))
+                .font(PluginTypography.detail.font.weight(.medium))
+                .foregroundStyle(theme.text.primary)
+                .monospacedDigit()
+                .lineLimit(1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(app.name) \(PowerStatusValueText.energyWatts(app.watts))")
+    }
+
+    @Environment(\.pluginComponentTheme) private var theme
 }
 
 private struct PowerStatusMetricRow: View {

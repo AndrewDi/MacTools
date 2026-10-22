@@ -28,6 +28,16 @@ enum PowerStatusValueText {
         guard let watts else { return unavailable }
         return String(format: "%.0fW", max(0, watts))
     }
+
+    /// Two decimals below one watt, so low draws do not all read `0.0 W`.
+    static func energyWatts(_ watts: Double?) -> String {
+        guard let watts else { return unavailable }
+        let value = max(0, watts)
+        if value < 1 {
+            return String(format: "%.2f W", value)
+        }
+        return String(format: "%.1f W", value)
+    }
 }
 
 /// A snapshot of power and battery telemetry collected from IOKit.
@@ -70,6 +80,10 @@ struct PowerStatusSnapshot: Equatable {
 
     /// EMA-smoothed discharge power set by the view model for stable time estimates.
     var smoothedDischargePowerW: Double?
+
+    /// Per-application energy readings for the current sampling window, set by
+    /// the view model while the panel is visible.
+    var topEnergyApps: [PowerStatusAppEnergy] = []
 
     static let empty = PowerStatusSnapshot(
         timestamp: Date(),

@@ -57,6 +57,9 @@ final class PowerStatusPlugin: MacToolsPlugin {
                 diagramRowCount: PowerStatusLayout.flowDiagramRowCount(for: snapshot),
                 capacityTileCount: PowerStatusLayout.capacityTileCount(for: snapshot),
                 voltageCurrentTileCount: PowerStatusLayout.voltageCurrentTileCount(for: snapshot),
+                energyAppCount: snapshot.topEnergyApps.count,
+                sensorRowCount: viewModel.sensorSnapshot.components.count,
+                isSensorsExpanded: viewModel.isSensorsExpanded,
                 isDataAvailable: snapshot.isDataAvailable
             )
         )

@@ -644,6 +644,184 @@ final class PowerStatusPluginTests: XCTestCase {
         XCTAssertEqual(PowerStatusLayout.capacityTileCount(for: designOnly), 1)
     }
 
+    // MARK: - App energy readings
+
+    func testAppEnergyDeltaConvertsNanojoulesToWatts() {
+        let previous: [Int32: UInt64] = [
+            10: 1_000_000_000,
+            20: 500_000_000,
+            30: 2_000_000_000,
+        ]
+        let current: [Int32: UInt64] = [
+            10: 3_000_000_000, // +2 J over 2 s = 1 W
+            20: 400_000_000,   // counter went backwards (reused PID) = no reading
+            30: 2_500_000_000, // +0.5 J over 2 s = 0.25 W
+            40: 9_000_000_000, // no baseline yet
+        ]
+
+        let watts = PowerStatusAppEnergyMath.watts(previous: previous, current: current, elapsed: 2)
+
+        XCTAssertEqual(watts[10] ?? -1, 1.0, accuracy: 0.001)
+        XCTAssertNil(watts[20])
+        XCTAssertEqual(watts[30] ?? -1, 0.25, accuracy: 0.001)
+        XCTAssertNil(watts[40])
+    }
+
+    func testAppEnergyRankingKeepsFiveHeaviestAboveThreshold() {
+        let apps = [
+            PowerStatusAppEnergyReading(id: "a", name: "Alpha", watts: 0.05),
+            PowerStatusAppEnergyReading(id: "b", name: "Bravo", watts: 1.20),
+            PowerStatusAppEnergyReading(id: "c", name: "Charlie", watts: 0.30),
+            PowerStatusAppEnergyReading(id: "d", name: "Delta", watts: 0.90),
+            PowerStatusAppEnergyReading(id: "e", name: "Echo", watts: 0.60),
+            PowerStatusAppEnergyReading(id: "f", name: "Foxtrot", watts: 0.40),
+            PowerStatusAppEnergyReading(id: "g", name: "Golf", watts: 0.01),
+        ]
+
+        let ranked = PowerStatusAppEnergyMath.rankedReadings(apps)
+
+        XCTAssertEqual(ranked.map(\.name), ["Bravo", "Delta", "Echo", "Foxtrot", "Charlie"])
+        XCTAssertFalse(ranked.contains { $0.id == "g" })
+    }
+
+    func testAppEnergyWattsFormattingUsesExtraPrecisionBelowOneWatt() {
+        XCTAssertEqual(PowerStatusValueText.energyWatts(1.24), "1.2 W")
+        XCTAssertEqual(PowerStatusValueText.energyWatts(0.126), "0.13 W")
+        XCTAssertEqual(PowerStatusValueText.energyWatts(nil), PowerStatusValueText.unavailable)
+    }
+
+    // MARK: - Component sensors
+
+    func testSensorTemperatureKeysMapToComponents() {
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "Tp1A"), .cpu)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "Te05"), .cpu)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "TC0P"), .cpu)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "Tg0X"), .gpu)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "TG0D"), .gpu)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "TRD0"), .memory)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "TM0P"), .memory)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "TH0x"), .storage)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "TB0T"), .battery)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "TPD0"), .mainboard)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "Ts0P"), .mainboard)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "Ta0P"), .ambient)
+        XCTAssertEqual(PowerStatusSensorMath.component(forTemperatureKey: "TW0P"), .wireless)
+        XCTAssertNil(PowerStatusSensorMath.component(forTemperatureKey: "Tf04"))
+        XCTAssertNil(PowerStatusSensorMath.component(forTemperatureKey: "PSTR"))
+    }
+
+    func testSensorTemperatureValidityRejectsUnpopulatedSiliconSensors() {
+        // Some P-core keys report single-digit values before the die warms up.
+        XCTAssertFalse(PowerStatusSensorMath.isValidTemperature(6.7, for: .cpu))
+        XCTAssertTrue(PowerStatusSensorMath.isValidTemperature(46.2, for: .cpu))
+        XCTAssertTrue(PowerStatusSensorMath.isValidTemperature(9.5, for: .ambient))
+        XCTAssertFalse(PowerStatusSensorMath.isValidTemperature(0, for: .battery))
+        XCTAssertFalse(PowerStatusSensorMath.isValidTemperature(130, for: .gpu))
+    }
+
+    func testNeuralEngineRowIsHiddenBeforeM3() {
+        XCTAssertFalse(PowerStatusSensorMath.supportsNeuralEngineComponent(chipName: "Apple M1"))
+        XCTAssertFalse(PowerStatusSensorMath.supportsNeuralEngineComponent(chipName: "Apple M2 Max"))
+        XCTAssertFalse(PowerStatusSensorMath.supportsNeuralEngineComponent(chipName: "Intel(R) Core(TM) i7"))
+        XCTAssertFalse(PowerStatusSensorMath.supportsNeuralEngineComponent(chipName: nil))
+        XCTAssertTrue(PowerStatusSensorMath.supportsNeuralEngineComponent(chipName: "Apple M3"))
+        XCTAssertTrue(PowerStatusSensorMath.supportsNeuralEngineComponent(chipName: "Apple M4 Pro"))
+    }
+
+    func testSensorPowerChannelsMapOnlyAggregateComponents() {
+        XCTAssertEqual(PowerStatusSensorMath.component(forPowerChannel: "CPU Energy"), .cpu)
+        XCTAssertEqual(PowerStatusSensorMath.component(forPowerChannel: "GPU Energy"), .gpu)
+        XCTAssertEqual(PowerStatusSensorMath.component(forPowerChannel: "DRAM0"), .memory)
+        XCTAssertEqual(PowerStatusSensorMath.component(forPowerChannel: "DRAM1"), .memory)
+        XCTAssertEqual(PowerStatusSensorMath.component(forPowerChannel: "ANE0"), .neuralEngine)
+        // Per-cluster and SRAM counters would double count the aggregate.
+        XCTAssertNil(PowerStatusSensorMath.component(forPowerChannel: "PACC0_CPU"))
+        XCTAssertNil(PowerStatusSensorMath.component(forPowerChannel: "GPU0"))
+        XCTAssertNil(PowerStatusSensorMath.component(forPowerChannel: "GPU SRAM0"))
+    }
+
+    func testSensorEnergyUnitsConvertToJoules() {
+        XCTAssertEqual(PowerStatusSensorMath.joules(from: 2, unit: "J") ?? -1, 2, accuracy: 0.001)
+        XCTAssertEqual(PowerStatusSensorMath.joules(from: 2_000, unit: "mJ") ?? -1, 2, accuracy: 0.001)
+        XCTAssertEqual(PowerStatusSensorMath.joules(from: 2_000_000, unit: "uJ") ?? -1, 2, accuracy: 0.001)
+        XCTAssertEqual(
+            PowerStatusSensorMath.joules(from: 2_000_000_000, unit: "nJ") ?? -1,
+            2,
+            accuracy: 0.001
+        )
+        XCTAssertNil(PowerStatusSensorMath.joules(from: 2, unit: "W"))
+        XCTAssertNil(PowerStatusSensorMath.joules(from: -1, unit: "J"))
+    }
+
+    func testSensorPowerWattsUsesEnergyDeltasAndDropsInvalidCounters() {
+        let previous: [PowerStatusSensorComponent: Double] = [
+            .cpu: 10,
+            .memory: 5,
+        ]
+        let current: [PowerStatusSensorComponent: Double] = [
+            .cpu: 14,     // +4 J over 2 s = 2 W
+            .memory: 4,   // counter went backwards = no reading
+            .gpu: 8,      // no baseline yet
+        ]
+
+        let watts = PowerStatusSensorMath.watts(
+            previous: previous,
+            current: current,
+            elapsed: 2
+        )
+
+        XCTAssertEqual(watts[.cpu] ?? -1, 2.0, accuracy: 0.001)
+        XCTAssertNil(watts[.memory])
+        XCTAssertNil(watts[.gpu])
+    }
+
+    func testSensorMemoryPowerTreatsZeroAsUnavailable() {
+        XCTAssertEqual(
+            PowerStatusSensorMath.memoryPowerWatts(energyModel: 1.2, smcFallback: 0.8) ?? -1,
+            1.2,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            PowerStatusSensorMath.memoryPowerWatts(energyModel: 0, smcFallback: 0.8) ?? -1,
+            0.8,
+            accuracy: 0.001
+        )
+        XCTAssertNil(PowerStatusSensorMath.memoryPowerWatts(energyModel: 0, smcFallback: nil))
+        XCTAssertNil(PowerStatusSensorMath.memoryPowerWatts(energyModel: nil, smcFallback: 0))
+    }
+
+    func testSensorLayoutHeightGrowsWithExpandedRows() {
+        let collapsed = PowerStatusLayout.contentHeight(
+            flowRowCount: 3,
+            diagramRowCount: 1,
+            capacityTileCount: 7,
+            voltageCurrentTileCount: 4,
+            sensorRowCount: 9,
+            isSensorsExpanded: false,
+            isDataAvailable: true
+        )
+        let expanded = PowerStatusLayout.contentHeight(
+            flowRowCount: 3,
+            diagramRowCount: 1,
+            capacityTileCount: 7,
+            voltageCurrentTileCount: 4,
+            sensorRowCount: 9,
+            isSensorsExpanded: true,
+            isDataAvailable: true
+        )
+
+        XCTAssertGreaterThan(expanded, collapsed)
+        XCTAssertEqual(
+            expanded - collapsed,
+            PowerStatusLayout.sectionHeaderContent
+                + PowerStatusLayout.sensorTableHeaderHeight
+                + PowerStatusLayout.sensorRowSpacing
+                + 9 * PowerStatusLayout.sensorRowHeight
+                + 8 * PowerStatusLayout.sensorRowSpacing,
+            accuracy: 0.5
+        )
+    }
+
     // MARK: - Helpers
 
     private func makeSnapshot(

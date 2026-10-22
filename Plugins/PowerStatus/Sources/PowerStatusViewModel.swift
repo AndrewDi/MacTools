@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import SwiftUI
 import IOKit.ps
@@ -8,6 +9,8 @@ import MacToolsPluginKit
 final class PowerStatusViewModel: ObservableObject {
     @Published private(set) var snapshot: PowerStatusSnapshot = .empty
     @Published private(set) var isPanelVisible: Bool = false
+    @Published private(set) var sensorSnapshot: PowerStatusSensorSnapshot = .empty
+    @Published private(set) var isSensorsExpanded: Bool = false
 
     var onSnapshotChange: (() -> Void)?
 
@@ -20,6 +23,68 @@ final class PowerStatusViewModel: ObservableObject {
     /// so the locally computed remaining time does not jump between samples.
     private static let emaAlpha = 0.065
     private var dischargeEMA: Double?
+
+    private let energyMonitor = PowerStatusAppEnergyMonitor()
+    private nonisolated(unsafe) var energyTask: Task<Void, Never>?
+    private var energySession = 0
+    private var appIconCache: [String: NSImage] = [:]
+
+    private let sensorMonitor = PowerStatusSensorMonitor()
+    private nonisolated(unsafe) var sensorTask: Task<Void, Never>?
+    private var sensorGeneration = 0
+
+    // MARK: - Sensor section
+
+    /// Expands or collapses the component temperature and power table. Sampling
+    /// only runs while the section is open; collapsing drops the readings so a
+    /// later expansion cannot show stale values.
+    func setSensorsExpanded(_ expanded: Bool) {
+        guard expanded != isSensorsExpanded else { return }
+        isSensorsExpanded = expanded
+        sensorGeneration += 1
+        sensorTask?.cancel()
+        sensorTask = nil
+
+        if expanded {
+            sampleSensors()
+        } else {
+            sensorSnapshot = .empty
+        }
+        onSnapshotChange?()
+    }
+
+    private func updateSensorsIfNeeded() {
+        guard isSensorsExpanded else { return }
+        sampleSensors()
+    }
+
+    private func sampleSensors() {
+        guard isSensorsExpanded, sensorTask == nil else { return }
+
+        let generation = sensorGeneration
+        let batteryTemperature = snapshot.batteryTemperatureC
+        let batteryPower = batteryPowerForSensors
+        sensorTask = Task { [weak self] in
+            guard let self else { return }
+            let readings = await self.sensorMonitor.sample(
+                batteryTemperatureC: batteryTemperature,
+                batteryPowerW: batteryPower
+            )
+            guard self.sensorGeneration == generation else { return }
+            self.sensorSnapshot = readings
+            self.sensorTask = nil
+        }
+    }
+
+    private var batteryPowerForSensors: Double? {
+        if snapshot.batteryChargeRateW > 0 {
+            return snapshot.batteryChargeRateW
+        }
+        if snapshot.batteryDischargeRateW > 0 {
+            return snapshot.batteryDischargeRateW
+        }
+        return nil
+    }
 
     // MARK: - Panel visibility
 
@@ -43,6 +108,13 @@ final class PowerStatusViewModel: ObservableObject {
 
     private func startMonitoring() {
         guard timer == nil else { return }
+        energySession += 1
+        energyTask?.cancel()
+        energyTask = nil
+        if !snapshot.topEnergyApps.isEmpty {
+            snapshot.topEnergyApps = []
+            onSnapshotChange?()
+        }
         updateData()
         scheduleTimer()
         setupPowerSourceNotification()
@@ -51,6 +123,12 @@ final class PowerStatusViewModel: ObservableObject {
     private func stopMonitoring() {
         timer?.invalidate()
         timer = nil
+        energySession += 1
+        energyTask?.cancel()
+        energyTask = nil
+        sensorGeneration += 1
+        sensorTask?.cancel()
+        sensorTask = nil
         if let notifier = powerSourceNotifier {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), notifier, .commonModes)
             powerSourceNotifier = nil
@@ -103,9 +181,76 @@ final class PowerStatusViewModel: ObservableObject {
     private func updateData() {
         var newSnapshot = PowerStatusSampler.readSnapshot()
         newSnapshot.smoothedDischargePowerW = updateSmoothedDischargePower(from: newSnapshot)
-        guard newSnapshot != snapshot else { return }
-        snapshot = newSnapshot
-        onSnapshotChange?()
+        // Keep the last list visible while a new background sample is in
+        // flight instead of clearing it every two seconds.
+        newSnapshot.topEnergyApps = newSnapshot.isDataAvailable ? snapshot.topEnergyApps : []
+        if newSnapshot != snapshot {
+            snapshot = newSnapshot
+            onSnapshotChange?()
+        }
+        updateEnergyAppsIfNeeded(timestamp: newSnapshot.timestamp)
+        updateSensorsIfNeeded()
+    }
+
+    // MARK: - App energy
+
+    private func updateEnergyAppsIfNeeded(timestamp: Date) {
+        guard isPanelVisible, snapshot.isDataAvailable, energyTask == nil else { return }
+
+        let session = energySession
+        let identities = Self.runningAppIdentities()
+        energyTask = Task { [weak self] in
+            guard let self else { return }
+            let readings = await self.energyMonitor.sample(
+                identities: identities,
+                now: timestamp,
+                sessionID: session
+            )
+            guard self.energySession == session else { return }
+            self.energyTask = nil
+            guard self.isPanelVisible, self.snapshot.isDataAvailable else { return }
+
+            self.snapshot.topEnergyApps = readings.map { reading in
+                PowerStatusAppEnergy(
+                    id: reading.id,
+                    name: reading.name,
+                    icon: self.appIcon(for: reading.id),
+                    watts: reading.watts
+                )
+            }
+            self.onSnapshotChange?()
+        }
+    }
+
+    private static func runningAppIdentities() -> [PowerStatusAppIdentity] {
+        NSWorkspace.shared.runningApplications.compactMap { app in
+            let pid = app.processIdentifier
+            guard pid > 0,
+                  let bundleID = app.bundleIdentifier,
+                  !bundleID.isEmpty else {
+                return nil
+            }
+            return PowerStatusAppIdentity(
+                pid: pid,
+                bundleID: bundleID,
+                name: app.localizedName ?? bundleID,
+                isRegular: app.activationPolicy == .regular
+            )
+        }
+    }
+
+    /// Loads and caches icons only for the ranked apps, after sampling has
+    /// finished off the main actor.
+    private func appIcon(for bundleID: String) -> NSImage? {
+        if let cached = appIconCache[bundleID] {
+            return cached
+        }
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return nil
+        }
+        let icon = NSWorkspace.shared.icon(forFile: url.path)
+        appIconCache[bundleID] = icon
+        return icon
     }
 
     /// Smooths instantaneous discharge power for time estimates; resets when
@@ -139,6 +284,8 @@ final class PowerStatusViewModel: ObservableObject {
 
     deinit {
         timer?.invalidate()
+        energyTask?.cancel()
+        sensorTask?.cancel()
         if let notifier = powerSourceNotifier {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), notifier, .commonModes)
         }

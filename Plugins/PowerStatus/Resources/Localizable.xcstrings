@@ -576,6 +576,326 @@
         "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tahmini çalışma süresi" } },
         "ar" : { "stringUnit" : { "state" : "translated", "value" : "مدة التشغيل المقدّرة" } }
       }
+    },
+    "energyApps.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "High Energy Apps" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "高耗电应用" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "高耗電應用" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "電力消費の多いアプリ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "에너지 사용이 많은 앱" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Hoher Energieverbrauch" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Fortes consommations" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Mayor consumo" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Maior consumo" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Высокое энергопотребление" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Yüksek Enerji Kullanımı" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "التطبيقات عالية الاستهلاك" } }
+      }
+    },
+    "energyApps.help" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Average power draw over the latest sampling interval." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最近一次采样间隔内的平均功耗。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "最近一次取樣間隔內的平均功耗。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "直近のサンプリング間隔における平均消費電力。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "최근 샘플링 구간의 평균 전력 사용량입니다." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Durchschnittliche Leistungsaufnahme im letzten Messintervall." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Consommation moyenne sur le dernier intervalle d'échantillonnage." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Consumo medio durante el último intervalo de muestreo." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Consumo médio no último intervalo de amostragem." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Средняя потребляемая мощность за последний интервал измерения." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Son örnekleme aralığındaki ortalama güç tüketimi." } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "متوسط استهلاك الطاقة خلال آخر فترة قياس." } }
+      }
+    },
+    "sensors.title" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Temperature & Power" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "温度与功耗" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "溫度與功耗" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "温度と電力" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "온도 및 전력" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Temperatur & Leistung" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Température et puissance" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Temperatura y potencia" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Temperatura e potência" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Температура и питание" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Sıcaklık ve Güç" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الحرارة والطاقة" } }
+      }
+    },
+    "sensors.component" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Component" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "组件" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "元件" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "コンポーネント" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "구성 요소" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Komponente" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Composant" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Componente" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Componente" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Компонент" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bileşen" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "المكوّن" } }
+      }
+    },
+    "sensors.temperature" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Temp." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "温度" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "溫度" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "温度" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "온도" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Temp." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Temp." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Temp." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Temp." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Темп." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Sıcaklık" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الحرارة" } }
+      }
+    },
+    "sensors.power" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Power" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "功耗" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "功耗" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "電力" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "전력" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Leistung" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Puissance" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Potencia" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Potência" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Мощность" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Güç" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الطاقة" } }
+      }
+    },
+    "sensors.cpu" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "CPU" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "处理器" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "處理器" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "プロセッサ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "프로세서" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Prozessor" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Processeur" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Procesador" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Processador" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Процессор" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "İşlemci" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "المعالج" } }
+      }
+    },
+    "sensors.gpu" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "GPU" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "图形处理器" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "圖形處理器" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "グラフィックス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "그래픽" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Grafik" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Graphiques" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Gráficos" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Gráficos" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Графика" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Grafik" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الرسوميات" } }
+      }
+    },
+    "sensors.memory" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Memory" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "内存" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "記憶體" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "メモリ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메모리" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Arbeitsspeicher" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Mémoire" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Memoria" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Memória" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Память" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bellek" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الذاكرة" } }
+      }
+    },
+    "sensors.neuralEngine" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Neural Engine" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "神经网络引擎" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "神經網路引擎" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ニューラルエンジン" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "신경망 엔진" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neural Engine" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Neural Engine" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Neural Engine" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Neural Engine" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нейродвижок" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Sinir Motoru" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "محرك الأعصاب" } }
+      }
+    },
+    "sensors.storage" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Storage" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "存储" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "儲存空間" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ストレージ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "저장 장치" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Speicher" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Stockage" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Almacenamiento" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Armazenamento" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Накопитель" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Depolama" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "التخزين" } }
+      }
+    },
+    "sensors.mainboard" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mainboard" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主板" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "主機板" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "マザーボード" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "메인보드" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Mainboard" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Carte mère" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Placa base" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Placa-mãe" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Системная плата" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Anakart" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "اللوحة الأم" } }
+      }
+    },
+    "sensors.battery" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Battery" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "电池" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "電池" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "バッテリー" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "배터리" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Batterie" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Batterie" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Batería" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Bateria" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Батарея" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Pil" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "البطارية" } }
+      }
+    },
+    "sensors.ambient" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Ambient" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "环境" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "環境" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "環境" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "주변" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Umgebung" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ambiant" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Ambiente" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Ambiente" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Среда" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Ortam" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "البيئة" } }
+      }
+    },
+    "sensors.wireless" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Wireless" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无线网络" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "無線網路" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "ワイヤレス" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "무선 네트워크" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "WLAN" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Sans fil" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Inalámbrica" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Sem fio" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Беспроводная сеть" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Kablosuz" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "الشبكة اللاسلكية" } }
+      }
+    },
+    "sensors.help" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Highest reading in each component; power comes from hardware energy counters." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "温度取组件内最高读数，功耗来自硬件能耗计数器。" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "溫度取元件內最高讀數，功耗來自硬體能耗計數器。" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "温度は各コンポーネントの最高値、電力はハードウェアのエネルギーカウンターから取得します。" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "온도는 구성 요소의 최고 판독값이며 전력은 하드웨어 에너지 카운터에서 가져옵니다." } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Höchster Messwert der Komponente; Leistung aus den Hardware-Energiezählern." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Valeur maximale du composant ; puissance issue des compteurs d'énergie matériels." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Lectura más alta del componente; potencia de los contadores de energía del hardware." } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Leitura mais alta do componente; potência dos contadores de energia do hardware." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Максимальное значение компонента; мощность из аппаратных счётчиков энергии." } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Bileşendeki en yüksek değer; güç donanım enerji sayaçlarından alınır." } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "أعلى قراءة في المكوّن؛ والطاقة من عدّادات طاقة العتاد." } }
+      }
+    },
+    "sensors.expandHint" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show temperatures and power for all components" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "展开查看所有组件的温度与功耗" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "展開查看所有元件的溫度與功耗" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "すべてのコンポーネントの温度と電力を表示" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "모든 구성 요소의 온도와 전력 보기" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Temperaturen und Leistung aller Komponenten anzeigen" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Afficher la température et la puissance de tous les composants" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar la temperatura y la potencia de todos los componentes" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Mostrar a temperatura e a potência de todos os componentes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать температуру и мощность всех компонентов" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Tüm bileşenlerin sıcaklık ve gücünü göster" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "عرض حرارة وطاقة جميع المكوّنات" } }
+      }
+    },
+    "sensors.collapseHint" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Collapse temperatures and power" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "收起温度与功耗" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "收起溫度與功耗" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "温度と電力を折りたたむ" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "온도 및 전력 접기" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Temperaturen und Leistung einklappen" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Réduire la température et la puissance" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Contraer temperatura y potencia" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Recolher temperatura e potência" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Свернуть температуру и мощность" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Sıcaklık ve gücü daralt" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "طي الحرارة والطاقة" } }
+      }
+    },
+    "sensors.loading" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Reading sensors…" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "正在读取传感器…" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "正在讀取感測器…" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "センサーを読み取り中…" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "센서 읽는 중…" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sensoren werden gelesen…" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Lecture des capteurs…" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Leyendo sensores…" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Lendo sensores…" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Чтение датчиков…" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Sensörler okunuyor…" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "جارٍ قراءة المستشعرات…" } }
+      }
+    },
+    "sensors.empty" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No sensors found" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未发现传感器" } },
+        "zh-Hant" : { "stringUnit" : { "state" : "translated", "value" : "未發現感測器" } },
+        "ja" : { "stringUnit" : { "state" : "translated", "value" : "センサーが見つかりません" } },
+        "ko" : { "stringUnit" : { "state" : "translated", "value" : "센서를 찾을 수 없음" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Keine Sensoren gefunden" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun capteur trouvé" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se encontraron sensores" } },
+        "pt" : { "stringUnit" : { "state" : "translated", "value" : "Nenhum sensor encontrado" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Датчики не найдены" } },
+        "tr" : { "stringUnit" : { "state" : "translated", "value" : "Sensör bulunamadı" } },
+        "ar" : { "stringUnit" : { "state" : "translated", "value" : "لم يتم العثور على مستشعرات" } }
+      }
     }
   },
   "version" : "1.0"
