@@ -5,69 +5,75 @@
         <description>Latest release metadata for MacTools.</description>
         <language>en</language>
         <item>
-            <title>Version 2.0.1</title>
-            <link>https://github.com/mactools-app/MacTools/releases/tag/v2.0.1</link>
-            <sparkle:version>72</sparkle:version>
-            <sparkle:shortVersionString>2.0.1</sparkle:shortVersionString>
+            <title>Version 2.1.0</title>
+            <link>https://github.com/mactools-app/MacTools/releases/tag/v2.1.0</link>
+            <sparkle:version>73</sparkle:version>
+            <sparkle:shortVersionString>2.1.0</sparkle:shortVersionString>
             <description sparkle:format="markdown"><![CDATA[## App Updates
 
 ### Added
 
-- Choose whether floating panels follow macOS transparency or use a solid background, with Reduce Transparency always taking precedence.
-- Menu-bar panel sliders support inline action buttons, including display power controls.
-- Added Turkish as an app language: the language picker now includes Türkçe, and app, plugin, and Finder Sync surfaces are fully localized in Turkish.
+- Arrange controls and widgets in aligned columns with drag previews, labeled editing actions, and adjustable widths. Panel and item widths are included in settings backups.
+- Combine seven starter packs during first-launch setup, with panel previews, plugin choices, and a setup checklist. Resume unfinished setup, restore a backup safely, or start empty while preserving settings.
 
 ### Changed
 
-- The menu bar icon now shows a red dot when an app update is available. Panels show plugin update and loading progress instead of an empty state after launch.
-- Settings and menu-bar panels use consistent native text styles, compact widget labels, and action buttons that fit longer translations.
+- Startup and plugin refresh stay responsive, with custom menu bar icons finishing preparation after the app becomes available.
+- Plugin details show installation feedback and setup guidance, and plugin updates block conflicting actions. Search opens details directly while keeping usable title matches ahead of capability suggestions.
+- Trackpad plugins share input during weighing, recover after interruptions, and wait for fingers to lift before gestures resume. Stopped gestures stay stopped during updates.
 
 ### Fixed
 
-- Command-1 through Command-9 can be assigned to actions; unassigned keys retain their default navigation behavior.
-- Complete translations for app settings and controls in all supported languages. Improve live language switching, Arabic layouts, appearance controls, and Marketplace privacy and action risk labels.
-- Marketplace plugin rows now show the complete keyboard focus outline, including during installation.
-- Widgets align consistently at the top across panels, layout editing, and previews, reducing extra space below the toolbar.
-- Plugin settings sliders now persist keyboard and assistive-technology adjustments without repeating committed actions when values refresh externally.
+- Expanded panel details remain visible after scrolling.
+- Opening or returning to plugin settings refreshes permission guidance without restarting every plugin's background work.
+- Plugin search now matches Turkish capitalization and German sharp-S spellings consistently.
+- Upgrading panel layouts no longer creates false cloud settings conflicts.
+- MacTools 2.1.0 requires Middle Click and Trackpad Gestures 2.0.2 or later to prevent input conflicts. Older packages keep settings and update guidance, including during interrupted migration recovery.
+- Keep Trackpad Scale calibration across measurements and app restarts when the trackpad provides a stable device identity.
 
 ## Plugin Updates
 
 ### Added
 
-- AI Assistant captures selected text more reliably and no longer overwrites content you copied afterwards. The panel adds hide, stop, and discard controls plus manual text entry, and no longer logs provider error text.
-- Display Brightness can turn off individual displays while keeping at least one on. Disabled displays turn back on when MacTools quits or the remaining displays disconnect.
-- Duo Status adds icon sizes, battery percentage, optional color policies, four network glyphs, volume dots or a bar, and a Bluetooth mark. Existing battery colors remain the default.
-- System Data measures system storage across caches, logs, developer artifacts, package managers, models, and backups, with a safety hint per category. Collapsible groups, Finder reveal, and copy path; nothing is deleted.
-- System Status adds an estimated memory pressure percentage with history and statistics. Choose memory usage or pressure in settings.
+- Appearance, Night Shift, Microphone Mute, and Auto Hide Dock now offer compact switches in the panel editor on MacTools 2.1.0 or later.
+- Auto Input fixed rules can now set a per-app keyboard mode: follow the system, use standard F1–F12 function keys, or keep the MacBook top-row shortcuts. The choice applies while the app is frontmost.
+- Container Indicator monitors the Apple container service in one panel card, listing containers and virtual machines with CPU, memory, and storage details plus start, stop, and restart controls.
+- Key Stats counts key presses and trackpad use, shows today’s counts on a MacBook Pro keyboard, and charts daily and seven-day usage. Counts reset at midnight; the last seven days stay on device.
+- Power Status shows live power flow, AC input, battery charge and discharge, health, temperature, cycles, and time estimates, with grouped voltage, current, and capacity readings.
+- Power Status now has a collapsible temperature and power section that shows readings for the processor, GPU, memory, storage, mainboard, and battery. The Neural Engine row is hidden on M1 and M2 Macs.
+- Power Status now lists the five apps using the most energy while the panel is open, based on per-process energy counters.
+- Region recordings can zoom toward clicks and scrolling in the saved video. Processing shows progress and can keep the original movie instead.
+- Screenshot adds Spotlight to highlight details in copied, saved, and pinned images. Rectangles, ellipses, and spotlight regions can be selected, moved, resized, and undone after drawing.
+- Trackpad Scale automatically tares finger contact and captures stable readings, keeping results visible after sampling stops. Automatic capture can be disabled; manual Tare is available in Calibration and with ⌘T.
+- Trackpad Scale offers known-weight calibration that stays consistent through brief pressure changes, with an accuracy warning beside the reading.
+- Experimental Trackpad Scale estimates weight on built-in Force Touch trackpads, with stability feedback and restart controls. Middle Click and Trackpad Gestures pause until sampling stops and fingers lift.
 
 ### Changed
 
-- AI Assistant shortcuts now prefer directly readable selected text, then use an unchanged clipboard when clipboard input is enabled. Simulated-copy text still requires confirmation.
-- Speed up searches for leftover installers and developer build artifacts in folders with many files.
-- Window Layouts, Auto Input, and Clipboard feedback panels now share the app's floating-panel appearance.
-- Plugin widgets and windows use consistent text, clearer hover details, and native confirmation buttons.
-- Speed up Storage Explorer and Xcode Clean scans of folders with many files, and reduce Storage Explorer memory use in wide folders.
-- System Status simplifies chart controls and offers process limits of 3 (default), 5, 10, 15, or 20. Menu-bar values can be selected independently, including duplicates.
+- Improved plugin discovery across all 12 locales with capability terms such as TipTap, smooth scrolling, launch agents, device batteries, and system monitoring.
+- Brightness reads keep startup and refresh responsive. Monitors that cannot report their current brightness can still use hardware brightness controls.
+- Screenshot keeps recognized text layout, tolerates noisy scrolling frames, adds pinned-image controls, and never overwrites saved files. Cancelling Save As returns to the selection.
+- Screenshot adds opaque fills for rectangles and ellipses and strengthens mosaic redaction against text recovery.
+
+### Removed
+
+- Screenshot removes blur redaction; use mosaic or opaque fills to conceal content.
 
 ### Fixed
 
-- AI Assistant releases paused shortcuts, keeps prompt edits private until saved, and remembers an empty prompt list. Simulated copy now requires opt-in because its contents may enter Clipboard History.
-- AI Assistant preserves clipboard changes and keeps hidden panels hidden. Selection shortcuts retain the original app and require confirmation before sending simulated-copy text to AI.
-- Custom OpenAI-compatible endpoints now require a complete IPv4 address before private-network checks apply.
-- Clipboard History pastes links copied from another device into text fields and preserves URL format where supported. Plain-text actions also accept URL-only clipboard content.
-- Calendar dates stay centered beneath corner badges, with full lunar labels on hover. System Status network and disk cards fit within the panel.
-- Complete plugin translations and improve Arabic controls, numbers, and dates. Plugin names, retained errors, upload windows, and screenshot tips now follow language changes without restarting operations.
-- Mouse Enhancer preserves normal wheel scrolling if smooth scrolling fails to start or stops responding.
-- Plugin updates that need MacTools 2.0.1 are limited to compatible hosts, so older apps keep their installed versions.
-- Closing a screenshot or recording selection restores the normal cursor.
-- Storage Explorer updates the current view and scan warnings after moving items to Trash without rescanning. Failed items stay selected for retry, and scans start only when requested.
-- System Status improves hardware readings and chart history accuracy, including peaks, gaps, and averages. Process lists group by app, report physical memory use, and refresh more promptly.
-- System Status panels reopen with cached readings and show metrics before process scans finish. Menu-bar popovers keep a consistent background and stay aligned as values change.
-- Window Switcher keeps selections visible, restores minimized windows, and scrolls grids. Search Select shares Cycle's toolbar; preview pinch follows Tab changes and helper app activity is tracked.
+- Auto Input no longer stalls MacTools during startup or focus changes involving unresponsive apps. Focus tracking recovers when an app quits during a switch.
+- Display volume updates no longer freeze Settings.
+- Hide Active App on Dock Click no longer hides an app newly selected in the Dock when mouse-event delivery is delayed.
+- Window Layouts keeps a window in place when an application ignores an incremental resize.
+- Clipboard History now shows saved image previews reliably on first selection when image details load at the same time.
+- Dock Lock now treats a missing Dock orientation preference as macOS’s default bottom position.
+- Middle Click recovers when another MacTools process releases trackpad input and preserves held-click release when weighing starts. Reconnection stops while disabled or paused.
+- On macOS 14 and 15, screenshots, scrolling capture, and recordings keep menu and popover shadows.
+- Closing text recognition chosen from the mode bar now ends the capture instead of showing annotation tools. Recognized line counts exclude layout blank lines, and the result panel stays on screen.
 ]]></description>
             <sparkle:fullReleaseNotesLink>https://github.com/mactools-app/MacTools/releases</sparkle:fullReleaseNotesLink>
-            <pubDate>Sat, 10 Oct 2026 13:09:40 +0000</pubDate>
-            <enclosure url="https://github.com/mactools-app/MacTools/releases/download/v2.0.1/MacTools.dmg" length="13533810" type="application/octet-stream" sparkle:edSignature="LJeZ8s5XGA6c2nqLzuR0tzT6eayHGrxmqRhWXsj1sKP8N2F0wvY89lQYsgbqOxOo3Lb/ayR7tECl/qDx2XLsDQ==" />
+            <pubDate>Fri, 23 Oct 2026 12:37:36 +0000</pubDate>
+            <enclosure url="https://github.com/mactools-app/MacTools/releases/download/v2.1.0/MacTools.dmg" length="14552434" type="application/octet-stream" sparkle:edSignature="iCYsFpx8kAfWxkjCJ9WildMFyH9gqfmKJ+XJE2Q+MTAEjC27yJfL/J9eCdnCSjGeWEM9J4EpBuDv7qrD+jaZDg==" />
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
         </item>
     </channel>
