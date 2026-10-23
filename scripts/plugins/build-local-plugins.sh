@@ -128,14 +128,14 @@ if [[ -z "$SOURCE_DIR" || -z "$OUTPUT_DIR" ]]; then
     exit 1
 fi
 
-SOURCE_DIR="$(cd "$SOURCE_DIR" 2>/dev/null && pwd || true)"
+SOURCE_DIR="$(cd "$SOURCE_DIR" 2>/dev/null && pwd -P || true)"
 if [[ -z "$SOURCE_DIR" || ! -d "$SOURCE_DIR" ]]; then
     echo "Plugin source directory not found. Expected: $SOURCE_DIR" >&2
     exit 1
 fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
-OFFICIAL_PLUGIN_SOURCE_DIR="$(cd "$REPO_ROOT/Plugins" && pwd)"
+OFFICIAL_PLUGIN_SOURCE_DIR="$(cd "$REPO_ROOT/Plugins" && pwd -P)"
 THIRD_PARTY_NOTICE_MANIFEST="$REPO_ROOT/Sources/Resources/ThirdPartyNotices/manifest.json"
 THIRD_PARTY_NOTICE_GENERATOR="$REPO_ROOT/scripts/licenses/generate-third-party-notices.py"
 if [[ -z "$XCODEBUILD_COMMAND" ]]; then

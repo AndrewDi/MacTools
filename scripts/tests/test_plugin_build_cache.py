@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -109,6 +110,29 @@ sys.exit(subprocess.call(['/usr/bin/ditto',*sys.argv[1:]]))
             self.assertEqual((self.root / label / 'Packages/example.mactoolsplugin/Example.bundle/payload').read_text(), 'built plugin')
             self.assertIn('Fixture build log', Path(report['report'], 'build.log').read_text())
             self.assertFalse((self.root / label / 'DerivedData').exists())
+
+    def test_symlinked_checkout_keeps_official_plugin_notices(self):
+        checkout = self.root / 'checkout'
+        for relative in ['scripts/plugins/build-local-plugins.sh', 'scripts/plugins/with-build-cache.py',
+                         'scripts/plugins/copy-plugin-manifest.py', 'scripts/plugins/plugin_source_manifest.py',
+                         'Configs/AppVersion.xcconfig']:
+            target = checkout / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO / relative, target)
+        shutil.copytree(self.source, checkout / 'Plugins/Example')
+        generator = checkout / 'scripts/licenses/generate-third-party-notices.py'
+        generator.parent.mkdir(parents=True)
+        generator.write_text('import pathlib,sys\npathlib.Path(sys.argv[sys.argv.index("--output")+1]).write_text("Required notice")\n')
+        alias = self.root / 'checkout-alias'
+        alias.symlink_to(checkout, target_is_directory=True)
+        result = subprocess.run(
+            ['/bin/bash', '-c', 'cd "$1" && exec ./scripts/plugins/build-local-plugins.sh "${@:2}"',
+             'fixture', str(alias), '--source-dir', 'Plugins', '--output-dir', str(self.root / 'aliased'),
+             '--xcodebuild', str(self.builder), '--skip-catalog'],
+            env=self.env, text=True, capture_output=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((self.root / 'aliased/Packages/example.mactoolsplugin/THIRD_PARTY_NOTICES.txt').read_text(),
+                         'Required notice')
 
     def test_configuration_signing_sdk_probe_and_fresh_workspaces_are_separate(self):
         cases = [([], {}), (['--configuration', 'Release'], {}), (['--unsigned-build'], {}),
