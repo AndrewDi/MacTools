@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+ORIGINAL_ARGS=("$@")
 
 if [[ -z "${PYTHON3:-}" ]]; then
     if [[ -x /usr/bin/python3 ]]; then
@@ -133,7 +134,7 @@ if [[ -z "$SOURCE_DIR" || ! -d "$SOURCE_DIR" ]]; then
     exit 1
 fi
 
-REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd -P)"
 OFFICIAL_PLUGIN_SOURCE_DIR="$(cd "$REPO_ROOT/Plugins" && pwd)"
 THIRD_PARTY_NOTICE_MANIFEST="$REPO_ROOT/Sources/Resources/ThirdPartyNotices/manifest.json"
 THIRD_PARTY_NOTICE_GENERATOR="$REPO_ROOT/scripts/licenses/generate-third-party-notices.py"
@@ -142,11 +143,11 @@ if [[ -z "$XCODEBUILD_COMMAND" ]]; then
 fi
 OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
 PACKAGES_DIR="$OUTPUT_DIR/Packages"
-DERIVED_DATA_DIR="$OUTPUT_DIR/DerivedData"
+DERIVED_DATA_DIR="${MACTOOLS_PLUGIN_DERIVED_ROOT:-}"
 CATALOG_PATH="$OUTPUT_DIR/catalog.dev.json"
 
 rm -rf "$PACKAGES_DIR"
-mkdir -p "$PACKAGES_DIR" "$DERIVED_DATA_DIR"
+mkdir -p "$PACKAGES_DIR"
 
 json_value() {
     local file="$1"
@@ -309,6 +310,14 @@ build_bundle_if_needed() {
         return
     fi
 
+    # Prebuilt/aggregate products keep their existing path; only fallback compiles need a cache owner.
+    if [[ "${MACTOOLS_PLUGIN_CACHE_CHECKOUT:-}" != "$REPO_ROOT" ]]; then
+        local cache_args=(--source-dir "$SOURCE_DIR" --output-dir "$OUTPUT_DIR"
+            --configuration "$CONFIGURATION" --destination "$DESTINATION" --xcodebuild "$XCODEBUILD_COMMAND")
+        [[ "$UNSIGNED_BUILD" == "1" ]] && cache_args+=(--unsigned-build)
+        exec "$PYTHON3" "$REPO_ROOT/scripts/plugins/with-build-cache.py" "${cache_args[@]}" -- "${ORIGINAL_ARGS[@]}"
+    fi
+
     local project
     project_file_for "$root" "$manifest" project
     if [[ -z "$project" ]]; then
@@ -324,8 +333,13 @@ build_bundle_if_needed() {
     fi
 
     local derived_data
-    derived_data="$DERIVED_DATA_DIR/$(basename "$root")"
-    rm -rf "$derived_data"
+    local project_key
+    project_key="$("$PYTHON3" - "$project" "$scheme" <<'PY'
+import hashlib, json, pathlib, sys
+print(hashlib.sha256(json.dumps([str(pathlib.Path(sys.argv[1]).resolve()), sys.argv[2]]).encode()).hexdigest()[:24])
+PY
+)"
+    derived_data="$DERIVED_DATA_DIR/$project_key"
 
     local build_args=(
         -project "$project"

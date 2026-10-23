@@ -1,0 +1,152 @@
+"""Fallback plugin compiles reuse output without racing the packaging consumer."""
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+
+from test_copy_plugin_manifest import runtime_envelope
+
+REPO = Path(__file__).resolve().parents[2]
+SCRIPT = REPO / 'scripts/plugins/build-local-plugins.sh'
+
+
+class PluginBuildCacheTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.source = self.root / 'source/Example'
+        self.source.mkdir(parents=True)
+        (self.source / 'Example.xcodeproj').mkdir()
+        (self.source / 'plugin.json').write_text(json.dumps(runtime_envelope(
+            build={'project': 'Example.xcodeproj', 'scheme': 'Example'})))
+        self.bin = self.root / 'bin'
+        self.bin.mkdir()
+        self.env = {key: value for key, value in os.environ.items() if not key.startswith('MACTOOLS_PLUGIN_')}
+        self.env.update(PATH=str(self.bin) + os.pathsep + self.env['PATH'],
+                        PYTHON3=sys.executable, DEVELOPER_DIR=str(self.root / 'Xcode/Developer'),
+                        MACTOOLS_PLUGIN_CACHE_ROOT=str(self.root / 'compiler'), CALLS=str(self.root / 'calls'))
+        self.tool('xcrun', "import os\nprint(os.environ.get('SDK_BUILD','fixture-sdk'))\n")
+        self.builder = self.tool('xcodebuild', '''import os,pathlib,sys
+if '-version' in sys.argv:
+ print('fixture-xcode')
+ sys.exit(0)
+derived=pathlib.Path(sys.argv[sys.argv.index('-derivedDataPath')+1])
+with open(os.environ['CALLS'],'a') as stream: stream.write(str(derived)+'\\n')
+bundle=derived/'Build/Products'/sys.argv[sys.argv.index('-configuration')+1]/'Example.bundle'
+bundle.mkdir(parents=True,exist_ok=True)
+(bundle/'payload').write_text('built plugin')
+print('Fixture build log',flush=True)
+sys.exit(int(os.environ.get('BUILD_EXIT','0')))
+''')
+        self.tool('ditto', '''import os,pathlib,subprocess,sys,time
+if os.environ.get('HOLD_COPY'):
+ pathlib.Path(os.environ['HOLD_COPY']).touch()
+ deadline=time.monotonic()+8
+ while not pathlib.Path(os.environ['RELEASE_COPY']).exists() and time.monotonic()<deadline: time.sleep(.02)
+sys.exit(subprocess.call(['/usr/bin/ditto',*sys.argv[1:]]))
+''')
+
+    def tool(self, name, body):
+        path = self.bin / name
+        path.write_text('#!' + sys.executable + '\n' + body)
+        path.chmod(0o755)
+        return path
+
+    def command(self, label, *extra):
+        return [str(SCRIPT), '--source-dir', str(self.source), '--output-dir', str(self.root / label),
+                '--xcodebuild', str(self.builder), '--skip-catalog', *extra]
+
+    def invoke(self, label, *extra, env=None):
+        return subprocess.run(self.command(label, *extra), env=env or self.env,
+                              text=True, capture_output=True, timeout=20)
+
+    def reports(self):
+        return sorted(self.root.glob('*/BuildReports/*/build.json'), key=lambda p: p.stat().st_mtime_ns)
+
+    def latest(self):
+        return json.loads(self.reports()[-1].read_text())
+
+    def wait_for(self, condition):
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            if condition():
+                return
+            time.sleep(.02)
+        self.fail('Timed out waiting for fixture workflow')
+
+    def stop(self, child):
+        if child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait(timeout=5)
+
+    def test_reuses_compiler_across_outputs_and_keeps_packaged_products_and_logs(self):
+        self.assertEqual(self.invoke('first').returncode, 0)
+        first = self.latest()
+        retained = Path(first['workspace']) / 'retained-compiler-marker'
+        retained.touch()
+        self.assertEqual(self.invoke('second').returncode, 0)
+        second = self.latest()
+        self.assertEqual(first['workspace'], second['workspace'])
+        self.assertNotEqual(first['report'], second['report'])
+        self.assertTrue(retained.exists())
+        self.assertEqual(len(set((self.root / 'calls').read_text().splitlines())), 1)
+        for label, report in [('first', first), ('second', second)]:
+            self.assertEqual((self.root / label / 'Packages/example.mactoolsplugin/Example.bundle/payload').read_text(), 'built plugin')
+            self.assertIn('Fixture build log', Path(report['report'], 'build.log').read_text())
+            self.assertFalse((self.root / label / 'DerivedData').exists())
+
+    def test_configuration_signing_sdk_probe_and_fresh_workspaces_are_separate(self):
+        cases = [([], {}), (['--configuration', 'Release'], {}), (['--unsigned-build'], {}),
+                 ([], {'SDK_BUILD': 'changed-sdk'}), ([], {'MACTOOLS_PLUGIN_CACHE_VARIANT': 'probe'}),
+                 ([], {'MACTOOLS_PLUGIN_FRESH_BUILD': '1'}), ([], {'MACTOOLS_PLUGIN_FRESH_BUILD': '1'})]
+        workspaces = []
+        for number, (extra, changes) in enumerate(cases):
+            result = self.invoke('run-' + str(number), *extra, env=dict(self.env, **changes))
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            workspaces.append(self.latest()['workspace'])
+        self.assertEqual(len(workspaces), len(set(workspaces)))
+        self.assertTrue(all(Path(p).exists() for p in workspaces))
+
+    def test_lock_covers_bundle_copy_before_next_compile(self):
+        held, release = self.root / 'copy-started', self.root / 'copy-release'
+        first = subprocess.Popen(self.command('first'), env=dict(self.env, HOLD_COPY=str(held), RELEASE_COPY=str(release)),
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(self.stop, first)
+        self.wait_for(held.exists)
+        second = subprocess.Popen(self.command('second'), env=self.env,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(self.stop, second)
+        self.wait_for(lambda: len(self.reports()) == 2 and self.latest().get('lock_contended'))
+        self.assertEqual((self.root / 'calls').read_text().count('\n'), 1)
+        release.touch()
+        self.assertEqual(first.wait(timeout=10), 0)
+        self.assertEqual(second.wait(timeout=10), 0)
+
+    def test_failure_retains_report_and_allows_following_run(self):
+        failed = self.invoke('failed', env=dict(self.env, BUILD_EXIT='42'))
+        self.assertNotEqual(failed.returncode, 0)
+        record = self.latest()
+        self.assertEqual(record['state'], 'failed')
+        self.assertIn('Fixture build log', Path(record['report'], 'build.log').read_text())
+        self.assertEqual(self.invoke('following').returncode, 0)
+        self.assertEqual(self.latest()['workspace'], record['workspace'])
+
+    def test_external_cache_and_output_overrides_are_rejected_before_compile(self):
+        for changes in [{'MACTOOLS_PLUGIN_CACHE_ROOT': '/Volumes/MacTools-deferred-cache'},
+                        {'OBJROOT': str(self.root / 'unmanaged')}]:
+            result = self.invoke('rejected', env=dict(self.env, **changes))
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertFalse((self.root / 'calls').exists())
+
+
+if __name__ == '__main__':
+    unittest.main()
