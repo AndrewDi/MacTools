@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import tempfile
@@ -31,15 +32,20 @@ class PluginBuildCacheTests(unittest.TestCase):
                         PYTHON3=sys.executable, DEVELOPER_DIR=str(self.root / 'Xcode/Developer'),
                         MACTOOLS_PLUGIN_CACHE_ROOT=str(self.root / 'compiler'), CALLS=str(self.root / 'calls'))
         self.tool('xcrun', "import os\nprint(os.environ.get('SDK_BUILD','fixture-sdk'))\n")
-        self.builder = self.tool('xcodebuild', '''import os,pathlib,sys
+        self.builder = self.tool('xcodebuild', '''import json,os,pathlib,sys
 if '-version' in sys.argv:
  print('fixture-xcode')
  sys.exit(0)
 derived=pathlib.Path(sys.argv[sys.argv.index('-derivedDataPath')+1])
+products=derived/'Build/Products'/os.environ.get('PRODUCT_DIRECTORY','')/sys.argv[sys.argv.index('-configuration')+1]
+name=os.environ.get('PRODUCT_NAME','Example.bundle')
+if '-showBuildSettings' in sys.argv:
+ print(json.dumps([{'buildSettings':{'TARGET_BUILD_DIR':str(products),'FULL_PRODUCT_NAME':name}}]))
+ sys.exit(0)
 with open(os.environ['CALLS'],'a') as stream: stream.write(str(derived)+'\\n')
-bundle=derived/'Build/Products'/sys.argv[sys.argv.index('-configuration')+1]/'Example.bundle'
+bundle=products/name
 bundle.mkdir(parents=True,exist_ok=True)
-(bundle/'payload').write_text('built plugin')
+(bundle/'payload').write_text(os.environ.get('BUNDLE_PAYLOAD','built plugin'))
 print('Fixture build log',flush=True)
 sys.exit(int(os.environ.get('BUILD_EXIT','0')))
 ''')
@@ -139,6 +145,36 @@ sys.exit(subprocess.call(['/usr/bin/ditto',*sys.argv[1:]]))
         self.assertIn('Fixture build log', Path(record['report'], 'build.log').read_text())
         self.assertEqual(self.invoke('following').returncode, 0)
         self.assertEqual(self.latest()['workspace'], record['workspace'])
+
+    def test_old_bundle_is_rejected_when_current_scheme_no_longer_produces_it(self):
+        self.assertEqual(self.invoke('first').returncode, 0)
+        workspace = self.latest()['workspace']
+        moved = self.invoke('moved', env=dict(self.env, PRODUCT_DIRECTORY='ZZ-current', BUNDLE_PAYLOAD='current moved plugin'))
+        self.assertEqual(moved.returncode, 0, moved.stdout + moved.stderr)
+        self.assertEqual((self.root / 'moved/Packages/example.mactoolsplugin/Example.bundle/payload').read_text(), 'current moved plugin')
+        self.assertEqual(self.latest()['workspace'], workspace)
+        result = self.invoke('renamed', env=dict(self.env, PRODUCT_NAME='Renamed.bundle'))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.latest()['state'], 'failed')
+        self.assertEqual(self.latest()['workspace'], workspace)
+        self.assertFalse((self.root / 'renamed/Packages/example.mactoolsplugin').exists())
+
+    def test_terminal_hangup_stops_packaging_and_finalizes_failure(self):
+        held, release = self.root / 'copy-started', self.root / 'copy-release'
+        console = self.root / 'hangup.log'
+        with console.open('wb') as stream:
+            child = subprocess.Popen(self.command('cancelled'), env=dict(self.env, HOLD_COPY=str(held), RELEASE_COPY=str(release)),
+                                     stdout=stream, stderr=subprocess.STDOUT)
+        self.addCleanup(self.stop, child)
+        try:
+            self.wait_for(held.exists)
+            child.send_signal(signal.SIGHUP)
+            self.assertEqual(child.wait(timeout=10), 129, console.read_text())
+            record = self.latest()
+            self.assertEqual((record['state'], record['exit_code']), ('failed', 129))
+            self.assertEqual(self.invoke('following').returncode, 0)
+        finally:
+            release.touch()
 
     def test_external_cache_and_output_overrides_are_rejected_before_compile(self):
         for changes in [{'MACTOOLS_PLUGIN_CACHE_ROOT': '/Volumes/MacTools-deferred-cache'},

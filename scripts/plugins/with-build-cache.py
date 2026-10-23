@@ -39,6 +39,20 @@ def query(*command):
     return subprocess.check_output(command, text=True).strip()
 
 
+def signal_group(pid, signum):
+    try:
+        os.killpg(pid, signum)
+    except ProcessLookupError:
+        pass
+    except PermissionError:
+        # Teardown can race an empty group on macOS. Never ignore an EPERM with live members.
+        rows = subprocess.check_output(['/bin/ps', '-axo', 'pgid=,stat='], text=True)
+        for line in rows.splitlines():
+            parts = line.split()
+            if len(parts) == 2 and parts[0] == str(pid) and not parts[1].startswith('Z'):
+                raise
+
+
 def storage_paths(output_dir):
     cache = internal_path(os.environ.get('MACTOOLS_PLUGIN_CACHE_ROOT',
                                          str(Path.home() / 'Library/Caches/MacTools/PluginBuilds')))
@@ -72,7 +86,8 @@ def run(args):
     temporary = workspace / 'Temporary'
     temporary.mkdir(exist_ok=True)
     env = dict(os.environ, MACTOOLS_PLUGIN_CACHE_CHECKOUT=str(REPO),
-               MACTOOLS_PLUGIN_DERIVED_ROOT=str(workspace / 'DerivedData'), TMPDIR=str(temporary) + '/')
+               MACTOOLS_PLUGIN_DERIVED_ROOT=str(workspace / 'DerivedData'),
+               MACTOOLS_PLUGIN_BUILD_REPORT=str(report), TMPDIR=str(temporary) + '/')
     command = ['/bin/bash', str(REPO / 'scripts/plugins/build-local-plugins.sh'), *args.arguments]
     record = dict(identity=identity, cache_key=key, workspace=str(workspace), report=str(report),
                   command=command, fresh=fresh, state='waiting-for-lock')
@@ -88,7 +103,7 @@ def run(args):
             save()
             raise SystemExit(128 + signum)
 
-        waiting = {sig: signal.signal(sig, cancel_wait) for sig in (signal.SIGINT, signal.SIGTERM)}
+        waiting = {sig: signal.signal(sig, cancel_wait) for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
         try:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -107,12 +122,9 @@ def run(args):
         def forward(signum, frame):
             received.append(signum)
             if child is not None:
-                try:
-                    os.killpg(child.pid, signum)
-                except ProcessLookupError:
-                    pass
+                signal_group(child.pid, signum)
 
-        previous = {sig: signal.signal(sig, forward) for sig in (signal.SIGINT, signal.SIGTERM)}
+        previous = {sig: signal.signal(sig, forward) for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
         try:
             with (report / 'build.log').open('wb') as log:
                 child = subprocess.Popen(command, env=env, stdout=log, stderr=subprocess.STDOUT,
@@ -126,10 +138,7 @@ def run(args):
         finally:
             if child is not None:
                 # A failed/cancelled shell must leave no background compiler writers.
-                try:
-                    os.killpg(child.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+                signal_group(child.pid, signal.SIGKILL)
                 child.wait()
             for sig, handler in previous.items():
                 signal.signal(sig, handler)

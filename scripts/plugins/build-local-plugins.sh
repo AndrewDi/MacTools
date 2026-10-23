@@ -359,19 +359,29 @@ PY
             CODE_SIGN_IDENTITY=
         )
     fi
-    build_args+=(build -quiet)
-
-    if ! "$XCODEBUILD_COMMAND" "${build_args[@]}"; then
+    if ! "$XCODEBUILD_COMMAND" "${build_args[@]}" build -quiet; then
         echo "Failed to build plugin bundle '$scheme' for $root." >&2
         return 1
     fi
 
+    local settings_file="$MACTOOLS_PLUGIN_BUILD_REPORT/$project_key-build-settings.json"
+    "$XCODEBUILD_COMMAND" "${build_args[@]}" -showBuildSettings -json > "$settings_file"
     local built_bundle
-    built_bundle="$(find "$derived_data/Build/Products" -name "$bundle_name" -type d -print | sort | head -1)"
-    if [[ -z "$built_bundle" ]]; then
-        echo "Built bundle not found: $bundle_name" >&2
-        return 1
-    fi
+    # Retained products may include obsolete targets or paths. Use the current scheme's declared product.
+    built_bundle="$("$PYTHON3" - "$settings_file" "$bundle_name" "$derived_data" <<'PY'
+import json, pathlib, sys
+settings_file, name, derived = sys.argv[1:]
+settings = json.load(open(settings_file))
+paths = {pathlib.Path(entry['buildSettings']['TARGET_BUILD_DIR']) / name
+         for entry in settings if entry.get('buildSettings', {}).get('FULL_PRODUCT_NAME') == name}
+if len(paths) != 1:
+    sys.exit('Current scheme must declare exactly one product for ' + name)
+product = paths.pop().resolve()
+if pathlib.Path(derived).resolve() not in product.parents or not product.is_dir():
+    sys.exit('Current product is missing or outside managed compiler storage: ' + str(product))
+print(product)
+PY
+)"
 
     printf -v "$output_var" '%s' "$built_bundle"
 }
