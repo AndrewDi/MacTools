@@ -170,6 +170,34 @@ sys.exit(subprocess.call(['/usr/bin/ditto',*sys.argv[1:]]))
         self.assertEqual(self.invoke('following').returncode, 0)
         self.assertEqual(self.latest()['workspace'], record['workspace'])
 
+    def test_report_remains_readable_while_an_update_is_being_written(self):
+        shim = self.root / 'shim'
+        shim.mkdir()
+        (shim / 'sitecustomize.py').write_text('''import json,os,pathlib,time
+original=pathlib.Path.write_text
+def write_text(path,data,*args,**kwargs):
+ if path.name in {'build.json','build.json.tmp'} and json.loads(data).get('state')=='running':
+  with path.open('w') as stream:
+   pathlib.Path(os.environ['REPORT_WRITE_STARTED']).touch()
+   deadline=time.monotonic()+8
+   while not pathlib.Path(os.environ['RELEASE_REPORT_WRITE']).exists() and time.monotonic()<deadline: time.sleep(.02)
+   return stream.write(data)
+ return original(path,data,*args,**kwargs)
+pathlib.Path.write_text=write_text
+''')
+        held, release = self.root / 'report-started', self.root / 'report-release'
+        child = subprocess.Popen(self.command('report'), env=dict(self.env, PYTHONPATH=str(shim),
+                                 REPORT_WRITE_STARTED=str(held), RELEASE_REPORT_WRITE=str(release)),
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.addCleanup(self.stop, child)
+        try:
+            self.wait_for(held.exists)
+            self.assertEqual(self.latest()['state'], 'waiting-for-lock')
+        finally:
+            release.touch()
+        self.assertEqual(child.wait(timeout=10), 0)
+        self.assertEqual(self.latest()['state'], 'passed')
+
     def test_old_bundle_is_rejected_when_current_scheme_no_longer_produces_it(self):
         self.assertEqual(self.invoke('first').returncode, 0)
         workspace = self.latest()['workspace']

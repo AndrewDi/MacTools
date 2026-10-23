@@ -93,7 +93,9 @@ def run(args):
                   command=command, fresh=fresh, state='waiting-for-lock')
 
     def save():
-        (report / 'build.json').write_text(json.dumps(record, indent=2) + '\n')
+        temporary_report = report / 'build.json.tmp'
+        temporary_report.write_text(json.dumps(record, indent=2) + '\n')
+        temporary_report.replace(report / 'build.json')
 
     save()
     print('Plugin build report: ' + str(report), flush=True)
