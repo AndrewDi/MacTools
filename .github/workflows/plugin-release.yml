@@ -39,6 +39,7 @@ concurrency:
 env:
   PLUGIN_SOURCE_DIR: Plugins
   PLUGIN_RELEASE_ROOT: build/plugin-release
+  PLUGIN_DERIVED_DATA: build/plugin-release/DerivedData
   PLUGIN_BUILD_DIR: build/plugin-release/Build
   PLUGIN_ASSETS_DIR: build/plugin-release/Assets
   PLUGIN_PREVIOUS_CATALOG_PATH: build/plugin-release/previous-catalog.json
@@ -50,7 +51,7 @@ jobs:
   plugin-release:
     name: Build, sign, and release plugins
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 120
 
     steps:
       - name: Checkout
@@ -311,9 +312,38 @@ jobs:
         if: env.PLUGIN_RELEASE_REQUIRED == 'true' && env.PLUGIN_CHANGED_COUNT != '0'
         run: make generate
 
-      - name: Build plugin release assets
+      - name: Build unsigned Release app and plugins
         if: env.PLUGIN_RELEASE_REQUIRED == 'true' && env.PLUGIN_CHANGED_COUNT != '0'
         run: |
+          ./scripts/xcodebuild-filtered.sh \
+            -project MacTools.xcodeproj \
+            -scheme MacTools \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -derivedDataPath "$PLUGIN_DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= \
+            build \
+            -quiet
+
+      - name: Sign and package plugin release assets
+        if: env.PLUGIN_RELEASE_REQUIRED == 'true' && env.PLUGIN_CHANGED_COUNT != '0'
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          plan = json.loads(Path(os.environ["PLUGIN_RELEASE_PLAN_PATH"]).read_text(encoding="utf-8"))
+          products = Path(os.environ["PLUGIN_DERIVED_DATA"]) / "Build/Products/Release"
+          for plugin in plan["plugins"]:
+              manifest = json.loads((Path(plugin["path"]) / "plugin.json").read_text(encoding="utf-8"))
+              bundle = products / Path(manifest["bundleRelativePath"]).name
+              if not bundle.is_dir():
+                  raise SystemExit(f"Aggregate Release build is missing {plugin['id']}: {bundle}")
+          PY
+
           selected_plugins=()
           while IFS= read -r plugin_id; do
             [[ -n "$plugin_id" ]] && selected_plugins+=("$plugin_id")
@@ -333,6 +363,8 @@ jobs:
             --build-dir "$PLUGIN_BUILD_DIR"
             --dist-dir "$PLUGIN_RELEASE_ROOT"
             --assets-dir "$PLUGIN_ASSETS_DIR"
+            --products-dir "$PLUGIN_DERIVED_DATA/Build/Products/Release"
+            --configuration Release
             --base-url "$PLUGIN_ASSET_BASE_URL"
             --catalog-output "$PLUGIN_CATALOG_DELTA_PATH"
             --minimum-host-version "$PLUGIN_CATALOG_MINIMUM_HOST_VERSION"

@@ -91,11 +91,19 @@ Use Prepare Release with `type=plugin`, a batch version without `plugins-`, and 
 
 The local entry point is `make release ARGS="--type plugin"`. Normal feature PRs should not bump manifest versions: preparation identifies package-relevant changes and increments affected `plugin.json.version` values. Shared PluginKit changes are package-relevant for every plugin. ABI or catalog-schema migrations require a complete rebuild.
 
-Plugin Release validates the plan, builds and signs selected bundles, packages them with licenses/notices, and publishes the batch with `--latest=false`. Within one compatibility line, it merges updated entries into the signed catalog; unchanged entries retain their existing assets. A no-change plan creates no release, while a catalog-only change may publish without new ZIPs.
+Plugin Release validates the plan and performs one unsigned aggregate `Release` build of the app and plugins, sharing compiled dependencies. It checks that every selected bundle exists, then reuses the products directory to sign and package only the selected plugins with licenses/notices. Build and packaging are separate steps, and the job has a 120-minute timeout. The batch publishes with `--latest=false`. Within one compatibility line, it merges updated entries into the signed catalog; unchanged entries retain their existing assets. A no-change plan creates no release, while a catalog-only change skips compilation and may publish without new ZIPs.
 
 The current line is **PluginKit 7 / catalog schema 3**, published at `docs/plugins/v7/catalog.json`. Prior catalog lines remain available to their released hosts. Never merge packages from different ABIs or overwrite a compatibility catalog with a schema its clients cannot read.
 
 See [Plugin catalog](plugins/plugin-catalog.md) for package metadata, compatibility, local catalogs, and lower-level tooling.
+
+For an inline workflow-only failure with correct tagged source, push the fix to `main` and start a new run using the existing batch tag and intended mode:
+
+```bash
+gh workflow run plugin-release.yml --ref main -f tag=plugins-2.1.0 -f mode=all
+```
+
+The workflow comes from `main`; plugin source, packaging scripts, versions, and release notes still come from the tag. **Re-run jobs** retains the failed run's workflow revision. Keep the original tag in place; a fix to tagged source or scripts requires a separate release-source decision.
 
 ## Nightly releases
 

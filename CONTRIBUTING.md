@@ -53,6 +53,8 @@ This builds the app and plugins, syncs the Debug catalog, and installs `~/Applic
 
 Keep local configuration, credentials, generated projects, and build products out of commits. See [local plugin development](docs/plugins/local-native-plugins.md) for package setup and debugging.
 
+Stable plugin publication reuses one aggregate `Release` build for package signing, avoiding separate clean builds of shared dependencies. Preserve the release plan's package selection and the check for missing prebuilt bundles when changing this flow. See [plugin release and recovery instructions](docs/github-actions.md#plugin-releases).
+
 ## Where changes belong
 
 | Path | Responsibility |

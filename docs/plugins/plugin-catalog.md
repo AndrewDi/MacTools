@@ -243,7 +243,7 @@ Recommended production flow is an incremental batch plugin release:
 5. The `Plugin Release` GitHub Action reads the catalog for the current PluginKit version. The first release of a new ABI may fall back to the previous catalog only to compare versions.
 6. In default `auto` mode, the workflow selects new plugins, plugins whose manifest version is higher than the previous catalog entry, and every plugin when shared `Sources/MacToolsPluginKit/` code changed since its previous package was built.
 7. If package-relevant files changed inside a plugin or shared PluginKit code changed but that plugin version did not increase, the workflow fails before signing or uploading. A `pluginKitVersion` change automatically becomes a full `mode=all` rebuild and replaces the catalog for that ABI line; other exceptional shared paths can still be supplied explicitly with `--shared-path`.
-8. The workflow builds, signs, zips, and uploads only the selected plugin packages.
+8. When packages are selected, the workflow performs one unsigned aggregate `Release` app-and-plugin build with shared dependencies. It checks the selected bundles exist, then passes the products directory to `build-plugin-release-assets.sh --products-dir` to sign, zip, and upload only the selected packages. Catalog-only updates skip compilation.
 9. For an ABI migration, the workflow generates a complete catalog from all rebuilt packages. For later releases within an ABI line, it generates a delta catalog and merges it into that line's catalog, keeping unchanged entries pointing at their existing assets.
 10. The signed catalog is committed to its compatibility path. The released PluginKit v5/schema-2 catalog remains at `docs/plugins/v5/catalog.json`; Released PluginKit v6/schema 3 remains at `docs/plugins/v6/catalog.json`; new PluginKit v7 packages go to `docs/plugins/v7/catalog.json`.
 11. `Deploy Pages` publishes the signed catalog to GitHub Pages.
@@ -253,7 +253,7 @@ Website generation is part of release preparation even with `--skip-check`; `--d
 The batch tag is stored per plugin entry through `package.url` and `releaseNotesURL`, so one catalog can point different plugins to different release tags without changing host code.
 Plugin batch releases are published with `--latest=false`; only stable `v*` App releases may become the repository's GitHub Latest release.
 
-An app signing failure does not require republishing an already verified plugin batch or catalog. For an inline workflow-only fix, keep the existing app tag and start a new `Release` run on `main` with that tag; see [App release recovery](../github-actions.md#app-release-recovery).
+An app signing failure does not require republishing an already verified plugin batch or catalog. For an inline workflow-only fix, keep the existing app tag and start a new `Release` run on `main` with that tag; see [App release recovery](../github-actions.md#app-release-recovery). The same recovery pattern applies to plugin workflow-only failures: dispatch `plugin-release.yml` from `main` with the original batch tag and intended mode. The job allows 120 minutes; compilation and packaging have separate step timings. Tagged source and scripts remain unchanged; see [Plugin releases](../github-actions.md#plugin-releases).
 
 The GitHub Release body for each plugin batch is extracted from the matching `CHANGELOG.md` entry, such as `## [plugins-1.0.1]`.
 

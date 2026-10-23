@@ -204,48 +204,52 @@ class CopyPluginManifestTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("numeric run.attempt components", result.stderr)
 
-    def test_nightly_packaging_reuses_aggregate_build_products(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = pathlib.Path(temporary_directory)
-            source = root / "Source"
-            plugin_root = source / "Example"
-            products = root / "Products"
-            output = root / "Output"
-            bundle = products / "Example.bundle"
-            plugin_root.mkdir(parents=True)
-            bundle.mkdir(parents=True)
-            (bundle / "payload").write_text("nightly bundle", encoding="utf-8")
-            (plugin_root / "plugin.json").write_text(
-                json.dumps(runtime_envelope(
-                    id="example-nightly-plugin",
-                    version="1.3.0",
-                    minHostVersion="1.2.0",
-                )),
-                encoding="utf-8",
-            )
+    def test_release_and_nightly_packaging_reuse_aggregate_build_products(self) -> None:
+        for configuration, expected_version in [("Release", "1.3.0"), ("Nightly", "1.512.1")]:
+            with self.subTest(configuration=configuration), tempfile.TemporaryDirectory() as temporary_directory:
+                self.check_aggregate_build_products(temporary_directory, configuration, expected_version)
 
-            subprocess.run(
-                [
-                    str(REPO_ROOT / "scripts/plugins/build-local-plugins.sh"),
-                    "--source-dir", str(source),
-                    "--output-dir", str(output),
-                    "--configuration", "Nightly",
-                    "--products-dir", str(products),
-                    "--nightly-build-number", "512.1",
-                    "--skip-catalog",
-                ],
-                check=True,
-                capture_output=True,
-                text=True,
-            )
+    def check_aggregate_build_products(self, temporary_directory: str, configuration: str, expected_version: str) -> None:
+        root = pathlib.Path(temporary_directory)
+        source = root / "Source"
+        plugin_root = source / "Example"
+        products = root / "Products"
+        output = root / "Output"
+        bundle = products / "Example.bundle"
+        plugin_root.mkdir(parents=True)
+        bundle.mkdir(parents=True)
+        (bundle / "payload").write_text("prebuilt bundle", encoding="utf-8")
+        (plugin_root / "plugin.json").write_text(
+            json.dumps(runtime_envelope(
+                id="example-nightly-plugin",
+                version="1.3.0",
+                minHostVersion="1.2.0",
+            )),
+            encoding="utf-8",
+        )
 
-            package = output / "Packages/example-nightly-plugin.mactoolsplugin"
-            manifest = json.loads((package / "plugin.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["version"], "1.512.1")
-            self.assertEqual(
-                (package / "Example.bundle/payload").read_text(encoding="utf-8"),
-                "nightly bundle",
-            )
+        subprocess.run(
+            [
+                str(REPO_ROOT / "scripts/plugins/build-local-plugins.sh"),
+                "--source-dir", str(source),
+                "--output-dir", str(output),
+                "--configuration", configuration,
+                "--products-dir", str(products),
+                *(["--nightly-build-number", "512.1"] if configuration == "Nightly" else []),
+                "--skip-catalog",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        package = output / "Packages/example-nightly-plugin.mactoolsplugin"
+        manifest = json.loads((package / "plugin.json").read_text(encoding="utf-8"))
+        self.assertEqual(manifest["version"], expected_version)
+        self.assertEqual(
+            (package / "Example.bundle/payload").read_text(encoding="utf-8"),
+            "prebuilt bundle",
+        )
 
     def test_release_copy_expands_source_localization_references(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
