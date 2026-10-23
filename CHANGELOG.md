@@ -7,6 +7,28 @@ All notable changes to this project are documented here. The format follows
 Pending release notes live in `changes/unreleased/*.md` and are compiled during
 the app and plugin release processes.
 
+## [v2.1.0] - 2026-10-23
+
+### Added
+
+- Arrange controls and widgets in aligned columns with drag previews, labeled editing actions, and adjustable widths. Panel and item widths are included in settings backups.
+- Combine seven starter packs during first-launch setup, with panel previews, plugin choices, and a setup checklist. Resume unfinished setup, restore a backup safely, or start empty while preserving settings.
+
+### Changed
+
+- Startup and plugin refresh stay responsive, with custom menu bar icons finishing preparation after the app becomes available.
+- Plugin details show installation feedback and setup guidance, and plugin updates block conflicting actions. Search opens details directly while keeping usable title matches ahead of capability suggestions.
+- Trackpad plugins share input during weighing, recover after interruptions, and wait for fingers to lift before gestures resume. Stopped gestures stay stopped during updates.
+
+### Fixed
+
+- Expanded panel details remain visible after scrolling.
+- Opening or returning to plugin settings refreshes permission guidance without restarting every plugin's background work.
+- Plugin search now matches Turkish capitalization and German sharp-S spellings consistently.
+- Upgrading panel layouts no longer creates false cloud settings conflicts.
+- MacTools 2.1.0 requires Middle Click and Trackpad Gestures 2.0.2 or later to prevent input conflicts. Older packages keep settings and update guidance, including during interrupted migration recovery.
+- Keep Trackpad Scale calibration across measurements and app restarts when the trackpad provides a stable device identity.
+
 ## [plugins-2.1.0] - 2026-10-23
 
 ### Added
