@@ -2,4 +2,5 @@
 release: plugin
 type: added
 ---
-New Key Stats plugin counts every key press and trackpad use, lays out today’s counts on a MacBook Pro keyboard, charts daily and seven-day usage, resets at midnight, and keeps the last seven days on device.
+
+Key Stats counts key presses and trackpad use, shows today’s counts on a MacBook Pro keyboard, and charts daily and seven-day usage. Counts reset at midnight; the last seven days stay on device.

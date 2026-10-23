@@ -4,4 +4,4 @@ type: changed
 area: Performance
 ---
 
-Plugin state updates avoid rebuilding unchanged tool declarations. Custom menu bar icons finish preparing after the app becomes available.
+Startup and plugin refresh stay responsive, with custom menu bar icons finishing preparation after the app becomes available.

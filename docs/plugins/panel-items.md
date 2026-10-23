@@ -163,8 +163,8 @@ calculate default plugin metrics from the popup width or restart collectors on r
 
 ### Compact switch rows
 
-Host 2.0.3 adds the optional `PluginPanelCompactSwitchProviding` protocol without
-changing the PluginKit 7 binary contract. Declare `minHostVersion: 2.0.3` when
+Host 2.1.0 adds the optional `PluginPanelCompactSwitchProviding` protocol without
+changing the PluginKit 7 binary contract. Declare `minHostVersion: 2.1.0` when
 adopting it:
 
 ```swift

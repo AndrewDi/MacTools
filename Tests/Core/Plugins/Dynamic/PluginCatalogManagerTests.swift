@@ -234,7 +234,7 @@ final class PluginCatalogManagerTests: XCTestCase {
     func testOldTrackpadCatalogEntryCannotInstallOrAutomaticallyUpdate() async throws {
         let oldStore = PluginPackageStore(rootDirectory: temporaryRoot, userDefaults: defaults, hostVersion: "2.0.1")
         _ = try oldStore.installPackage(from: makePackage(id: "trackpad-gestures", version: "2.0.0"))
-        let store = PluginPackageStore(rootDirectory: temporaryRoot, userDefaults: defaults, hostVersion: "2.0.2")
+        let store = PluginPackageStore(rootDirectory: temporaryRoot, userDefaults: defaults, hostVersion: "2.1.0")
         let dynamicManager = DynamicPluginManager(packageStore: store, pluginLoader: StubDynamicPluginLoader { _ in [] })
         dynamicManager.prepareInstalledPluginsWithoutLoading()
         let snapshot = makeCatalogSnapshot(entries: [
@@ -581,7 +581,7 @@ final class PluginCatalogManagerTests: XCTestCase {
         defaults.set(true, forKey: rule.transactionJournalKey)
         defaults.set(true, forKey: rule.legacyPreferenceKey)
 
-        let store = PluginPackageStore(rootDirectory: temporaryRoot, userDefaults: defaults, hostVersion: "2.0.2")
+        let store = PluginPackageStore(rootDirectory: temporaryRoot, userDefaults: defaults, hostVersion: "2.1.0")
         let loader = StubDynamicPluginLoader { records in
             records.map { record in
                 guard case .installed = record.state else {

@@ -236,9 +236,9 @@ enum PluginPackageManifestLoader {
     }
 
     static func pluginVersionFailure(id: String, version: String, hostVersion: String) -> PluginPackageManifestError? {
-        // Host 2.0.2 owns shared trackpad input. Older gesture packages retain
+        // Host 2.1.0 owns shared trackpad input. Older gesture packages retain
         // independent native listeners and must be updated before activation.
-        guard PluginVersionComparator.isVersion(hostVersion, atLeast: "2.0.2"),
+        guard PluginVersionComparator.isVersion(hostVersion, atLeast: "2.1.0"),
               let required = minimumPluginVersions[id],
               !PluginVersionComparator.isVersion(version, atLeast: required) else { return nil }
         return .incompatiblePluginVersion(required: required, current: version)

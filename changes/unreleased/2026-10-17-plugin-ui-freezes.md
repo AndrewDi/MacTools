@@ -1,6 +1,7 @@
 ---
 release: plugin
 type: fixed
+area: Display Volume
 ---
 
-Prevent Settings freezes caused by display volume cache updates or unresponsive apps during input focus observation.
+Display volume updates no longer freeze Settings.

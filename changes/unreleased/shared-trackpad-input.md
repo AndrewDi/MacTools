@@ -2,4 +2,5 @@
 release: app
 type: changed
 ---
-Share trackpad input across plugins during experimental weighing and require held contacts to lift before gestures resume after stopping.
+
+Trackpad plugins share input during weighing, recover after interruptions, and wait for fingers to lift before gestures resume. Stopped gestures stay stopped during updates.

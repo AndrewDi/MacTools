@@ -59,7 +59,7 @@
     "setup.description": "@localizable.calibration.instructions"
   },
   "version": "1.0.0",
-  "minHostVersion": "2.0.2",
+  "minHostVersion": "2.1.0",
   "pluginKitVersion": 7,
   "bundleRelativePath": "TrackpadScale.bundle",
   "factoryClass": "TrackpadScalePlugin.TrackpadScalePluginFactory",

@@ -9,14 +9,16 @@ final class PluginPackageManifestTests: XCTestCase {
                     id: id, displayName: "Demo", version: version,
                     minHostVersion: "1.3.1", bundleRelativePath: "Demo.bundle"
                 )
-                XCTAssertNoThrow(try PluginPackageManifestLoader.validate(manifest, hostVersion: "2.0.1"))
+                for hostVersion in ["2.0.1", "2.0.3"] {
+                    XCTAssertNoThrow(try PluginPackageManifestLoader.validate(manifest, hostVersion: hostVersion))
+                }
                 if id != "com.example.demo", version == "2.0.1" {
-                    XCTAssertThrowsError(try PluginPackageManifestLoader.validate(manifest, hostVersion: "2.0.2")) {
+                    XCTAssertThrowsError(try PluginPackageManifestLoader.validate(manifest, hostVersion: "2.1.0")) {
                         XCTAssertEqual($0 as? PluginPackageManifestError,
                                        .incompatiblePluginVersion(required: "2.0.2", current: version))
                     }
                 } else {
-                    XCTAssertNoThrow(try PluginPackageManifestLoader.validate(manifest, hostVersion: "2.0.2"))
+                    XCTAssertNoThrow(try PluginPackageManifestLoader.validate(manifest, hostVersion: "2.1.0"))
                 }
             }
         }

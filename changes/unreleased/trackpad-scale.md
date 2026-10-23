@@ -2,4 +2,5 @@
 release: plugin
 type: added
 ---
-Add experimental Trackpad Scale with tare, stability feedback, and known-weight calibration for built-in Force Touch trackpads. Trackpad Gestures and Middle Click pause during weighing.
+
+Experimental Trackpad Scale estimates weight on built-in Force Touch trackpads, with stability feedback and restart controls. Middle Click and Trackpad Gestures pause until sampling stops and fingers lift.

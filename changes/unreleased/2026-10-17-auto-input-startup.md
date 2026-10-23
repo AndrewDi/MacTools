@@ -3,4 +3,4 @@ release: plugin
 type: fixed
 ---
 
-Auto Input no longer stalls MacTools during startup. Focus tracking survives app quits during a switch, and stopped sessions ignore late updates.
+Auto Input no longer stalls MacTools during startup or focus changes involving unresponsive apps. Focus tracking recovers when an app quits during a switch.

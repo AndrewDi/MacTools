@@ -124,7 +124,7 @@ See [presentation subscriptions](presentation-performance.md) for implementation
 
 Follow [LICENSING.md](../../LICENSING.md), retain third-party notices, and declare required system access accurately before installation.
 
-Shared raw trackpad input uses the host-injected `TrackpadInputService` capability (host 2.0.2). Do not create a separate native multitouch driver in a plugin. See [Trackpad Scale](trackpad-scale.md) for pressure limitations, subscription ownership, and hardware validation.
+Shared raw trackpad input uses the host-injected `TrackpadInputService` capability (host 2.1.0). Do not create a separate native multitouch driver in a plugin. See [Trackpad Scale](trackpad-scale.md) for pressure limitations, subscription ownership, and hardware validation.
 
 ## Review references
 

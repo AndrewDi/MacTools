@@ -101,7 +101,7 @@
     }
   },
   "version": "2.0.2",
-  "minHostVersion": "2.0.2",
+  "minHostVersion": "2.1.0",
   "pluginKitVersion": 7,
   "bundleRelativePath": "MiddleClick.bundle",
   "factoryClass": "MiddleClickPlugin.MiddleClickPluginFactory",

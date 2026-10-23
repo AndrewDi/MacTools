@@ -1,5 +1,6 @@
 ---
 release: plugin
-type: fixed
+type: added
 ---
-Keep saved Trackpad Scale calibration consistent with the displayed reading, including brief pressure variations, and show an accuracy warning beside the weight.
+
+Trackpad Scale offers known-weight calibration that stays consistent through brief pressure changes, with an accuracy warning beside the reading.

@@ -3,4 +3,4 @@ release: app
 type: added
 ---
 
-Drag controls and widgets between aligned columns, with clear previews and width choices available while editing. Panel and item widths are included in settings backups.
+Arrange controls and widgets in aligned columns with drag previews, labeled editing actions, and adjustable widths. Panel and item widths are included in settings backups.

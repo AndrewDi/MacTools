@@ -1,6 +1,6 @@
 # Trackpad Scale (experimental)
 
-Trackpad Scale is an optional plugin for estimating small object weights on a **built-in Force Touch trackpad**. It requires MacTools 2.0.2. Capability checks require the private runtime to report both built-in status and force support; model age is never used. Missing optional capability symbols fail closed. External Magic Trackpads are not supported or advertised.
+Trackpad Scale is an optional plugin for estimating small object weights on a **built-in Force Touch trackpad**. It requires MacTools 2.1.0. Capability checks require the private runtime to report both built-in status and force support; model age is never used. Missing optional capability symbols fail closed. External Magic Trackpads are not supported or advertised.
 
 ## Try it
 
@@ -43,7 +43,7 @@ The host owns one subscription-based MultitouchSupport driver and its existing p
 
 The host supplies shared input before dynamic plugin activation and migration readiness checks. Deactivated instances are excluded from host callbacks immediately, including while a batch update still holds the old plugin list.
 
-MacTools 2.0.2 and later require Trackpad Gestures and Middle Click packages 2.0.2 or later. Older packages remain installed with their settings preserved, but cannot activate; **Plugins** shows update guidance. This also applies when Scale is not installed, preventing old native listeners from competing with shared input. Older catalog entries and manual packages cannot be installed on the new host. Display reconfiguration rebuilds the shared listener, and recovery after system sleep waits for the native driver's ten-second settling period.
+MacTools 2.1.0 and later require Trackpad Gestures and Middle Click packages 2.0.2 or later. Older packages remain installed with their settings preserved, but cannot activate; **Plugins** shows update guidance. This also applies when Scale is not installed, preventing old native listeners from competing with shared input. Older catalog entries and manual packages cannot be installed on the new host. Display reconfiguration rebuilds the shared listener, and recovery after system sleep waits for the native driver's ten-second settling period.
 
 This feature needs no new permission or entitlement: it reads the same private contact stream, without posting input events. Gesture plugins retain their own existing permissions. There are no signing or security-setting changes.
 

@@ -40,7 +40,7 @@ final class PluginPackageStoreTests: XCTestCase {
     func testHostUpgradeRetainsOldTrackpadPackageWithoutLoadingIt() throws {
         let oldStore = makeStore(hostVersion: "2.0.1")
         let oldPackage = try oldStore.installPackage(from: makePackage(id: "trackpad-gestures", version: "2.0.1"))
-        let store = makeStore(hostVersion: "2.0.2")
+        let store = makeStore(hostVersion: "2.1.0")
         _ = try store.installPackage(from: makePackage(id: "middle-click", version: "2.0.2"))
         let loader = RequirementRecordingLoader()
         let manager = DynamicPluginManager(packageStore: store, pluginLoader: loader)
