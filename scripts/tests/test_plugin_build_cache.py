@@ -147,6 +147,16 @@ sys.exit(subprocess.call(['/usr/bin/ditto',*sys.argv[1:]]))
             self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertFalse((self.root / 'calls').exists())
 
+    def test_misconfigured_overlapping_cache_is_preserved_before_package_reset(self):
+        cache = self.root / 'output/Packages/compiler'
+        cache.mkdir(parents=True)
+        marker = cache / 'compiler-output'
+        marker.write_text('preserve')
+        result = self.invoke('output', env=dict(self.env, MACTOOLS_PLUGIN_CACHE_ROOT=str(cache)))
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(marker.read_text(), 'preserve')
+        self.assertFalse((self.root / 'calls').exists())
+
 
 if __name__ == '__main__':
     unittest.main()

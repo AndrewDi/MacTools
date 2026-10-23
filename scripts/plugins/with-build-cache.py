@@ -39,15 +39,20 @@ def query(*command):
     return subprocess.check_output(command, text=True).strip()
 
 
+def storage_paths(output_dir):
+    cache = internal_path(os.environ.get('MACTOOLS_PLUGIN_CACHE_ROOT',
+                                         str(Path.home() / 'Library/Caches/MacTools/PluginBuilds')))
+    output = internal_path(output_dir)
+    if cache == output or cache in output.parents or output in cache.parents:
+        raise ValueError('Plugin packages/reports and compiler cache must have separate roots.')
+    return cache, output
+
+
 def run(args):
     overrides = [name for name in OUTPUT_SETTINGS if os.environ.get(name)]
     if overrides:
         raise ValueError('Compiler output overrides are unmanaged: ' + ', '.join(overrides))
-    cache = internal_path(os.environ.get('MACTOOLS_PLUGIN_CACHE_ROOT',
-                                         str(Path.home() / 'Library/Caches/MacTools/PluginBuilds')))
-    output = internal_path(args.output_dir)
-    if cache == output or cache in output.parents or output in cache.parents:
-        raise ValueError('Plugin packages/reports and compiler cache must have separate roots.')
+    cache, output = storage_paths(args.output_dir)
     executable = shutil.which(args.xcodebuild)
     if executable is None:
         raise ValueError('xcodebuild executable not found: ' + args.xcodebuild)
@@ -147,11 +152,15 @@ if __name__ == '__main__':
     parser.add_argument('--destination', default='')
     parser.add_argument('--xcodebuild', required=True)
     parser.add_argument('--unsigned-build', action='store_true')
+    parser.add_argument('--check-paths', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.arguments[:1] == ['--']:
         args.arguments = args.arguments[1:]
     try:
+        if args.check_paths:
+            storage_paths(args.output_dir)
+            sys.exit(0)
         sys.exit(run(args))
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print('Plugin build cache: ' + str(error), file=sys.stderr)

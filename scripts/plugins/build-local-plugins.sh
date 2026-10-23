@@ -141,6 +141,11 @@ THIRD_PARTY_NOTICE_GENERATOR="$REPO_ROOT/scripts/licenses/generate-third-party-n
 if [[ -z "$XCODEBUILD_COMMAND" ]]; then
     XCODEBUILD_COMMAND="$REPO_ROOT/scripts/xcodebuild-filtered.sh"
 fi
+cache_args=(--source-dir "$SOURCE_DIR" --output-dir "$OUTPUT_DIR"
+    --configuration "$CONFIGURATION" --destination "$DESTINATION" --xcodebuild "$XCODEBUILD_COMMAND")
+[[ "$UNSIGNED_BUILD" == "1" ]] && cache_args+=(--unsigned-build)
+# Validate before resetting Packages, including when a cache root was misconfigured inside it.
+"$PYTHON3" "$REPO_ROOT/scripts/plugins/with-build-cache.py" --check-paths "${cache_args[@]}"
 OUTPUT_DIR="$(mkdir -p "$OUTPUT_DIR" && cd "$OUTPUT_DIR" && pwd)"
 PACKAGES_DIR="$OUTPUT_DIR/Packages"
 DERIVED_DATA_DIR="${MACTOOLS_PLUGIN_DERIVED_ROOT:-}"
@@ -312,9 +317,6 @@ build_bundle_if_needed() {
 
     # Prebuilt/aggregate products keep their existing path; only fallback compiles need a cache owner.
     if [[ "${MACTOOLS_PLUGIN_CACHE_CHECKOUT:-}" != "$REPO_ROOT" ]]; then
-        local cache_args=(--source-dir "$SOURCE_DIR" --output-dir "$OUTPUT_DIR"
-            --configuration "$CONFIGURATION" --destination "$DESTINATION" --xcodebuild "$XCODEBUILD_COMMAND")
-        [[ "$UNSIGNED_BUILD" == "1" ]] && cache_args+=(--unsigned-build)
         exec "$PYTHON3" "$REPO_ROOT/scripts/plugins/with-build-cache.py" "${cache_args[@]}" -- "${ORIGINAL_ARGS[@]}"
     fi
 
