@@ -132,7 +132,7 @@
       "zh-Hant": "記憶體壓力"
     }
   },
-  "version": "2.0.1",
+  "version": "2.1.0",
   "minHostVersion": "2.0.1",
   "pluginKitVersion": 7,
   "bundleRelativePath": "SystemStatus.bundle",

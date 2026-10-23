@@ -2,6 +2,60 @@
   "schemaVersion": 1,
   "releases": [
     {
+      "id": "plugins-2.1.0",
+      "kind": "plugin",
+      "version": "2.1.0",
+      "date": "2026-10-23",
+      "sections": [
+        {
+          "kind": "added",
+          "entries": [
+            "Appearance, Night Shift, Microphone Mute, and Auto Hide Dock now offer compact switches in the panel editor on MacTools 2.1.0 or later.",
+            "Auto Input fixed rules can now set a per-app keyboard mode: follow the system, use standard F1–F12 function keys, or keep the MacBook top-row shortcuts. The choice applies while the app is frontmost.",
+            "Container Indicator monitors the Apple container service in one panel card, listing containers and virtual machines with CPU, memory, and storage details plus start, stop, and restart controls.",
+            "Key Stats counts key presses and trackpad use, shows today’s counts on a MacBook Pro keyboard, and charts daily and seven-day usage. Counts reset at midnight; the last seven days stay on device.",
+            "Power Status shows live power flow, AC input, battery charge and discharge, health, temperature, cycles, and time estimates, with grouped voltage, current, and capacity readings.",
+            "Power Status now has a collapsible temperature and power section that shows readings for the processor, GPU, memory, storage, mainboard, and battery. The Neural Engine row is hidden on M1 and M2 Macs.",
+            "Power Status now lists the five apps using the most energy while the panel is open, based on per-process energy counters.",
+            "Region recordings can zoom toward clicks and scrolling in the saved video. Processing shows progress and can keep the original movie instead.",
+            "Screenshot adds Spotlight to highlight details in copied, saved, and pinned images. Rectangles, ellipses, and spotlight regions can be selected, moved, resized, and undone after drawing.",
+            "Trackpad Scale automatically tares finger contact and captures stable readings, keeping results visible after sampling stops. Automatic capture can be disabled; manual Tare is available in Calibration and with ⌘T.",
+            "Trackpad Scale offers known-weight calibration that stays consistent through brief pressure changes, with an accuracy warning beside the reading.",
+            "Experimental Trackpad Scale estimates weight on built-in Force Touch trackpads, with stability feedback and restart controls. Middle Click and Trackpad Gestures pause until sampling stops and fingers lift."
+          ]
+        },
+        {
+          "kind": "changed",
+          "entries": [
+            "Improved plugin discovery across all 12 locales with capability terms such as TipTap, smooth scrolling, launch agents, device batteries, and system monitoring.",
+            "Brightness reads keep startup and refresh responsive. Monitors that cannot report their current brightness can still use hardware brightness controls.",
+            "Screenshot keeps recognized text layout, tolerates noisy scrolling frames, adds pinned-image controls, and never overwrites saved files. Cancelling Save As returns to the selection.",
+            "Screenshot adds opaque fills for rectangles and ellipses and strengthens mosaic redaction against text recovery."
+          ]
+        },
+        {
+          "kind": "removed",
+          "entries": [
+            "Screenshot removes blur redaction; use mosaic or opaque fills to conceal content."
+          ]
+        },
+        {
+          "kind": "fixed",
+          "entries": [
+            "Auto Input no longer stalls MacTools during startup or focus changes involving unresponsive apps. Focus tracking recovers when an app quits during a switch.",
+            "Display volume updates no longer freeze Settings.",
+            "Hide Active App on Dock Click no longer hides an app newly selected in the Dock when mouse-event delivery is delayed.",
+            "Window Layouts keeps a window in place when an application ignores an incremental resize.",
+            "Clipboard History now shows saved image previews reliably on first selection when image details load at the same time.",
+            "Dock Lock now treats a missing Dock orientation preference as macOS’s default bottom position.",
+            "Middle Click recovers when another MacTools process releases trackpad input and preserves held-click release when weighing starts. Reconnection stops while disabled or paused.",
+            "On macOS 14 and 15, screenshots, scrolling capture, and recordings keep menu and popover shadows.",
+            "Closing text recognition chosen from the mode bar now ends the capture instead of showing annotation tools. Recognized line counts exclude layout blank lines, and the result panel stays on screen."
+          ]
+        }
+      ]
+    },
+    {
       "id": "v2.0.1",
       "kind": "app",
       "version": "2.0.1",
