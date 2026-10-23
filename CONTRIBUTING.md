@@ -6,20 +6,26 @@ Help improve a native, lightweight macOS utility collection. Bug fixes, plugins,
 
 ## Before you start
 
-Search [existing issues](https://github.com/ggbond268/MacTools/issues) and pull requests first. Discuss new plugins, public PluginKit APIs, and substantial interaction changes in an issue before implementation. Describe the user need, proposed behavior, and tradeoffs. Prefer English for commit messages and PR titles; clear reports in Chinese are also welcome.
+Search [existing issues](https://github.com/mactools-app/MacTools/issues) and pull requests first. Discuss new plugins, public PluginKit APIs, and substantial interaction changes in an issue before implementation. Describe the user need, proposed behavior, and tradeoffs. Prefer English for commit messages and PR titles; clear reports in Chinese are also welcome.
 
 ### Issue format
 
-Use the [Bug report](.github/ISSUE_TEMPLATE/bug_report.yml) or [Feature request](.github/ISSUE_TEMPLATE/feature_request.yml) form. Give the title a concrete symptom or outcome, such as “Calendar panel does not refresh after wake.”
+Start from [New issue](https://github.com/mactools-app/MacTools/issues/new/choose) and choose [Bug report](https://github.com/mactools-app/MacTools/issues/new?template=bug_report.yml) or [Feature or plugin request](https://github.com/mactools-app/MacTools/issues/new?template=feature_request.yml). Templates use English; responses in English or Chinese are welcome.
 
-| Report | Include |
-| --- | --- |
-| Bug | Reproduction steps or observations, expected and actual behavior, frequency, app version/channel, plugin version, macOS version, and Mac chip. Add relevant displays, devices, permissions, or logs. |
-| UI issue | A screenshot showing the affected panel or window; a short recording for interaction problems. Include app language, appearance, and display scaling when relevant. |
-| Performance issue | The workload, whether the panel is open or closed, approximate duration, and CPU/memory/Energy Impact observations. Include a baseline when available. |
-| Feature or plugin | The problem and use case, proposed interaction, current workaround, alternatives, and required system access. |
+- **Bug:** three required fields: what went wrong, what you were doing, and the MacTools version. If the version is unavailable, enter “Unknown”. System/plugin details and screenshots are optional. Intermittent problems do not need reliable reproduction steps.
+- **Feature:** two required fields: what you want to do and what improvement would help. Examples are optional; no technical solution is required.
 
-Remove credentials, private content, and identifying account details from attachments. Report one problem per issue; link related reports instead of duplicating them.
+A few sentences are enough. Use a specific title, report one problem or idea at a time, and search open and closed issues first. Add evidence to a matching report instead of duplicating it. Remove private information from attachments. Use [Discussions](https://github.com/mactools-app/MacTools/discussions) for usage questions and general discussion.
+
+### Issue triage for maintainers
+
+Forms apply `bug` or `enhancement` automatically. Keep follow-up lightweight:
+
+- Review scope and duplicates; use `documentation` for documentation work. Direct usage questions to Discussions.
+- Ask only for information needed to investigate. Use `question` while waiting, then remove it after the reply. Do not reject useful reports because optional fields are blank or automatically close confirmed bugs because they are old.
+- Link the implementation PR and verification result. Explain why an issue is closed; link the original for `duplicate`, explain the tradeoff for `wontfix`, and state the release containing a fix or that it is awaiting release. Assign an owner when work starts and a milestone when a release target is agreed.
+
+Templates take effect after merging into the default branch. The chooser hides blank issues for ordinary contributors; maintainers and API/CLI submissions can still bypass it. The approach draws on [LocalSend's bug form](https://github.com/localsend/localsend/blob/main/.github/ISSUE_TEMPLATE/bug_report.yml) and [VS Code's triage workflow](https://github.com/microsoft/vscode/wiki/Issue-Tracking).
 
 ## Build and run
 

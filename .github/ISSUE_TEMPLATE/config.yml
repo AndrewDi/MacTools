@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and discussions
+    url: https://github.com/mactools-app/MacTools/discussions
+    about: Ask for usage help, share workflows, or discuss early ideas.
+  - name: Documentation
+    url: https://github.com/mactools-app/MacTools/blob/main/docs/README.md
+    about: Read feature, installation, and permission guides.

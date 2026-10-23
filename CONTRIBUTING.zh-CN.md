@@ -6,20 +6,26 @@
 
 ## 开始之前
 
-先搜索[已有 Issue](https://github.com/ggbond268/MacTools/issues) 和 PR。新增插件、公共 PluginKit API 或较大的交互改动，请先用 Issue 说明用户需求、预期行为和取舍。提交信息与 PR 标题优先使用英文；也欢迎清晰的中文反馈。
+先搜索[已有 Issue](https://github.com/mactools-app/MacTools/issues) 和 PR。新增插件、公共 PluginKit API 或较大的交互改动，请先用 Issue 说明用户需求、预期行为和取舍。提交信息与 PR 标题优先使用英文；也欢迎清晰的中文反馈。
 
 ### Issue 推荐格式
 
-使用 [Bug 报告](.github/ISSUE_TEMPLATE/bug_report.yml)或[功能建议](.github/ISSUE_TEMPLATE/feature_request.yml)表单。标题描述具体症状或目标，例如「唤醒后日历面板未刷新」。
+从[新建 Issue](https://github.com/mactools-app/MacTools/issues/new/choose) 选择 [Bug report（问题反馈）](https://github.com/mactools-app/MacTools/issues/new?template=bug_report.yml)或 [Feature or plugin request（功能或插件建议）](https://github.com/mactools-app/MacTools/issues/new?template=feature_request.yml)。模板统一使用英文，内容可以用中文或英文填写。
 
-| 类型 | 建议提供 |
-| --- | --- |
-| Bug | 复现步骤或观察到的规律、预期与实际结果、发生频率、应用版本及渠道、插件版本、macOS 版本、Mac 芯片；相关的显示器、外设、权限状态或日志。 |
-| UI 问题 | 包含面板或窗口上下文的截图；交互问题附短录屏。必要时注明语言、外观和显示缩放。 |
-| 性能问题 | 具体操作或负载、面板打开或关闭状态、观察时长，以及 CPU、内存、能耗影响；有条件时提供对照数据。 |
-| 功能或插件建议 | 要解决的问题、使用场景、预期交互、当前替代方案，以及需要的系统访问能力。 |
+- **问题反馈：** 只需必填「遇到了什么问题」「当时在做什么」「MacTools 版本」三项。版本无法获取时填「未知」。系统／插件信息和截图均为选填，偶发问题不要求稳定复现。
+- **功能建议：** 只需必填「你想完成什么」「希望怎样改进」两项。参考资料选填，不要求提供技术方案。
 
-附件请移除凭证、私人内容和可识别的账号信息。每个 Issue 讨论一个问题，相关问题用链接关联。
+简单写几句话即可。标题尽量具体，每次反馈一个问题或想法，提交前搜索未关闭和已关闭的 Issue；已有相同问题时在原帖补充。附件请移除私人信息。使用咨询和一般交流请到 [Discussions 讨论区](https://github.com/mactools-app/MacTools/discussions)。
+
+### 维护者的 Issue 处理流程
+
+表单自动添加 `bug` 或 `enhancement`，后续处理保持简单：
+
+- 确认范围及是否重复；文档工作使用 `documentation`，使用咨询引导到 Discussions。
+- 只追问排查必需的信息。等待补充时使用 `question`，收到答复后移除。不要因选填项留空而拒绝有价值的反馈，也不要因长期未更新就自动关闭已确认的 Bug。
+- 关联实现 PR 和验证结果。关闭时说明原因：`duplicate` 链接原问题，`wontfix` 解释取舍；修复则注明所在版本或尚待发布。开始处理时指定负责人，确定发布目标后再加入里程碑。
+
+模板合并到默认分支后生效。普通用户的模板选择页隐藏空白入口，维护者及 API/CLI 提交仍可绕过。此流程参考 [LocalSend 的问题表单](https://github.com/localsend/localsend/blob/main/.github/ISSUE_TEMPLATE/bug_report.yml)和 [VS Code 的分类流程](https://github.com/microsoft/vscode/wiki/Issue-Tracking)。
 
 ## 构建与运行
 
