@@ -30,8 +30,28 @@ struct PortableCredentialAuthorization {
         return Self.field.accepts(.data(data))
     }
 
-    func revoking(_ profileIDs: Set<String>) -> Data? {
-        try? JSONEncoder().encode(grants.filter { !profileIDs.contains($0.key) })
+    /// Revoke before writing so an interrupted replacement cannot reuse an old endpoint grant.
+    /// Restore grants after failure only when a fresh read proves the secret is unchanged.
+    func replaceCredential(
+        for profileIDs: Set<String>? = nil,
+        store: PortablePreferencesStore,
+        load: () throws -> String?,
+        save: () throws -> Void
+    ) throws {
+        let previousGrants = storage.data(forKey: Self.key)
+        let previousKey = try? load()
+        let retainedGrants = profileIDs.map { ids in grants.filter { !ids.contains($0.key) } } ?? [:]
+        guard let revoked = try? JSONEncoder().encode(retainedGrants),
+              store.commit([Self.key: .data(revoked)]) else { throw CocoaError(.fileWriteUnknown) }
+        do {
+            try save()
+        } catch {
+            if let previousKey, let currentKey = try? load(), currentKey == previousKey,
+               let previousGrants {
+                _ = store.commit([Self.key: .data(previousGrants)])
+            }
+            throw error
+        }
     }
 
     private var grants: [String: String] {

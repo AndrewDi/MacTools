@@ -214,6 +214,29 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertNotNil(reloaded.saveConfiguration(OpenAICompatibleConfiguration(baseURL: "https://imported.example/v1", model: "test", promptTemplate: "{{text}}"), apiKey: "", languagePair: .init(first: .english, second: .simplifiedChinese)))
     }
 
+    func testFailedCredentialReplacementPreservesOnlyVerifiedUnchangedAccess() throws {
+        for (changesKey, readFails) in [(false, false), (true, false), (false, true)] {
+            let storage = TranslatorInMemoryPluginStorage()
+            let secret = CountingTranslatorSecretStore(apiKey: "original-local-key")
+            let plugin = makePlugin(storage: storage, secretStore: secret)
+            let profile = TranslatorProviderProfile.defaultProfile()
+            var edited = profile
+            edited.baseURL = "https://changed.example/v1"
+            secret.saveFailure = (changesKey, readFails)
+            XCTAssertNotNil(plugin.saveConfiguration(profiles: [edited], apiKeys: [edited.id: "replacement-local-key"],
+                languagePair: .init(first: .english, second: .simplifiedChinese)))
+            let authorization = PortableCredentialAuthorization(storage: storage)
+            let preservesAccess = !changesKey && !readFails
+            XCTAssertEqual(authorization.allows(profileID: profile.id, baseURL: profile.baseURL), preservesAccess)
+            XCTAssertFalse(authorization.allows(profileID: edited.id, baseURL: edited.baseURL))
+            secret.saveFailure = nil
+            let reloaded = makePlugin(storage: storage, secretStore: secret)
+            XCTAssertEqual(TranslatorProviderProfileStore(storage: storage).loadProfiles(), [profile])
+            XCTAssertEqual(reloaded.saveConfiguration(profiles: [profile], apiKeys: [:],
+                languagePair: .init(first: .english, second: .simplifiedChinese)) == nil, preservesAccess)
+        }
+    }
+
     func testDisabledImportedProfileCannotAuthorizeUnsavedReplacementKey() throws {
         let storage = TranslatorInMemoryPluginStorage()
         let secret = CountingTranslatorSecretStore(apiKey: "existing-destination-secret")
@@ -273,6 +296,7 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
     private var apiKey: String?
     private(set) var saveCount = 0
     private(set) var loadCount = 0
+    var saveFailure: (changesKey: Bool, readFails: Bool)?
 
     init(apiKey: String?) {
         self.apiKey = apiKey
@@ -288,16 +312,22 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
 
     func loadAPIKey() throws -> String? {
         loadCount += 1
+        if saveCount > 0, saveFailure?.readFails == true { throw CocoaError(.fileReadUnknown) }
         return apiKey
     }
 
     func loadAPIKey(forProfileID _: String) throws -> String? {
         loadCount += 1
+        if saveCount > 0, saveFailure?.readFails == true { throw CocoaError(.fileReadUnknown) }
         return apiKey
     }
 
     func saveAPIKey(_ apiKey: String) throws {
         saveCount += 1
+        if let saveFailure {
+            if saveFailure.changesKey { self.apiKey = apiKey }
+            throw CocoaError(.fileWriteUnknown)
+        }
         self.apiKey = apiKey
     }
 

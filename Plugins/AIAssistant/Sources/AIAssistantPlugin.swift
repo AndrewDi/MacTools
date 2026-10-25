@@ -64,6 +64,7 @@ final class AIAssistantPlugin:
     var onPersistentPreferencesChange: (() -> Void)?
     private let storage: PluginStorage
     private var providerEditorRevision = 0
+    private var promptEditorRevision = 0
     private var credentialAuthorization: PortableCredentialAuthorization { .init(storage: storage) }
     private let accessibilityTrustProvider: () -> Bool
     private let accessibilityTrustRequester: (Bool) -> Bool
@@ -427,6 +428,7 @@ final class AIAssistantPlugin:
                                 )
                         }
                     )
+                    .id(self.promptEditorRevision)
                 }
             }
         ])
@@ -794,8 +796,13 @@ final class AIAssistantPlugin:
         }
         do {
             if let normalizedAPIKey = Self.normalizedAPIKey(apiKey) {
-                guard portableStore.commit([PortableCredentialAuthorization.key: .data(Data("{}".utf8))]) else { throw CocoaError(.fileWriteUnknown) }
-                try secretStore.saveAPIKey(normalizedAPIKey)
+                cachedAPIKey = nil
+                didLoadAPIKey = false
+                try credentialAuthorization.replaceCredential(
+                    store: portableStore,
+                    load: { try secretStore.loadAPIKey() },
+                    save: { try secretStore.saveAPIKey(normalizedAPIKey) }
+                )
                 cachedAPIKey = normalizedAPIKey
                 didLoadAPIKey = true
             }
@@ -975,9 +982,11 @@ extension AIAssistantPlugin: PluginPortablePreferencesProviding, PluginPortableP
             guard candidate.count <= 256, let encoded = try? JSONEncoder().encode(candidate) else { return false }
             values[AIAssistantConstants.StorageKey.prompts] = .data(encoded)
         }
+        let previousPrompts = prompts
         guard portableStore.commit(values) else { return false }
         providerProfiles = providerProfileStore.loadProfiles()
         prompts = promptStore.loadPrompts()
+        if prompts != previousPrompts { promptEditorRevision += 1 }
         if let coordinator { coordinator.close() } else { panelController.close() }
         coordinator = nil
         providerEditorRevision += 1

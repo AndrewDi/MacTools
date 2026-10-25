@@ -590,9 +590,17 @@ final class TranslatorPlugin:
                     return localization.string("settings.error.blankAPIKey", defaultValue: "API Key 不能为空。")
                 }
                 if let normalizedAPIKey = Self.normalizedAPIKey(apiKey) {
-                    guard let revoked = credentialAuthorization.revoking([profile.id]),
-                          portableStore.commit([PortableCredentialAuthorization.key: .data(revoked)]) else { throw CocoaError(.fileWriteUnknown) }
-                    try secretStore.saveAPIKey(normalizedAPIKey, forProfileID: profile.id)
+                    cachedAPIKeys.removeValue(forKey: profile.id)
+                    didLoadProfileAPIKeys.remove(profile.id)
+                    if profile.id == TranslatorProviderProfile.defaultID {
+                        cachedAPIKey = nil
+                        didLoadAPIKey = false
+                    }
+                    try credentialAuthorization.replaceCredential(
+                        for: [profile.id], store: portableStore,
+                        load: { try secretStore.loadAPIKey(forProfileID: profile.id) },
+                        save: { try secretStore.saveAPIKey(normalizedAPIKey, forProfileID: profile.id) }
+                    )
                     savedCredentialEndpoints[profile.id] = profile.baseURL
                     cachedAPIKeys[profile.id] = normalizedAPIKey
                     didLoadProfileAPIKeys.insert(profile.id)

@@ -2822,11 +2822,11 @@ final class PluginHost: ObservableObject {
         selection: PreferencesBackupSelection
     ) -> ActionReferencePortability {
         let schemaPortability = actionRegistry.portability(of: reference)
-        guard schemaPortability == .portable else { return schemaPortability }
+        guard schemaPortability != .knownNonPortable else { return schemaPortability }
         guard let plugin = activePlugins.first(where: {
             $0.metadata.id == reference.key.providerID
         }), let provider = plugin as? any PluginActionReferenceBackupProviding else {
-            return .portable
+            return schemaPortability
         }
 
         switch guardedValue(
@@ -2835,7 +2835,7 @@ final class PluginHost: ObservableObject {
             provider.backupDisposition(for: reference)
         ) ?? .excluded {
         case .selfContained:
-            return .portable
+            return schemaPortability
         case .requiresPluginPreferences:
             guard selection.pluginPreferenceIDs.contains(plugin.metadata.id) else { return .knownNonPortable }
             if plugin is any PluginPortablePreferencesActionReferencesProviding,
@@ -2844,7 +2844,7 @@ final class PluginHost: ObservableObject {
                 let definitions = indexes[plugin.metadata.id] ?? []
                 return definitions.contains(reference) || definitions.contains(migrated) ? .portable : .knownNonPortable
             }
-            return .portable
+            return schemaPortability
         case .excluded:
             return .knownNonPortable
         }

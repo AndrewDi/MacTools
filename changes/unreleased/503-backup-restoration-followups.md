@@ -2,4 +2,4 @@
 release: plugin
 type: fixed
 ---
-Restored input rules stay current in open editors, and disabled AI prompts retain included shortcuts. Translator backups preserve excluded text and reject unusable enabled services before changing settings.
+Open editors retain restored input rules and AI prompts, included disabled prompts keep their shortcuts, and failed key saves preserve verified existing access. Translator rejects unusable restored services.

@@ -8,7 +8,7 @@ import XCTest
 
 @MainActor
 final class AIAssistantPluginTests: XCTestCase {
-    func testIncludedDisabledPromptRetainsCustomizedShortcutThroughBackup() throws {
+    func testIncludedDisabledPromptRetainsCustomizedShortcutThroughBackup() async throws {
         let plugin = makePlugin()
         var prompt = AIAssistantPrompt(id: "custom", name: "Custom prompt", template: "Process {{text}}",
             systemPrompt: nil, isEnabled: true)
@@ -25,17 +25,50 @@ final class AIAssistantPluginTests: XCTestCase {
         let shortcutID = "ai-assistant.shortcut." + (try XCTUnwrap(plugin.shortcutDefinitions.first)).id
         let binding = ShortcutBinding(keyCode: 97, modifiers: [.command, .option, .control, .shift])
         XCTAssertNil(host.setShortcutBindingAndReturnError(binding, for: shortcutID))
+        let reference = ActionReference(key: .init(providerID: "ai-assistant", actionID: prompt.id))
+        let canonicalBinding = ShortcutBinding(keyCode: 98, modifiers: [.command, .option, .control, .shift])
+        guard case .success = host.setActionShortcutBinding(canonicalBinding, to: reference) else {
+            return XCTFail("Could not assign the canonical shortcut")
+        }
         prompt.isEnabled = false
         XCTAssertNil(plugin.savePromptsConfiguration([prompt]))
+        host.refreshAll()
+        for _ in 0..<100 where host.actionRegistry.definition(for: reference.key) != nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertNil(host.actionRegistry.definition(for: reference.key))
 
         let backup = try host.makePreferencesBackupExport().requiringSuccessfulSelection()
         XCTAssertEqual(backup.shortcutCustomizations[shortcutID], .custom(binding))
+        XCTAssertTrue(backup.actionShortcutAssignments.contains { $0.reference == reference })
         let result = try host.importPreferences(backup)
 
         XCTAssertTrue(result.shortcutErrors.isEmpty)
         XCTAssertEqual(shortcuts.customization(for: shortcutID), .custom(binding))
+        XCTAssertNotNil(host.shortcutAssignmentService.assignment(for: reference))
         XCTAssertEqual(plugin.shortcutDefinitions.first?.scope, .whilePluginActive)
         XCTAssertTrue(plugin.actionDefinitions.isEmpty)
+    }
+
+    func testFailedCredentialReplacementPreservesOnlyVerifiedUnchangedAccess() throws {
+        for (changesKey, readFails) in [(false, false), (true, false), (false, true)] {
+            let storage = AIAssistantInMemoryPluginStorage()
+            let secret = CountingAIAssistantSecretStore(apiKey: "original-local-key")
+            let plugin = makePlugin(storage: storage, secretStore: secret)
+            let profile = AIAssistantProviderProfile.defaultProfile()
+            var edited = profile
+            edited.baseURL = "https://changed.example/v1"
+            secret.saveFailure = (changesKey, readFails)
+            XCTAssertNotNil(plugin.saveProviderConfiguration(profiles: [edited], apiKey: "replacement-local-key"))
+            let authorization = PortableCredentialAuthorization(storage: storage)
+            let preservesAccess = !changesKey && !readFails
+            XCTAssertEqual(authorization.allows(profileID: profile.id, baseURL: profile.baseURL), preservesAccess)
+            XCTAssertFalse(authorization.allows(profileID: edited.id, baseURL: edited.baseURL))
+            secret.saveFailure = nil
+            let reloaded = makePlugin(storage: storage, secretStore: secret)
+            XCTAssertEqual(AIAssistantProviderProfileStore(storage: storage).loadProfiles(), [profile])
+            XCTAssertEqual(reloaded.saveProviderConfiguration(profiles: [profile], apiKey: "") == nil, preservesAccess)
+        }
     }
 
     func testMetadataMatchesManifestContract() {
@@ -451,7 +484,7 @@ final class AIAssistantPluginTests: XCTestCase {
         XCTAssertTrue(grants.allows(profileID: active.id, baseURL: active.baseURL))
         XCTAssertEqual(try JSONDecoder().decode([AIAssistantProviderProfile].self,
             from: XCTUnwrap(storage.data(forKey: AIAssistantConstants.StorageKey.providerProfiles))), profiles)
-        XCTAssertEqual(secret.loadCount, 0)
+        XCTAssertEqual(secret.loadCount, 1)
         XCTAssertEqual(secret.saveCount, 1)
     }
 
@@ -587,6 +620,7 @@ private final class CountingAIAssistantSecretStore: AIAssistantSecretStoring, @u
     private var apiKey: String?
     private(set) var loadCount = 0
     private(set) var saveCount = 0
+    var saveFailure: (changesKey: Bool, readFails: Bool)?
 
     init(apiKey: String?) {
         self.apiKey = apiKey
@@ -598,11 +632,16 @@ private final class CountingAIAssistantSecretStore: AIAssistantSecretStoring, @u
 
     func loadAPIKey() throws -> String? {
         loadCount += 1
+        if saveCount > 0, saveFailure?.readFails == true { throw CocoaError(.fileReadUnknown) }
         return apiKey
     }
 
     func saveAPIKey(_ apiKey: String) throws {
         saveCount += 1
+        if let saveFailure {
+            if saveFailure.changesKey { self.apiKey = apiKey }
+            throw CocoaError(.fileWriteUnknown)
+        }
         self.apiKey = apiKey
     }
 
