@@ -66,16 +66,21 @@ struct LaunchControlPortablePreferences {
 
     func backup() -> Data? {
         let store = Self.store(storage)
-        guard store.backup() != nil, let values = store.currentValues(),
-              case let .strings(favorites)? = values[Key.favorites],
-              case let .data(notesData)? = values[Key.notes],
-              let notes = try? JSONDecoder().decode([String: String].self, from: notesData) else { return nil }
+        let keys: Set<String> = includesNotes ? [Key.favorites, Key.notes] : [Key.favorites]
+        guard store.backup(including: keys) != nil, let values = store.currentValues(including: keys),
+              case let .strings(favorites)? = values[Key.favorites] else { return nil }
+        var portableNotes: [Note]?
+        if includesNotes {
+            guard case let .data(notesData)? = values[Key.notes],
+                  let notes = try? JSONDecoder().decode([String: String].self, from: notesData) else { return nil }
+            portableNotes = notes.compactMap { key, text in
+                reference(for: key).map { Note(reference: $0, text: text) }
+            }.sorted { order($0.reference, $1.reference) }
+        }
         let payload = Payload(
             formatVersion: 1,
             favorites: favorites.compactMap(reference).sorted(by: order),
-            notes: includesNotes ? notes.compactMap { key, text in
-                reference(for: key).map { Note(reference: $0, text: text) }
-            }.sorted { order($0.reference, $1.reference) } : nil
+            notes: portableNotes
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -91,26 +96,28 @@ struct LaunchControlPortablePreferences {
               (payload.notes?.count ?? 0) <= 1_024,
               payload.notes?.allSatisfy({ $0.reference.isValid && Self.validNote($0.text) }) != false,
               Set(payload.notes?.map(\.reference) ?? []).count == (payload.notes?.count ?? 0),
-              Self.store(storage).recover(), let values = Self.store(storage).currentValues(),
-              case let .strings(previousFavorites)? = values[Key.favorites],
-              case let .data(previousNotes)? = values[Key.notes],
-              var notes = try? JSONDecoder().decode([String: String].self, from: previousNotes)
+              Self.store(storage).recover(),
+              let values = Self.store(storage).currentValues(including: [Key.favorites]),
+              case let .strings(previousFavorites)? = values[Key.favorites]
         else { return false }
         let favorites = previousFavorites.filter { reference(for: $0) == nil } + payload.favorites.map(path)
+        var candidate: [String: PortablePreferenceValue] = [Key.favorites: .strings(favorites.sorted())]
         if let incoming = payload.notes {
+            guard let values = Self.store(storage).currentValues(including: [Key.notes]),
+                  case let .data(previousNotes)? = values[Key.notes],
+                  var notes = try? JSONDecoder().decode([String: String].self, from: previousNotes) else { return false }
             if includesNotes { notes = notes.filter { reference(for: $0.key) == nil } }
             for note in incoming {
                 let itemID = path(for: note.reference)
                 if !includesNotes, let protected = notes[itemID], protected != note.text { return false }
                 notes[itemID] = note.text
             }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            guard let notesData = try? encoder.encode(notes) else { return false }
+            candidate[Key.notes] = .data(notesData)
         }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard let notesData = try? encoder.encode(notes) else { return false }
-        return Self.store(storage).commit([
-            Key.favorites: .strings(favorites.sorted()), Key.notes: .data(notesData),
-        ])
+        return Self.store(storage).commit(candidate)
     }
 
     func unmatchedReferences(matching itemIDs: Set<String>) -> [Reference] {

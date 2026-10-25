@@ -15,6 +15,7 @@ final class AppHotkeyStore: ObservableObject {
 
     init(storage: PluginStorage) {
         self.storage = storage
+        encoder.outputFormatting = [.sortedKeys]
         _ = Self.portableStore(storage: storage).recover()
         if let data = storage.data(forKey: Keys.entries),
            let loaded = try? JSONDecoder().decode([AppShortcutEntry].self, from: data) {

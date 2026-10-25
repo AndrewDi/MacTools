@@ -219,7 +219,16 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginApplicationActivityStateH
                         localization: localization,
                         onChange: {},
                         onNotificationSettingsChange: {
-                            if store.lowBatteryNotificationEnabled { lowBatteryNotificationController.requestAuthorization() }
+                            if store.lowBatteryNotificationEnabled {
+                                lowBatteryNotificationController.requestAuthorization {
+                                    lowBatteryNotificationController.evaluate(
+                                        snapshot: viewModel.snapshot,
+                                        isEnabled: store.lowBatteryNotificationEnabled,
+                                        threshold: store.lowBatteryNotificationThreshold,
+                                        localization: localization
+                                    )
+                                }
+                            }
                             viewModel.setLowBatteryMonitoringEnabled(
                                 store.lowBatteryNotificationEnabled
                             )

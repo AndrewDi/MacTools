@@ -10,7 +10,7 @@ struct DeviceBatteryLowBatteryNotification: Equatable {
 
 @MainActor
 protocol DeviceBatteryLowBatteryNotifying {
-    func requestAuthorization()
+    func requestAuthorization(completion: @escaping @MainActor (_ newlyGranted: Bool) -> Void)
     func notifyLowBatteryDevices(
         _ items: [DeviceBatteryItem],
         threshold: Int,
@@ -19,7 +19,7 @@ protocol DeviceBatteryLowBatteryNotifying {
 }
 
 extension DeviceBatteryLowBatteryNotifying {
-    func requestAuthorization() {}
+    func requestAuthorization(completion: @escaping @MainActor (Bool) -> Void) { completion(false) }
 }
 
 @MainActor
@@ -32,12 +32,22 @@ final class DeviceBatteryLowBatteryNotificationController {
 
     private let notifier: any DeviceBatteryLowBatteryNotifying
     private var notifiedDeviceKeyGroups: [Set<String>] = []
+    private var isRequestingAuthorization = false
 
     init(notifier: any DeviceBatteryLowBatteryNotifying) {
         self.notifier = notifier
     }
 
-    func requestAuthorization() { notifier.requestAuthorization() }
+    func requestAuthorization(reevaluate: @escaping @MainActor () -> Void = {}) {
+        guard !isRequestingAuthorization else { return }
+        isRequestingAuthorization = true
+        notifier.requestAuthorization { [weak self] newlyGranted in
+            guard let self else { return }
+            self.isRequestingAuthorization = false
+            if newlyGranted { self.notifiedDeviceKeyGroups.removeAll() }
+            reevaluate()
+        }
+    }
 
     func evaluate(
         snapshot: DeviceBatterySnapshot,
@@ -50,6 +60,7 @@ final class DeviceBatteryLowBatteryNotificationController {
             notifiedDeviceKeyGroups.removeAll()
             return
         }
+        guard !isRequestingAuthorization else { return }
 
         let lowBatteryItems = snapshot.lowBatteryItems(threshold: normalizedThreshold)
         for recoveredItem in snapshot.visibleItems
@@ -161,8 +172,18 @@ final class DeviceBatteryUserNotificationCenterNotifier: DeviceBatteryLowBattery
         }
     }
 
-    func requestAuthorization() {
-        notificationCenter.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    func requestAuthorization(completion: @escaping @MainActor (Bool) -> Void) {
+        let center = notificationCenter
+        center.getNotificationSettings { settings in
+            let wasAuthorized: Bool
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral: wasAuthorized = true
+            default: wasAuthorized = false
+            }
+            center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                Task { @MainActor in completion(granted && !wasAuthorized) }
+            }
+        }
     }
 
     private nonisolated static func addNotification(title: String, body: String, identifier: String) {

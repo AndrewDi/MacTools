@@ -92,12 +92,12 @@ struct PortablePreferencesStore {
     private let journalKey = "preferences-backup.restore.v1"
     private let maximumBytes = 2 * 1_024 * 1_024
 
-    func backup(overriding overrides: [String: PortablePreferenceValue] = [:]) -> Data? {
+    func backup(including keys: Set<String>? = nil, overriding overrides: [String: PortablePreferenceValue] = [:]) -> Data? {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         guard storage.object(forKey: journalKey) == nil,
-              var values = currentValues(),
-              Set(overrides.keys).isSubset(of: Set(fields.keys)),
+              var values = currentValues(including: keys),
+              Set(overrides.keys).isSubset(of: keys ?? Set(fields.keys)),
               overrides.allSatisfy({ fields[$0.key]?.accepts($0.value) == true }) else { return nil }
         values.merge(overrides, uniquingKeysWith: { _, incoming in incoming })
         guard
@@ -106,9 +106,11 @@ struct PortablePreferencesStore {
         return data
     }
 
-    func currentValues() -> [String: PortablePreferenceValue]? {
+    func currentValues(including keys: Set<String>? = nil) -> [String: PortablePreferenceValue]? {
+        let selected = keys ?? Set(fields.keys)
+        guard selected.isSubset(of: Set(fields.keys)) else { return nil }
         var values: [String: PortablePreferenceValue] = [:]
-        for (key, field) in fields {
+        for (key, field) in fields where selected.contains(key) {
             guard let value = field.read(storage.object(forKey: key)) else { return nil }
             values[key] = value
         }

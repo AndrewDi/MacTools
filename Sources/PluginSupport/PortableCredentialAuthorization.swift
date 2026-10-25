@@ -11,9 +11,18 @@ struct PortableCredentialAuthorization {
         .data(Data("{}".utf8), maximumBytes: 262_144) { data in
             guard let grants = try? JSONDecoder().decode([String: String].self, from: data) else { return false }
             return grants.count <= 256 && grants.allSatisfy {
-                PortablePreferencesValidation.identifier($0.key) && PortablePreferencesValidation.endpoint($0.value)
+                validGrant(profileID: $0.key, endpoint: $0.value)
             }
         }
+    }
+
+    // These destination-only grants retain URL components supported by existing local clients.
+    // Portable payloads still use the stricter endpoint validator and cannot supply this map.
+    private static func validGrant(profileID: String, endpoint: String) -> Bool {
+        guard PortablePreferencesValidation.identifier(profileID), endpoint.utf8.count <= 262_144,
+              let url = URLComponents(string: endpoint.trimmingCharacters(in: .whitespacesAndNewlines)),
+              url.host?.isEmpty == false, url.url != nil else { return false }
+        return url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http"
     }
 
     var isInitialized: Bool {
@@ -37,13 +46,14 @@ struct PortableCredentialAuthorization {
     /// Call before any import, once for existing destination profiles; no Keychain access.
     func seedIfNeeded(profiles: [String: String], store: PortablePreferencesStore) {
         guard storage.object(forKey: Self.key) == nil,
-              let data = try? JSONEncoder().encode(profiles) else { return }
+              let data = try? JSONEncoder().encode(profiles.filter { Self.validGrant(profileID: $0.key, endpoint: $0.value) }) else { return }
         _ = store.commit([Self.key: .data(data)])
     }
 
     /// Only a locally entered key may authorize a changed endpoint.
     func granting(_ profiles: [String: String]) -> Data? {
-        let merged = grants.merging(profiles, uniquingKeysWith: { _, local in local })
+        let validProfiles = profiles.filter { Self.validGrant(profileID: $0.key, endpoint: $0.value) }
+        let merged = grants.merging(validProfiles, uniquingKeysWith: { _, local in local })
         return try? JSONEncoder().encode(merged)
     }
 

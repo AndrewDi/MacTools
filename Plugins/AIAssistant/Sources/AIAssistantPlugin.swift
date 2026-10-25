@@ -943,7 +943,10 @@ extension AIAssistantPlugin: PluginPortablePreferencesProviding, PluginPortableP
         return payload
     }
     func makePortablePreferencesBackup() -> Data? {
-        guard portableStore.backup() != nil else { return nil }
+        var keys: Set<String> = [AIAssistantConstants.StorageKey.providerProfiles,
+            AIAssistantConstants.StorageKey.shortcutEnabled, AIAssistantConstants.StorageKey.shortcutUsesClipboard]
+        if includesPromptText { keys.insert(AIAssistantConstants.StorageKey.prompts) }
+        guard portableStore.backup(including: keys) != nil else { return nil }
         let payload = PortablePreferences(formatVersion: 1, profiles: providerProfiles, shortcutEnabled: isShortcutEnabled,
             shortcutUsesClipboard: shortcutUsesClipboard, prompts: includesPromptText ? prompts : nil)
         let encoder = JSONEncoder()

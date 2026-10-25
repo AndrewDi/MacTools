@@ -401,6 +401,43 @@ final class AIAssistantPluginTests: XCTestCase {
         XCTAssertTrue(PortableCredentialAuthorization(storage: storage).allows(profileID: profile.id, baseURL: profile.baseURL))
     }
 
+    func testLocalCredentialMigrationAndRekeyIgnoreIncompleteDisabledDraft() throws {
+        let storage = AIAssistantInMemoryPluginStorage()
+        let secret = CountingAIAssistantSecretStore(apiKey: "existing-local-key")
+        let active = AIAssistantProviderProfile(id: "active", name: "Active", baseURL: "https://gateway.example/v1?api-version=2026-01-01")
+        let draft = AIAssistantProviderProfile(id: "draft", name: "Draft", isEnabled: false, baseURL: "")
+        let profiles = [active, draft]
+        storage.set(try JSONEncoder().encode(profiles), forKey: AIAssistantConstants.StorageKey.providerProfiles)
+        let plugin = makePlugin(storage: storage, secretStore: secret)
+        let grants = PortableCredentialAuthorization(storage: storage)
+        XCTAssertTrue(grants.isInitialized)
+        XCTAssertTrue(grants.allows(profileID: active.id, baseURL: active.baseURL))
+        XCTAssertFalse(grants.allows(profileID: draft.id, baseURL: draft.baseURL))
+        XCTAssertNil(plugin.saveProviderConfiguration(profiles: profiles, apiKey: ""))
+        XCTAssertNil(plugin.saveProviderConfiguration(profiles: profiles, apiKey: "replacement-local-key"))
+        XCTAssertTrue(grants.allows(profileID: active.id, baseURL: active.baseURL))
+        XCTAssertEqual(try JSONDecoder().decode([AIAssistantProviderProfile].self,
+            from: XCTUnwrap(storage.data(forKey: AIAssistantConstants.StorageKey.providerProfiles))), profiles)
+        XCTAssertEqual(secret.loadCount, 0)
+        XCTAssertEqual(secret.saveCount, 1)
+    }
+
+    func testExcludedLegacyPromptStorageDoesNotBlockConfigurationTransfer() throws {
+        let storage = AIAssistantInMemoryPluginStorage()
+        let prompts = [AIAssistantPrompt(id: "private", name: "Private",
+            template: String(repeating: "x", count: 1_048_576) + " {{text}}", systemPrompt: nil, isEnabled: true)]
+        let raw = try JSONEncoder().encode(prompts)
+        storage.set(raw, forKey: AIAssistantConstants.StorageKey.prompts)
+        let plugin = makePlugin(storage: storage)
+        let backup = try XCTUnwrap(plugin.makePortablePreferencesBackup())
+        XCTAssertNil(try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])["prompts"])
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: backup))
+        XCTAssertEqual(storage.data(forKey: AIAssistantConstants.StorageKey.prompts), raw)
+        plugin.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: true))
+        XCTAssertNil(plugin.makePortablePreferencesBackup())
+        XCTAssertEqual(storage.data(forKey: AIAssistantConstants.StorageKey.prompts), raw)
+    }
+
     func testPromptOptOutPreservesPrivateTextAndOmittedDefinitionsHaveNoIndex() throws {
         let plugin = makePlugin(storage: AIAssistantInMemoryPluginStorage())
         let local = AIAssistantPrompt(id: "private", name: "Private", template: "Private {{text}}", systemPrompt: nil, isEnabled: true)

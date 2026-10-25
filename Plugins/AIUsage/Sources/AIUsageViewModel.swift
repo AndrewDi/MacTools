@@ -61,8 +61,10 @@ final class AIUsageViewModel: ObservableObject {
         candidate.showsMenuBar = incoming.showsMenuBar
         guard persist(candidate) else { return false }
         let changed = preferences != candidate
+        let intervalChanged = preferences.refreshInterval != candidate.refreshInterval
         preferences = candidate
         cancelWork()
+        if intervalChanged { updateSuccessfulRefreshDeadlines() }
         // Install a future timer without an immediate credential read or network request.
         if isActive, activityAllowsWork, !preferences.queryableProviders.isEmpty { installTimer() }
         if changed { onPersistentPreferencesChange?() }
@@ -135,13 +137,17 @@ final class AIUsageViewModel: ObservableObject {
             }
         }
         if previous.refreshInterval != next.refreshInterval {
-            for provider in next.enabledProviders {
-                guard states[provider]?.failure == nil, let snapshot = states[provider]?.snapshot else { continue }
-                states[provider]?.nextRefresh = snapshot.fetchedAt.addingTimeInterval(Double(next.refreshInterval))
-            }
+            updateSuccessfulRefreshDeadlines()
         }
         onChange?()
         resume()
+    }
+
+    private func updateSuccessfulRefreshDeadlines() {
+        for provider in preferences.enabledProviders {
+            guard states[provider]?.failure == nil, let snapshot = states[provider]?.snapshot else { continue }
+            states[provider]?.nextRefresh = snapshot.fetchedAt.addingTimeInterval(Double(preferences.refreshInterval))
+        }
     }
 
     func setClaudeKeychainAccess(_ allowed: Bool) {

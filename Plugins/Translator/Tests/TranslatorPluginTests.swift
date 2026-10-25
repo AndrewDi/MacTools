@@ -47,6 +47,30 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertEqual(plugin.rowState.subtitle, "按 ⌥D 划词，⌥S 截图")
     }
 
+    func testCredentialUpgradePreservesActiveServiceBesideIncompleteDisabledDraft() throws {
+        for endpoint in ["https://gateway.example/v1", "HTTPS://gateway.example/v1?api-version=2026-01-01"] {
+            let storage = TranslatorInMemoryPluginStorage()
+            let secret = CountingTranslatorSecretStore(apiKey: "existing-local-key")
+            var active = TranslatorProviderProfile.defaultProfile()
+            active.baseURL = endpoint
+            let draft = TranslatorProviderProfile(id: "draft", name: "Draft", isEnabled: false, baseURL: "")
+            let profiles = [active, draft]
+            storage.set(try JSONEncoder().encode(profiles), forKey: TranslatorConstants.StorageKey.providerProfiles)
+            let plugin = makePlugin(storage: storage, secretStore: secret)
+
+            let grants = PortableCredentialAuthorization(storage: storage)
+            XCTAssertTrue(grants.isInitialized)
+            XCTAssertTrue(grants.allows(profileID: active.id, baseURL: endpoint))
+            XCTAssertFalse(grants.allows(profileID: draft.id, baseURL: draft.baseURL))
+            XCTAssertNil(plugin.saveConfiguration(profiles: profiles, apiKeys: [:],
+                languagePair: .init(first: .english, second: .simplifiedChinese)))
+            XCTAssertEqual(try JSONDecoder().decode([TranslatorProviderProfile].self,
+                from: XCTUnwrap(storage.data(forKey: TranslatorConstants.StorageKey.providerProfiles))), profiles)
+            XCTAssertEqual(secret.loadCount, 0)
+            XCTAssertEqual(secret.saveCount, 0)
+        }
+    }
+
     func testPrimaryPanelTogglePersistsDisabledStateAndNotifies() {
         let storage = TranslatorInMemoryPluginStorage()
         let plugin = makePlugin(storage: storage)

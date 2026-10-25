@@ -46,6 +46,24 @@ final class LaunchControlPortablePreferencesTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode([String: String].self, from: XCTUnwrap(destination.data(forKey: key))), [path: "Imported\nnote"])
     }
 
+    func testExcludedLegacyNoteDoesNotBlockFavoritesAndRemainsByteIdentical() throws {
+        let storage = FakePluginStorage()
+        let path = "/Library/LaunchAgents/example.plist"
+        let raw = try JSONSerialization.data(withJSONObject: [path: String(repeating: "x", count: 16_385)], options: [.prettyPrinted])
+        storage.set(raw, forKey: LaunchControlPortablePreferences.Key.notes)
+        let provider = LaunchControlPortablePreferences(storage: storage)
+        let data = try XCTUnwrap(provider.backup())
+        XCTAssertNil(try JSONDecoder().decode(LaunchControlPortablePreferences.Payload.self, from: data).notes)
+        let incoming = LaunchControlPortablePreferences.Payload(formatVersion: 1,
+            favorites: [.init(location: .globalAgents, plistFileName: "example.plist")], notes: nil)
+        XCTAssertTrue(provider.restore(try JSONEncoder().encode(incoming)))
+        XCTAssertEqual(storage.stringArray(forKey: LaunchControlPortablePreferences.Key.favorites), [path])
+        XCTAssertEqual(storage.data(forKey: LaunchControlPortablePreferences.Key.notes), raw)
+        XCTAssertTrue(provider.setIncludesNotes(true))
+        XCTAssertNil(provider.backup())
+        XCTAssertEqual(storage.data(forKey: LaunchControlPortablePreferences.Key.notes), raw)
+    }
+
     func testTraversalAndFutureVersionRejectBeforeMutation() throws {
         let storage = FakePluginStorage()
         let provider = LaunchControlPortablePreferences(storage: storage)
