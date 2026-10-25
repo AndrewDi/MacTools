@@ -921,9 +921,11 @@ extension TranslatorPlugin: PluginPortablePreferencesProviding, PluginPortablePr
               payload.profiles.allSatisfy({ profile in
                   let template = profile.promptTemplate ?? OpenAICompatibleConfiguration.defaultPromptTemplate(localization: localization)
                   let configuration = OpenAICompatibleConfiguration(baseURL: profile.baseURL, model: profile.model, promptTemplate: template)
-                  return PortablePreferencesValidation.identifier(profile.id) && PortablePreferencesValidation.text(profile.name, maximumBytes: 256)
-                      && PortablePreferencesValidation.endpoint(profile.baseURL) && PortablePreferencesValidation.text(profile.model, maximumBytes: 256)
-                      && template.utf8.count <= 65_536 && configuration.validationError == nil
+                  return PortablePreferencesValidation.identifier(profile.id)
+                      && PortablePreferencesValidation.text(profile.name, maximumBytes: 256, allowsEmpty: !profile.isEnabled)
+                      && PortablePreferencesValidation.endpoint(profile.baseURL, allowsIncomplete: !profile.isEnabled)
+                      && PortablePreferencesValidation.text(profile.model, maximumBytes: 256, allowsEmpty: !profile.isEnabled)
+                      && template.utf8.count <= 65_536 && (!profile.isEnabled || configuration.validationError == nil)
               }) else { return nil }
         return payload
     }

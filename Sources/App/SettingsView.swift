@@ -2416,7 +2416,7 @@ struct PreferencesImportPreviewSheet: View {
 
             Text(AppL10n.preferencesBackup(
                 "preferencesBackup.preview.replaceNotice",
-                defaultValue: "仅替换所选的备份设置；未包含的插件设置和本机数据会保留。"
+                defaultValue: "仅替换所选类别；未包含的插件设置和本机数据会保留。导入快捷键时，备份中未包含的绑定会恢复为默认值。"
             ))
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)

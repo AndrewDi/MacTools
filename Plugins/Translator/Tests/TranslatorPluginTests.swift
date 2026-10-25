@@ -71,6 +71,35 @@ final class TranslatorPluginTests: XCTestCase {
         }
     }
 
+    func testSavedIncompleteDisabledDraftTransfersWithoutCredentialAccess() throws {
+        let source = makePlugin()
+        let active = TranslatorProviderProfile.defaultProfile()
+        let draft = TranslatorProviderProfile(id: "draft", name: "", isEnabled: false, baseURL: "https://", model: "")
+        XCTAssertNil(source.saveConfiguration(profiles: [active, draft], apiKeys: [:],
+            languagePair: .init(first: .english, second: .simplifiedChinese)))
+        let data = try XCTUnwrap(source.makePortablePreferencesBackup())
+        let storage = TranslatorInMemoryPluginStorage()
+        let secret = CountingTranslatorSecretStore(apiKey: "local-secret")
+        let destination = makePlugin(storage: storage, secretStore: secret)
+        XCTAssertTrue(destination.restorePortablePreferencesReportingResult(from: data))
+        let saved = try XCTUnwrap(storage.data(forKey: TranslatorConstants.StorageKey.providerProfiles))
+        let profiles = try JSONDecoder().decode([TranslatorProviderProfile].self, from: saved)
+        XCTAssertEqual(profiles.first { $0.id == draft.id }, draft)
+
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var incoming = try XCTUnwrap(object["profiles"] as? [[String: Any]])
+        incoming[1]["isEnabled"] = true
+        object["profiles"] = incoming
+        XCTAssertFalse(destination.restorePortablePreferencesReportingResult(from: try JSONSerialization.data(withJSONObject: object)))
+        incoming[1]["isEnabled"] = false
+        incoming[1]["baseURL"] = "https://user:secret@gateway.example/v1"
+        object["profiles"] = incoming
+        XCTAssertFalse(destination.restorePortablePreferencesReportingResult(from: try JSONSerialization.data(withJSONObject: object)))
+        XCTAssertEqual(storage.data(forKey: TranslatorConstants.StorageKey.providerProfiles), saved)
+        XCTAssertEqual(secret.loadCount, 0)
+        XCTAssertEqual(secret.saveCount, 0)
+    }
+
     func testPrimaryPanelTogglePersistsDisabledStateAndNotifies() {
         let storage = TranslatorInMemoryPluginStorage()
         let plugin = makePlugin(storage: storage)

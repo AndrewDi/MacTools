@@ -927,9 +927,12 @@ extension AIAssistantPlugin: PluginPortablePreferencesProviding, PluginPortableP
         guard data.count <= 2 * 1_024 * 1_024, let payload = try? JSONDecoder().decode(PortablePreferences.self, from: data), payload.formatVersion == 1,
               (1...64).contains(payload.profiles.count), Set(payload.profiles.map(\.id)).count == payload.profiles.count,
               payload.profiles.allSatisfy({ profile in
-                  PortablePreferencesValidation.identifier(profile.id) && PortablePreferencesValidation.text(profile.name, maximumBytes: 256)
-                      && PortablePreferencesValidation.endpoint(profile.baseURL) && PortablePreferencesValidation.text(profile.model, maximumBytes: 256)
-                      && profile.temperature.isFinite && (0...2).contains(profile.temperature) && profile.validationError == nil
+                  PortablePreferencesValidation.identifier(profile.id)
+                      && PortablePreferencesValidation.text(profile.name, maximumBytes: 256, allowsEmpty: !profile.isEnabled)
+                      && PortablePreferencesValidation.endpoint(profile.baseURL, allowsIncomplete: !profile.isEnabled)
+                      && PortablePreferencesValidation.text(profile.model, maximumBytes: 256, allowsEmpty: !profile.isEnabled)
+                      && profile.temperature.isFinite && (0...2).contains(profile.temperature)
+                      && (!profile.isEnabled || profile.validationError == nil)
               }) else { return nil }
         if let prompts = payload.prompts {
             guard prompts.count <= 256, Set(prompts.map(\.id)).count == prompts.count,

@@ -12,10 +12,13 @@ enum PortablePreferencesValidation {
             && !value.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
     }
 
-    static func endpoint(_ value: String) -> Bool {
-        guard text(value, maximumBytes: 2_048), let url = URLComponents(string: value),
-              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil,
-              url.host?.isEmpty == false, url.url != nil else { return false }
+    static func endpoint(_ value: String, allowsIncomplete: Bool = false) -> Bool {
+        guard text(value, maximumBytes: 2_048, allowsEmpty: allowsIncomplete),
+              let url = URLComponents(string: value),
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { return false }
+        // Disabled drafts need not be executable, but still exclude credential-bearing components.
+        if allowsIncomplete { return true }
+        guard url.host?.isEmpty == false, url.url != nil else { return false }
         return url.scheme == "https" || url.scheme == "http"
     }
 }

@@ -507,8 +507,11 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
         let previousVolumes = volumes
         var candidateVolumes = volumes
         candidateVolumes[applicationID] = gain
-        canonicalRoutingVolumes = candidateVolumes
-        let targets = routingTargets(volumes: candidateVolumes)
+        let previousRoutingVolumes = sessionVolumes ?? volumes
+        var candidateRoutingVolumes = previousRoutingVolumes
+        candidateRoutingVolumes[applicationID] = gain
+        canonicalRoutingVolumes = candidateRoutingVolumes
+        let targets = routingTargets(volumes: candidateRoutingVolumes)
         let applyResult = await router.applyAndWait(
             targets: targets,
             outputDeviceUID: snapshot.outputDeviceUID
@@ -524,15 +527,15 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
             switch persistVolumes(candidateVolumes) {
             case .committed:
                 volumes = candidateVolumes
-                sessionVolumes = nil
+                if sessionVolumes != nil { sessionVolumes = candidateRoutingVolumes }
                 if candidateVolumes != previousVolumes { onPersistentPreferencesChange?() }
                 lastRouteErrorMessage = nil
                 onStateChange?()
                 return .succeeded()
             case let .rejected(rollbackSucceeded):
-                canonicalRoutingVolumes = previousVolumes
+                canonicalRoutingVolumes = previousRoutingVolumes
                 let rollbackResult = await router.applyAndWait(
-                    targets: routingTargets(volumes: previousVolumes),
+                    targets: routingTargets(volumes: previousRoutingVolumes),
                     outputDeviceUID: snapshot.outputDeviceUID
                 )
                 guard isCurrentCanonicalOperation(
@@ -562,9 +565,9 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
                 return .failed(message: message)
             }
         case .failed:
-            canonicalRoutingVolumes = previousVolumes
+            canonicalRoutingVolumes = previousRoutingVolumes
             let rollbackResult = await router.applyAndWait(
-                targets: routingTargets(volumes: previousVolumes),
+                targets: routingTargets(volumes: previousRoutingVolumes),
                 outputDeviceUID: snapshot.outputDeviceUID
             )
             guard isCurrentCanonicalOperation(

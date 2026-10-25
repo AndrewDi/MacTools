@@ -422,6 +422,34 @@ final class AIAssistantPluginTests: XCTestCase {
         XCTAssertEqual(secret.saveCount, 1)
     }
 
+    func testSavedIncompleteDisabledDraftTransfersWithoutCredentialAccess() throws {
+        let source = makePlugin()
+        let active = AIAssistantProviderProfile.defaultProfile()
+        let draft = AIAssistantProviderProfile(id: "draft", name: "", isEnabled: false, baseURL: "", model: "")
+        XCTAssertNil(source.saveProviderConfiguration(profiles: [active, draft], apiKey: ""))
+        let data = try XCTUnwrap(source.makePortablePreferencesBackup())
+        let storage = AIAssistantInMemoryPluginStorage()
+        let secret = CountingAIAssistantSecretStore(apiKey: "local-secret")
+        let destination = makePlugin(storage: storage, secretStore: secret)
+        XCTAssertTrue(destination.restorePortablePreferencesReportingResult(from: data))
+        let saved = try XCTUnwrap(storage.data(forKey: AIAssistantConstants.StorageKey.providerProfiles))
+        let profiles = try JSONDecoder().decode([AIAssistantProviderProfile].self, from: saved)
+        XCTAssertEqual(profiles.first { $0.id == draft.id }, draft)
+
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        var incoming = try XCTUnwrap(object["profiles"] as? [[String: Any]])
+        incoming[1]["isEnabled"] = true
+        object["profiles"] = incoming
+        XCTAssertFalse(destination.restorePortablePreferencesReportingResult(from: try JSONSerialization.data(withJSONObject: object)))
+        incoming[1]["isEnabled"] = false
+        incoming[1]["baseURL"] = "https://gateway.example/v1?api_key=secret"
+        object["profiles"] = incoming
+        XCTAssertFalse(destination.restorePortablePreferencesReportingResult(from: try JSONSerialization.data(withJSONObject: object)))
+        XCTAssertEqual(storage.data(forKey: AIAssistantConstants.StorageKey.providerProfiles), saved)
+        XCTAssertEqual(secret.loadCount, 0)
+        XCTAssertEqual(secret.saveCount, 0)
+    }
+
     func testExcludedLegacyPromptStorageDoesNotBlockConfigurationTransfer() throws {
         let storage = AIAssistantInMemoryPluginStorage()
         let prompts = [AIAssistantPrompt(id: "private", name: "Private",

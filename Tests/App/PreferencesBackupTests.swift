@@ -755,6 +755,25 @@ final class PreferencesBackupTests: XCTestCase {
         XCTAssertEqual(targetHost.panelItems.map(\.pluginID), ["second", "first"])
     }
 
+    func testManualShortcutImportReplacesOmittedBindingsOnlyWhenSelected() throws {
+        let defaults = makeDefaults()
+        let store = ShortcutStore(userDefaults: defaults)
+        let host = makeHost(plugins: [BackupTestPlugin(id: "local-item", order: 1, shortcutID: "paste")], defaults: defaults)
+        defer { host.deactivateAllPlugins() }
+        let id = "local-item.shortcut.paste"
+        let binding = ShortcutBinding(keyCode: 12, modifiers: [.command, .option])
+        host.setShortcutBinding(binding, for: id)
+        let backup = PreferencesBackup(application: validApplicationPreferences,
+            pluginDisplay: .init(orderedPluginIDs: [], hiddenPluginIDs: []), shortcutCustomizations: [:])
+        var selection = backup.effectiveSelection
+        selection.includesShortcuts = false
+        XCTAssertTrue(try host.importPreferences(backup, selection: selection).shortcutErrors.isEmpty)
+        XCTAssertEqual(store.customization(for: id), .custom(binding))
+        selection.includesShortcuts = true
+        XCTAssertTrue(try host.importPreferences(backup, selection: selection).shortcutErrors.isEmpty)
+        XCTAssertEqual(store.customization(for: id), .inheritDefault)
+    }
+
     func testInvalidShortcutImportLeavesAllShortcutCustomizationsUntouched() throws {
         let defaults = makeDefaults()
         let host = makeHost(

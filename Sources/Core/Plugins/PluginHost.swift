@@ -5334,6 +5334,8 @@ final class PluginHost: ObservableObject {
                 (action, importedCustomizations[action.rawValue] ?? .inheritDefault)
             }
         )
+        // Importing Shortcuts replaces the entire selected category, including local item
+        // bindings omitted from the portable archive. Missing bindings return to defaults.
         let targetCustomizations = Dictionary(
             descriptors.map { descriptor in
                 (descriptor.itemID, importedCustomizations[descriptor.itemID] ?? .inheritDefault)

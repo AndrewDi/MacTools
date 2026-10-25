@@ -5539,73 +5539,73 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Only selected settings present in the backup are replaced. Omitted plugin settings and local data are preserved."
+            "value": "Only selected categories are replaced. Omitted plugin settings and local data are preserved. Importing Shortcuts resets omitted bindings to defaults."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "仅替换所选的备份设置；未包含的插件设置和本机数据会保留。"
+            "value": "仅替换所选类别；未包含的插件设置和本机数据会保留。导入快捷键时，备份中未包含的绑定会恢复为默认值。"
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "僅取代所選的備份設定；未包含的外掛設定和本機資料會保留。"
+            "value": "僅取代所選類別；未包含的外掛設定與本機資料會保留。匯入快捷鍵時，備份中未包含的綁定會回復為預設值。"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Solo se reemplazan los ajustes seleccionados presentes en la copia. Se conservan los ajustes omitidos y los datos locales."
+            "value": "Solo se reemplazan las categorías seleccionadas. Se conservan los ajustes de plugins omitidos y los datos locales. Al importar Atajos, las asignaciones omitidas vuelven a sus valores predeterminados."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Seuls les réglages sélectionnés présents dans la sauvegarde sont remplacés. Les réglages omis et les données locales sont conservés."
+            "value": "Seules les catégories sélectionnées sont remplacées. Les réglages des plugins omis et les données locales sont conservés. L’importation des raccourcis réinitialise les associations absentes de la sauvegarde à leurs valeurs par défaut."
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Заменяются только выбранные настройки из копии. Пропущенные настройки плагинов и локальные данные сохраняются."
+            "value": "Заменяются только выбранные категории. Пропущенные настройки плагинов и локальные данные сохраняются. При импорте сочетаний клавиш пропущенные назначения сбрасываются к значениям по умолчанию."
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Somente os ajustes selecionados presentes no backup são substituídos. Ajustes omitidos e dados locais são preservados."
+            "value": "Somente as categorias selecionadas são substituídas. Os ajustes de plugins omitidos e os dados locais são preservados. Ao importar Atalhos, as associações omitidas voltam aos valores padrão."
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nur ausgewählte Einstellungen aus der Sicherung werden ersetzt. Ausgelassene Plugin-Einstellungen und lokale Daten bleiben erhalten."
+            "value": "Nur ausgewählte Kategorien werden ersetzt. Ausgelassene Plugin-Einstellungen und lokale Daten bleiben erhalten. Beim Import von Kurzbefehlen werden fehlende Tastenzuweisungen auf ihre Standardwerte zurückgesetzt."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "バックアップに含まれる選択した設定のみ置き換えます。含まれないプラグイン設定とローカルデータは保持されます。"
+            "value": "選択したカテゴリのみ置き換えます。含まれないプラグイン設定とローカルデータは保持されます。ショートカットを読み込むと、バックアップにないキー割り当てはデフォルトに戻ります。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "백업에 포함된 선택한 설정만 대체합니다. 생략된 플러그인 설정과 로컬 데이터는 유지됩니다."
+            "value": "선택한 카테고리만 대체합니다. 포함되지 않은 플러그인 설정과 로컬 데이터는 유지됩니다. 단축키를 가져오면 백업에 없는 키 할당은 기본값으로 재설정됩니다."
           }
         },
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "تُستبدل الإعدادات المحددة الموجودة في النسخة فقط. تُحفظ إعدادات الإضافات غير المضمنة والبيانات المحلية."
+            "value": "تُستبدل الفئات المحددة فقط. تُحفظ إعدادات الإضافات غير المضمنة والبيانات المحلية. يؤدي استيراد اختصارات لوحة المفاتيح إلى إعادة تعيينات المفاتيح غير المضمنة إلى قيمها الافتراضية."
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Yalnızca yedekte bulunan seçili ayarlar değiştirilir. Dahil edilmeyen eklenti ayarları ve yerel veriler korunur."
+            "value": "Yalnızca seçili kategoriler değiştirilir. Dahil edilmeyen eklenti ayarları ve yerel veriler korunur. Kısayollar içe aktarılırken dahil edilmeyen tuş atamaları varsayılanlara döner."
           }
         }
       }
