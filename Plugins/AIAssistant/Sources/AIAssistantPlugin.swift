@@ -110,9 +110,11 @@ final class AIAssistantPlugin:
         let providerProfileStore = AIAssistantProviderProfileStore(storage: context.storage, localization: localization)
         self.providerProfileStore = providerProfileStore
         self.providerProfiles = providerProfileStore.loadProfiles()
-        PortableCredentialAuthorization(storage: context.storage).seedIfNeeded(
+        if !PortableCredentialAuthorization(storage: context.storage).seedIfNeeded(
             profiles: Dictionary(self.providerProfiles.map { ($0.id, $0.baseURL) }, uniquingKeysWith: { first, _ in first }),
-            store: Self.portableStore(storage: context.storage))
+            store: Self.portableStore(storage: context.storage)) {
+            AIAssistantLog.provider.error("Could not initialize local credential authorization.")
+        }
         self.promptStore = AIAssistantPromptStore(storage: context.storage, localization: localization)
         self.prompts = promptStore.loadPrompts()
         self.cachedAPIKey = nil

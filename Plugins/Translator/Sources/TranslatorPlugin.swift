@@ -139,9 +139,11 @@ final class TranslatorPlugin:
         let providerProfiles = providerProfileStore.loadProfiles()
         self.providerProfileStore = providerProfileStore
         self.providerProfiles = providerProfiles
-        PortableCredentialAuthorization(storage: context.storage).seedIfNeeded(
+        if !PortableCredentialAuthorization(storage: context.storage).seedIfNeeded(
             profiles: Dictionary(providerProfiles.map { ($0.id, $0.baseURL) }, uniquingKeysWith: { first, _ in first }),
-            store: Self.portableStore(storage: context.storage))
+            store: Self.portableStore(storage: context.storage)) {
+            TranslatorLog.provider.error("Could not initialize local credential authorization.")
+        }
         let languagePreferenceStore = LanguagePreferenceStore(storage: context.storage)
         self.languagePreferenceStore = languagePreferenceStore
         self.providerConfiguration = providerProfiles.first?.configuration

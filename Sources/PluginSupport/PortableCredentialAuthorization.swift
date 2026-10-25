@@ -44,10 +44,10 @@ struct PortableCredentialAuthorization {
     }
 
     /// Call before any import, once for existing destination profiles; no Keychain access.
-    func seedIfNeeded(profiles: [String: String], store: PortablePreferencesStore) {
-        guard storage.object(forKey: Self.key) == nil,
-              let data = try? JSONEncoder().encode(profiles.filter { Self.validGrant(profileID: $0.key, endpoint: $0.value) }) else { return }
-        _ = store.commit([Self.key: .data(data)])
+    func seedIfNeeded(profiles: [String: String], store: PortablePreferencesStore) -> Bool {
+        guard storage.object(forKey: Self.key) == nil else { return isInitialized }
+        guard let data = try? JSONEncoder().encode(profiles.filter { Self.validGrant(profileID: $0.key, endpoint: $0.value) }) else { return false }
+        return store.commit([Self.key: .data(data)])
     }
 
     /// Only a locally entered key may authorize a changed endpoint.

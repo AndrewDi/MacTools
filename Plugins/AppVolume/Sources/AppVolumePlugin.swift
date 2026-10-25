@@ -1,4 +1,5 @@
 import AppKit
+import CoreAudio
 import Foundation
 import SwiftUI
 import MacToolsPluginKit
@@ -86,7 +87,11 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
 
     private var snapshot = AudioApplicationSnapshot.empty
     var onPersistentPreferencesChange: (() -> Void)?
-    private var sessionVolumes: [String: Double]?
+    private struct PlaybackVolume {
+        let processObjectIDs: Set<AudioObjectID>
+        let gain: Double
+    }
+    private var preservedPlaybackVolumes: [String: PlaybackVolume] = [:]
     private var volumes: [String: Double]
     private var controlApplicationIDs: [String: String] = [:]
     private var isExpanded = false
@@ -238,7 +243,7 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
     }
 
     func activate(context: PluginRuntimeContext) {
-        sessionVolumes = nil
+        preservedPlaybackVolumes.removeAll()
         lifecycleGeneration &+= 1
         isActive = true
         monitor.start()
@@ -249,6 +254,7 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
         isActive = false
         canonicalRouteToken = nil
         canonicalRoutingVolumes = nil
+        preservedPlaybackVolumes.removeAll()
         pendingPanelVolumes.removeAll()
         lastRouteErrorMessage = nil
         accessTask?.cancel()
@@ -384,14 +390,27 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
 
     private func receive(_ snapshot: AudioApplicationSnapshot) {
         guard isActive else { return }
+        preservedPlaybackVolumes = preservedPlaybackVolumes.filter { id, playback in
+            snapshot.applications.contains {
+                $0.id == id && Set($0.processObjectIDs) == playback.processObjectIDs
+            }
+        }
         self.snapshot = snapshot
         rebuildControlApplicationIDs()
         applyCurrentTargets()
         onStateChange?()
     }
 
+    private var playbackVolumes: [String: Double] {
+        volumes.merging(preservedPlaybackVolumes.mapValues(\.gain), uniquingKeysWith: { _, gain in gain })
+    }
+
     private func applyCurrentTargets() {
-        var effectiveVolumes = canonicalRoutingVolumes ?? sessionVolumes ?? volumes
+        var effectiveVolumes = playbackVolumes
+        if let canonicalRoutingVolumes {
+            // Only the edited app is overridden while an asynchronous route operation is pending.
+            for (id, gain) in canonicalRoutingVolumes { effectiveVolumes[id] = gain }
+        }
         for (applicationID, gain) in pendingPanelVolumes {
             effectiveVolumes[applicationID] = gain
         }
@@ -507,10 +526,9 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
         let previousVolumes = volumes
         var candidateVolumes = volumes
         candidateVolumes[applicationID] = gain
-        let previousRoutingVolumes = sessionVolumes ?? volumes
-        var candidateRoutingVolumes = previousRoutingVolumes
+        var candidateRoutingVolumes = playbackVolumes
         candidateRoutingVolumes[applicationID] = gain
-        canonicalRoutingVolumes = candidateRoutingVolumes
+        canonicalRoutingVolumes = [applicationID: gain]
         let targets = routingTargets(volumes: candidateRoutingVolumes)
         let applyResult = await router.applyAndWait(
             targets: targets,
@@ -527,15 +545,15 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
             switch persistVolumes(candidateVolumes) {
             case .committed:
                 volumes = candidateVolumes
-                if sessionVolumes != nil { sessionVolumes = candidateRoutingVolumes }
+                preservedPlaybackVolumes.removeValue(forKey: applicationID)
                 if candidateVolumes != previousVolumes { onPersistentPreferencesChange?() }
                 lastRouteErrorMessage = nil
                 onStateChange?()
                 return .succeeded()
             case let .rejected(rollbackSucceeded):
-                canonicalRoutingVolumes = previousRoutingVolumes
+                canonicalRoutingVolumes = nil
                 let rollbackResult = await router.applyAndWait(
-                    targets: routingTargets(volumes: previousRoutingVolumes),
+                    targets: routingTargets(volumes: playbackVolumes),
                     outputDeviceUID: snapshot.outputDeviceUID
                 )
                 guard isCurrentCanonicalOperation(
@@ -565,9 +583,9 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
                 return .failed(message: message)
             }
         case .failed:
-            canonicalRoutingVolumes = previousRoutingVolumes
+            canonicalRoutingVolumes = nil
             let rollbackResult = await router.applyAndWait(
-                targets: routingTargets(volumes: previousRoutingVolumes),
+                targets: routingTargets(volumes: playbackVolumes),
                 outputDeviceUID: snapshot.outputDeviceUID
             )
             guard isCurrentCanonicalOperation(
@@ -867,7 +885,12 @@ extension AppVolumePlugin: PluginPortablePreferencesProviding, PluginPortablePre
             .merging(payload.applications, uniquingKeysWith: { _, incoming in incoming })
         guard case .committed = persistVolumes(candidate) else { return false }
         if candidate != volumes {
-            if isActive, sessionVolumes == nil { sessionVolumes = volumes }
+            if isActive {
+                let currentVolumes = playbackVolumes
+                preservedPlaybackVolumes = Dictionary(uniqueKeysWithValues: snapshot.applications.map {
+                    ($0.id, PlaybackVolume(processObjectIDs: Set($0.processObjectIDs), gain: currentVolumes[$0.id] ?? 1))
+                })
+            }
             volumes = candidate
             onPersistentPreferencesChange?()
         }
