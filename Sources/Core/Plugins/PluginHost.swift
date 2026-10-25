@@ -1312,9 +1312,6 @@ final class PluginHost: ObservableObject {
                 )
             } else { entry.value }
         }
-        let shortcutCustomizations = backup.shortcutCustomizations.merging(
-            local?.shortcutCustomizations ?? [:], uniquingKeysWith: { _, local in local }
-        )
         preferencesBackupRestoreContext = restoreContext
         defer {
             preferencesBackupRestoreContext = nil
@@ -1409,6 +1406,11 @@ final class PluginHost: ObservableObject {
             )
         }
         if selection.includesShortcuts {
+            // Source definitions must succeed before their recorder bindings can transfer.
+            // Merge destination-only cloud bindings afterward; they are not incoming content.
+            let shortcutCustomizations = restorableShortcutCustomizations(
+                backup.shortcutCustomizations, context: restoreContext
+            ).merging(local?.shortcutCustomizations ?? [:], uniquingKeysWith: { _, local in local })
             if backup.actionShortcutAssignmentsWereEncoded {
                 let descriptors = shortcutDescriptors()
                 let appCustomizations = Dictionary(
@@ -5321,6 +5323,20 @@ final class PluginHost: ObservableObject {
             $0.pluginID == pluginID && $0.definition.id == shortcutDefinitionID
         }), eventShortcutConflictError(for: descriptor, descriptors: descriptors) == nil else { return nil }
         return legacyResolvedBinding(for: descriptor)
+    }
+
+    private func restorableShortcutCustomizations(
+        _ incoming: [String: ShortcutCustomization],
+        context: PreferencesActionRestoreContext
+    ) -> [String: ShortcutCustomization] {
+        var result = incoming
+        for descriptor in shortcutDescriptors() where descriptor.plugin is any PluginActionReferenceBackupProviding {
+            let reference = ActionReference(key: .init(providerID: descriptor.pluginID, actionID: descriptor.definition.actionID))
+            if actionReferenceRestorePortability(reference, context: context) == .knownNonPortable {
+                result.removeValue(forKey: descriptor.itemID)
+            }
+        }
+        return result
     }
 
     private func applyImportedShortcutCustomizations(

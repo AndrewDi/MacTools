@@ -272,6 +272,62 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertTrue(PortableCredentialAuthorization(storage: storage).allows(profileID: local.id, baseURL: local.baseURL))
     }
 
+    func testCredentialValidationPrecedesAllProviderWrites() throws {
+        for scenario in ["A-first-B-blank", "B-first-B-blank", "both-keys-present", "B-write-fails"] {
+            let storage = TranslatorInMemoryPluginStorage()
+            let profile = TranslatorProviderProfile.defaultProfile()
+            let other = TranslatorProviderProfile(id: "other", name: "Other", baseURL: "https://other.example/v1")
+            let secret = ValidationScopedTranslatorSecrets(legacy: nil, scoped: [profile.id: "original-local-key"])
+            let plugin = makePlugin(storage: storage, secretStore: secret)
+            XCTAssertNil(plugin.saveConfiguration(profiles: [profile], apiKeys: [:],
+                languagePair: .init(first: .english, second: .simplifiedChinese)))
+            let profiles = scenario == "B-first-B-blank" ? [other, profile] : [profile, other]
+            var keys = [profile.id: "original-local-key"]
+            if scenario == "both-keys-present" || scenario == "B-write-fails" { keys[other.id] = "other-key" }
+            if scenario == "B-write-fails" { secret.rejectedProfileID = other.id }
+            let error = plugin.saveConfiguration(profiles: profiles, apiKeys: keys,
+                languagePair: .init(first: .english, second: .simplifiedChinese))
+            let authorization = PortableCredentialAuthorization(storage: storage)
+            let allowed = authorization.allows(profileID: profile.id, baseURL: profile.baseURL)
+            XCTAssertEqual(error != nil, scenario != "both-keys-present")
+            XCTAssertTrue(allowed)
+            XCTAssertEqual(try secret.loadAPIKey(forProfileID: profile.id), "original-local-key")
+            if error != nil { XCTAssertEqual(TranslatorProviderProfileStore(storage: storage).loadProfiles(), [profile]) }
+            let reloaded = makePlugin(storage: storage, secretStore: secret)
+            let retryError = reloaded.saveConfiguration(profiles: [profile], apiKeys: [:],
+                languagePair: .init(first: .english, second: .simplifiedChinese))
+            XCTAssertNil(retryError)
+
+        }
+    }
+
+    func testFailedScopedReplacementVerifiesEffectiveLegacyKey() throws {
+        for scenario in ["legacy-only-fail-before-write", "scoped-fail-before-write", "legacy-success", "legacy-partial-write-failure"] {
+            let storage = TranslatorInMemoryPluginStorage()
+            let profile = TranslatorProviderProfile.defaultProfile()
+            let isScoped = scenario == "scoped-fail-before-write"
+            let secret = ValidationScopedTranslatorSecrets(legacy: isScoped ? nil : "original-local-key",
+                scoped: isScoped ? [profile.id:"original-local-key"] : [:])
+            let plugin = makePlugin(storage: storage, secretStore: secret)
+            XCTAssertNil(plugin.saveConfiguration(profiles: [profile], apiKeys: [:],
+                languagePair: .init(first: .english, second: .simplifiedChinese)))
+            secret.writeMode = scenario == "legacy-success" ? .success
+                : scenario == "legacy-partial-write-failure" ? .writeThenFail : .failBeforeWrite
+            let error = plugin.saveConfiguration(profiles: [profile], apiKeys: [profile.id:"replacement-local-key"],
+                languagePair: .init(first: .english, second: .simplifiedChinese))
+            let allowed = PortableCredentialAuthorization(storage: storage).allows(profileID: profile.id, baseURL: profile.baseURL)
+            XCTAssertEqual(error != nil, scenario != "legacy-success")
+            XCTAssertEqual(allowed, scenario != "legacy-partial-write-failure")
+            if !isScoped { XCTAssertEqual(try secret.loadAPIKey(), "original-local-key") }
+            if scenario == "legacy-only-fail-before-write" { XCTAssertNil(try secret.loadAPIKey(forProfileID: profile.id)) }
+            let reloaded = makePlugin(storage: storage, secretStore: secret)
+            let retryError = reloaded.saveConfiguration(profiles: [profile], apiKeys: [:],
+                languagePair: .init(first: .english, second: .simplifiedChinese))
+            XCTAssertEqual(retryError != nil, !allowed)
+
+        }
+    }
+
     private func makePlugin(
         storage: TranslatorInMemoryPluginStorage? = nil,
         accessibilityTrustProvider: @escaping () -> Bool = { true },
@@ -351,4 +407,27 @@ private final class RecordingTranslatorPanelController: TranslatorPanelControlli
     func show(snapshot _: TranslatorPanelSnapshot) {}
     func update(snapshot _: TranslatorPanelSnapshot) {}
     func close() {}
+}
+
+private final class ValidationScopedTranslatorSecrets: TranslatorSecretStoring, @unchecked Sendable {
+    enum WriteMode { case success, failBeforeWrite, writeThenFail }
+    private var legacy: String?
+    private var scoped: [String: String]
+    var rejectedProfileID: String?
+    var writeMode = WriteMode.success
+    private(set) var scopedWriteCount = 0
+    init(legacy: String?, scoped: [String: String]) { self.legacy = legacy; self.scoped = scoped }
+    func containsAPIKey() throws -> Bool { legacy != nil }
+    func containsAPIKey(forProfileID profileID: String) throws -> Bool { scoped[profileID] != nil }
+    func loadAPIKey() throws -> String? { legacy }
+    func loadAPIKey(forProfileID profileID: String) throws -> String? { scoped[profileID] }
+    func saveAPIKey(_ apiKey: String) throws { legacy = apiKey }
+    func saveAPIKey(_ apiKey: String, forProfileID profileID: String) throws {
+        scopedWriteCount += 1
+        if profileID == rejectedProfileID || writeMode == .failBeforeWrite { throw CocoaError(.fileWriteUnknown) }
+        scoped[profileID] = apiKey
+        if writeMode == .writeThenFail { throw CocoaError(.fileWriteUnknown) }
+    }
+    func deleteAPIKey() throws { legacy = nil }
+    func deleteAPIKey(forProfileID profileID: String) throws { scoped.removeValue(forKey: profileID) }
 }

@@ -71,6 +71,25 @@ final class AIAssistantPluginTests: XCTestCase {
         }
     }
 
+    func testPreferenceWriteFailureRestoresOnlyUnchangedCredentialGrants() throws {
+        for key in ["original-local-key", "replacement-local-key"] {
+            let storage = AIAssistantInMemoryPluginStorage()
+            let secret = CountingAIAssistantSecretStore(apiKey: "original-local-key")
+            let plugin = makePlugin(storage: storage, secretStore: secret)
+            let original = AIAssistantProviderProfile.defaultProfile()
+            XCTAssertNil(plugin.saveProviderConfiguration(profiles: [original], apiKey: ""))
+            var edited = original
+            edited.name = "Edited name"
+            storage.blockedSetKeys = [AIAssistantConstants.StorageKey.providerProfiles]
+            XCTAssertNotNil(plugin.saveProviderConfiguration(profiles: [edited], apiKey: key))
+            XCTAssertEqual(AIAssistantProviderProfileStore(storage: storage).loadProfiles(), [original])
+            XCTAssertEqual(PortableCredentialAuthorization(storage: storage).allows(profileID: original.id, baseURL: original.baseURL), key == "original-local-key")
+            storage.blockedSetKeys = []
+            let reloaded = makePlugin(storage: storage, secretStore: secret)
+            XCTAssertEqual(reloaded.saveProviderConfiguration(profiles: [original], apiKey: "") == nil, key == "original-local-key")
+        }
+    }
+
     func testMetadataMatchesManifestContract() {
         let plugin = makePlugin()
 
@@ -558,6 +577,78 @@ final class AIAssistantPluginTests: XCTestCase {
         XCTAssertEqual(plugin.makePortablePreferencesBackup(), before)
     }
 
+    func testRecorderImportRequiresSuccessfulSelectedDefinition() async throws {
+        for scenario in ["accepted", "rejected", "definition-unselected", "shortcuts-unselected"] {
+            let sourceStorage = AIAssistantInMemoryPluginStorage()
+            let source = makePlugin(storage: sourceStorage)
+            let destinationStorage = AIAssistantInMemoryPluginStorage()
+            let panel = RecordingAIAssistantPanelController()
+            let destination = makePlugin(storage: destinationStorage, panelController: panel,
+                providerFactoryOverride: { .success(ResolvedAIProvider(title: "Synthetic", client: ValidationEchoAIProcessor(),
+                    configuration: AIAssistantProviderProfile.defaultProfile().configuration, apiKey: "synthetic-key")) },
+                strategies: [StaticSelectionCapture(text: "synthetic")])
+            let id = "shared"
+            let sourcePrompt = AIAssistantPrompt(id: id, name: "Source", template: "Source {{text}}", isEnabled: true)
+            let destinationPrompt = AIAssistantPrompt(id: id, name: "Destination", template: "Destination {{text}}", isEnabled: true)
+            XCTAssertNil(source.savePromptsConfiguration([sourcePrompt]))
+            XCTAssertNil(destination.savePromptsConfiguration([destinationPrompt]))
+            source.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: true))
+            if scenario == "accepted" {
+                destination.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: true))
+            }
+            let sourceSuite = "ValidationSource." + UUID().uuidString
+            let destinationSuite = "ValidationDestination." + UUID().uuidString
+            let sourceDefaults = try XCTUnwrap(UserDefaults(suiteName: sourceSuite))
+            let destinationDefaults = try XCTUnwrap(UserDefaults(suiteName: destinationSuite))
+            defer { sourceDefaults.removePersistentDomain(forName: sourceSuite); destinationDefaults.removePersistentDomain(forName: destinationSuite) }
+            let sourceHost = PluginHost(plugins: [source], shortcutStore: .init(userDefaults: sourceDefaults),
+                pluginOrderingStore: .init(userDefaults: sourceDefaults), preferencesBackupStore: PreferencesBackupStore(userDefaults: sourceDefaults),
+                globalShortcutManager: .init(registrar: FakeCarbonHotKeyRegistrar()), loadDynamicPluginsOnInit: false)
+            let destinationShortcuts = ShortcutStore(userDefaults: destinationDefaults)
+            let registrar = FakeCarbonHotKeyRegistrar()
+            let destinationHost = PluginHost(plugins: [destination], shortcutStore: destinationShortcuts,
+                pluginOrderingStore: .init(userDefaults: destinationDefaults), preferencesBackupStore: PreferencesBackupStore(userDefaults: destinationDefaults),
+                globalShortcutManager: .init(registrar: registrar), loadDynamicPluginsOnInit: false)
+            defer { sourceHost.deactivateAllPlugins(); destinationHost.deactivateAllPlugins() }
+            let shortcutID = "ai-assistant.shortcut." + (try XCTUnwrap(source.shortcutDefinitions.first)).id
+            let chord = ShortcutBinding(keyCode: 97, modifiers: [.command, .option, .control, .shift])
+            let canonicalChord = ShortcutBinding(keyCode: 98, modifiers: [.command, .option, .control, .shift])
+            let originalDestinationChord = ShortcutBinding(keyCode: 96, modifiers: [.command, .option, .control, .shift])
+            XCTAssertNil(sourceHost.setShortcutBindingAndReturnError(chord, for: shortcutID))
+            XCTAssertNil(destinationHost.setShortcutBindingAndReturnError(originalDestinationChord, for: shortcutID))
+            let reference = ActionReference(key: .init(providerID: "ai-assistant", actionID: id))
+            guard case .success = sourceHost.setActionShortcutBinding(canonicalChord, to: reference) else {
+                return XCTFail("Unable to create canonical control")
+            }
+            let archive = try sourceHost.makePreferencesBackupExport().requiringSuccessfulSelection()
+            var selection = archive.effectiveSelection
+            if scenario == "definition-unselected" { selection.pluginPreferenceIDs = [] }
+            if scenario == "shortcuts-unselected" { selection.includesShortcuts = false }
+            let result = try destinationHost.importPreferences(archive, selection: selection)
+            let rejected = result.shortcutErrors["plugin-preferences.ai-assistant"] != nil
+            let recorderAttached = destinationShortcuts.customization(for: shortcutID) == .custom(chord)
+            let canonicalAttached = destinationHost.shortcutAssignmentService.assignment(for: reference) != nil
+            XCTAssertEqual(rejected, scenario == "rejected" || scenario == "shortcuts-unselected")
+            XCTAssertEqual(recorderAttached, scenario == "accepted")
+            XCTAssertEqual(canonicalAttached, scenario == "accepted")
+            let expectedPrompt = scenario == "accepted" ? sourcePrompt : destinationPrompt
+            XCTAssertEqual(AIAssistantPromptStore(storage: destinationStorage).loadPrompts(), [expectedPrompt])
+            if scenario == "shortcuts-unselected" {
+                XCTAssertEqual(destinationShortcuts.customization(for: shortcutID), .custom(originalDestinationChord))
+            } else if scenario == "accepted" {
+                XCTAssertTrue(registrar.registeredBindings.contains(chord))
+            } else {
+                XCTAssertEqual(destinationShortcuts.customization(for: shortcutID), .inheritDefault)
+            }
+            destination.handleShortcutEvent(id: id, phase: .pressed)
+            for _ in 0..<100 where panel.snapshot?.phase != .success {
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            XCTAssertEqual(panel.snapshot?.result?.text, scenario == "accepted" ? "Source synthetic" : "Destination synthetic")
+
+        }
+    }
+
     // MARK: - Helpers
 
     private func makePlugin(
@@ -671,5 +762,11 @@ private final class RecordingAIAssistantPanelController: AIAssistantPanelControl
 
     func close() {
         isVisible = false
+    }
+}
+
+private struct ValidationEchoAIProcessor: AIProcessing {
+    func complete(prompt: String, systemPrompt: String?, configuration: OpenAICompatibleConfiguration, apiKey: String) async throws -> AIProcessResult {
+        AIProcessResult(providerTitle: "Synthetic", text: prompt, reasoningText: nil, sourceText: "", promptName: "")
     }
 }

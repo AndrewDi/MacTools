@@ -795,25 +795,21 @@ final class AIAssistantPlugin:
             return localization.string("panelError.missingAPIKey", defaultValue: "请配置 API Key")
         }
         do {
-            if let normalizedAPIKey = Self.normalizedAPIKey(apiKey) {
+            let previousBackup = makePortablePreferencesBackup()
+            let profilesData = try JSONEncoder().encode(profiles.map { $0.normalized() })
+            var replacements: [PortableCredentialAuthorization.Replacement] = []
+            var endpoints: [String: String] = [:]
+            if let key = Self.normalizedAPIKey(apiKey) {
                 cachedAPIKey = nil
                 didLoadAPIKey = false
-                try credentialAuthorization.replaceCredential(
-                    store: portableStore,
-                    load: { try secretStore.loadAPIKey() },
-                    save: { try secretStore.saveAPIKey(normalizedAPIKey) }
-                )
-                cachedAPIKey = normalizedAPIKey
-                didLoadAPIKey = true
+                replacements = [.init(profileIDs: nil,
+                    load: { try self.secretStore.loadAPIKey() },
+                    save: { try self.secretStore.saveAPIKey(key) })]
+                endpoints = Dictionary(profiles.map { ($0.id, $0.baseURL) }, uniquingKeysWith: { first, _ in first })
             }
-
-            let previousBackup = makePortablePreferencesBackup()
-            try providerProfileStore.saveProfiles(profiles)
+            try credentialAuthorization.replaceCredentials(replacements, authorizing: endpoints,
+                values: [AIAssistantConstants.StorageKey.providerProfiles: .data(profilesData)], store: portableStore)
             providerProfiles = providerProfileStore.loadProfiles()
-            if Self.normalizedAPIKey(apiKey) != nil {
-                guard let grants = credentialAuthorization.granting(Dictionary(profiles.map { ($0.id, $0.baseURL) }, uniquingKeysWith: { first, _ in first })),
-                      portableStore.commit([PortableCredentialAuthorization.key: .data(grants)]) else { throw CocoaError(.fileWriteUnknown) }
-            }
             apiKeyState = .present
             if let coordinator {
                 coordinator.close()

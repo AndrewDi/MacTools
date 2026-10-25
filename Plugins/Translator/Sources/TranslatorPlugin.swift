@@ -574,77 +574,44 @@ final class TranslatorPlugin:
         }
 
         do {
-            // Compute removed profiles before saving because `providerProfiles` still reflects
-            // the persisted state at this point.
-            let retainedProfileIDs = Set(profiles.map(\.id))
-            let removedProfileIDs = providerProfiles
-                .map(\.id)
-                .filter { !retainedProfileIDs.contains($0) }
-            var savedCredentialEndpoints: [String: String] = [:]
-
-            for profile in profiles where profile.isEnabled {
-                let apiKey = apiKeys[profile.id]
-                if Self.normalizedAPIKey(apiKey) == nil, !credentialAuthorization.allows(profileID: profile.id, baseURL: profile.baseURL) {
+            // Complete credential validation before the first Keychain or preferences write.
+            for profile in profiles where profile.isEnabled && Self.normalizedAPIKey(apiKeys[profile.id]) == nil {
+                guard credentialAuthorization.allows(profileID: profile.id, baseURL: profile.baseURL),
+                      try secretStore.containsAPIKey(forProfileID: profile.id)
+                        || (profile.id == TranslatorProviderProfile.defaultID && hasKnownAPIKey) else {
                     apiKeyState = .missing
                     onStateChange?()
                     return localization.string("settings.error.blankAPIKey", defaultValue: "API Key 不能为空。")
                 }
-                if let normalizedAPIKey = Self.normalizedAPIKey(apiKey) {
-                    cachedAPIKeys.removeValue(forKey: profile.id)
-                    didLoadProfileAPIKeys.remove(profile.id)
-                    if profile.id == TranslatorProviderProfile.defaultID {
-                        cachedAPIKey = nil
-                        didLoadAPIKey = false
-                    }
-                    try credentialAuthorization.replaceCredential(
-                        for: [profile.id], store: portableStore,
-                        load: { try secretStore.loadAPIKey(forProfileID: profile.id) },
-                        save: { try secretStore.saveAPIKey(normalizedAPIKey, forProfileID: profile.id) }
-                    )
-                    savedCredentialEndpoints[profile.id] = profile.baseURL
-                    cachedAPIKeys[profile.id] = normalizedAPIKey
-                    didLoadProfileAPIKeys.insert(profile.id)
-                } else if try secretStore.containsAPIKey(forProfileID: profile.id) {
-                    cachedAPIKeys.removeValue(forKey: profile.id)
-                    didLoadProfileAPIKeys.remove(profile.id)
-                } else if profile.id == TranslatorProviderProfile.defaultID, hasKnownAPIKey {
-                    cachedAPIKeys.removeValue(forKey: profile.id)
-                    didLoadProfileAPIKeys.remove(profile.id)
-                } else {
-                    apiKeyState = .missing
-                    onStateChange?()
-                    if profiles.count == 1, profile.id == TranslatorProviderProfile.defaultID {
-                        return localization.string("settings.error.blankAPIKey", defaultValue: "API Key 不能为空。")
-                    }
-                    return localization.format(
-                        "settings.error.providerBlankAPIKeyFormat",
-                        defaultValue: "%@：API Key 不能为空。",
-                        profile.normalizedName.isEmpty
-                            ? localization.string("settings.provider.fallbackName", defaultValue: "翻译服务")
-                            : profile.normalizedName
-                    )
-                }
             }
-
-            // Remove stale Keychain credentials and caches for deleted profiles.
-            for removedID in removedProfileIDs {
-                try secretStore.deleteAPIKey(forProfileID: removedID)
-                cachedAPIKeys.removeValue(forKey: removedID)
-                didLoadProfileAPIKeys.remove(removedID)
+            let profilesData = try JSONEncoder().encode(profiles.map { $0.normalized() })
+            let retainedIDs = Set(profiles.map(\.id))
+            let removedIDs = providerProfiles.map(\.id).filter { !retainedIDs.contains($0) }
+            var replacements: [PortableCredentialAuthorization.Replacement] = []
+            var endpoints: [String: String] = [:]
+            for profile in profiles where profile.isEnabled {
+                guard let key = Self.normalizedAPIKey(apiKeys[profile.id]) else { continue }
+                endpoints[profile.id] = profile.baseURL
+                replacements.append(.init(profileIDs: [profile.id],
+                    load: { try self.loadRawAPIKey(forProfileID: profile.id) },
+                    save: { try self.secretStore.saveAPIKey(key, forProfileID: profile.id) }))
             }
-
+            for id in removedIDs {
+                replacements.append(.init(profileIDs: [id],
+                    load: { try self.loadRawAPIKey(forProfileID: id) },
+                    save: { try self.secretStore.deleteAPIKey(forProfileID: id) }))
+            }
             let previousBackup = makePortablePreferencesBackup()
-            guard let profilesData = try? JSONEncoder().encode(profiles.map { $0.normalized() }),
-                  portableStore.commit([
-                    TranslatorConstants.StorageKey.providerProfiles: .data(profilesData),
-                    TranslatorConstants.StorageKey.firstPreferredLanguage: .string(languagePair.first.rawValue),
-                    TranslatorConstants.StorageKey.secondPreferredLanguage: .string(languagePair.second.rawValue)
-                  ]) else { throw CocoaError(.fileWriteUnknown) }
+            cachedAPIKeys.removeAll()
+            didLoadProfileAPIKeys.removeAll()
+            cachedAPIKey = nil
+            didLoadAPIKey = false
+            try credentialAuthorization.replaceCredentials(replacements, authorizing: endpoints, values: [
+                TranslatorConstants.StorageKey.providerProfiles: .data(profilesData),
+                TranslatorConstants.StorageKey.firstPreferredLanguage: .string(languagePair.first.rawValue),
+                TranslatorConstants.StorageKey.secondPreferredLanguage: .string(languagePair.second.rawValue)
+            ], store: portableStore)
             providerProfiles = providerProfileStore.loadProfiles()
-            if !savedCredentialEndpoints.isEmpty {
-                guard let grants = credentialAuthorization.granting(savedCredentialEndpoints),
-                      portableStore.commit([PortableCredentialAuthorization.key: .data(grants)]) else { throw CocoaError(.fileWriteUnknown) }
-            }
             providerConfiguration = providerProfiles.first?.configuration
                 ?? OpenAICompatibleConfiguration(
                     promptTemplate: OpenAICompatibleConfiguration.defaultPromptTemplate(localization: localization)
@@ -838,28 +805,24 @@ final class TranslatorPlugin:
             return cachedAPIKeys[profileID]
         }
 
-        let profileKey = try secretStore.loadAPIKey(forProfileID: profileID)
-        if Self.hasNonEmptyAPIKey(profileKey) {
-            cachedAPIKeys[profileID] = profileKey
+        if let key = try loadRawAPIKey(forProfileID: profileID), Self.hasNonEmptyAPIKey(key) {
+            cachedAPIKeys[profileID] = key
             didLoadProfileAPIKeys.insert(profileID)
-            updateLegacyAPIKeyCacheIfNeeded(profileID: profileID, apiKey: profileKey)
-            return profileKey
-        }
-
-        if profileID == TranslatorProviderProfile.defaultID {
-            let legacyKey = try secretStore.loadAPIKey()
-            if Self.hasNonEmptyAPIKey(legacyKey) {
-                cachedAPIKeys[profileID] = legacyKey
-                didLoadProfileAPIKeys.insert(profileID)
-                updateLegacyAPIKeyCacheIfNeeded(profileID: profileID, apiKey: legacyKey)
-                return legacyKey
-            }
+            updateLegacyAPIKeyCacheIfNeeded(profileID: profileID, apiKey: key)
+            return key
         }
 
         cachedAPIKeys.removeValue(forKey: profileID)
         didLoadProfileAPIKeys.insert(profileID)
         updateLegacyAPIKeyCacheIfNeeded(profileID: profileID, apiKey: nil)
         return nil
+    }
+
+    /// Raw resolution must throw on an unreadable scoped entry instead of falling back.
+    private func loadRawAPIKey(forProfileID profileID: String) throws -> String? {
+        let scoped = try secretStore.loadAPIKey(forProfileID: profileID)
+        if Self.hasNonEmptyAPIKey(scoped) { return scoped }
+        return profileID == TranslatorProviderProfile.defaultID ? try secretStore.loadAPIKey() : nil
     }
 
     private func updateLegacyAPIKeyCacheIfNeeded(profileID: String, apiKey: String?) {

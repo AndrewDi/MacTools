@@ -22,6 +22,7 @@ enum ClipboardSnippetKeywordExpansionStatus: Equatable, Sendable {
 @MainActor
 final class ClipboardHistorySettingsStore: ObservableObject {
     private enum Key {
+        static let retentionDeferred = "retention-restoration-deferred.v1"
         static let isPaused = "collection-paused"
         static let maximumItemCount = "maximum-item-count"
         static let expirationDays = "expiration-days"
@@ -97,7 +98,7 @@ final class ClipboardHistorySettingsStore: ObservableObject {
             guard !isApplyingPortableSnapshot, maximumItemCount != oldValue else { return }
             let candidate = Self.validItemCount(maximumItemCount)
             let previous = portableStore.currentValues()
-            guard portableStore.commit([Key.maximumItemCount: .integer(candidate)]) else {
+            guard portableStore.commit([Key.maximumItemCount: .integer(candidate), Key.retentionDeferred: .boolean(false)]) else {
                 isApplyingPortableSnapshot = true
                 maximumItemCount = oldValue
                 isApplyingPortableSnapshot = false
@@ -116,7 +117,7 @@ final class ClipboardHistorySettingsStore: ObservableObject {
             guard !isApplyingPortableSnapshot, expiration != oldValue else { return }
             let candidate = expiration
             let previous = portableStore.currentValues()
-            guard portableStore.commit([Key.expirationDays: .integer(candidate.rawValue)]) else {
+            guard portableStore.commit([Key.expirationDays: .integer(candidate.rawValue), Key.retentionDeferred: .boolean(false)]) else {
                 isApplyingPortableSnapshot = true
                 expiration = oldValue
                 isApplyingPortableSnapshot = false
@@ -135,7 +136,7 @@ final class ClipboardHistorySettingsStore: ObservableObject {
             guard !isApplyingPortableSnapshot, maximumItemByteCount != oldValue else { return }
             let candidate = Self.validItemByteCount(maximumItemByteCount)
             let previous = portableStore.currentValues()
-            guard portableStore.commit([Key.maximumItemByteCount: .integer(candidate)]) else {
+            guard portableStore.commit([Key.maximumItemByteCount: .integer(candidate), Key.retentionDeferred: .boolean(false)]) else {
                 isApplyingPortableSnapshot = true
                 maximumItemByteCount = oldValue
                 isApplyingPortableSnapshot = false
@@ -154,7 +155,7 @@ final class ClipboardHistorySettingsStore: ObservableObject {
             guard !isApplyingPortableSnapshot, maximumTotalPayloadByteCount != oldValue else { return }
             let candidate = Self.validTotalPayloadByteCount(maximumTotalPayloadByteCount)
             let previous = portableStore.currentValues()
-            guard portableStore.commit([Key.maximumTotalPayloadByteCount: .integer(candidate)]) else {
+            guard portableStore.commit([Key.maximumTotalPayloadByteCount: .integer(candidate), Key.retentionDeferred: .boolean(false)]) else {
                 isApplyingPortableSnapshot = true
                 maximumTotalPayloadByteCount = oldValue
                 isApplyingPortableSnapshot = false
@@ -250,6 +251,7 @@ final class ClipboardHistorySettingsStore: ObservableObject {
     private static func portableStore(storage: any PluginStorage) -> PortablePreferencesStore {
         let defaults = ClipboardHistorySettings.defaults
         return PortablePreferencesStore(storage: storage, fields: [
+            Key.retentionDeferred: .boolean(false),
             Key.maximumItemCount: integer(defaults.maximumItemCount, allowed: allowedItemCounts),
             Key.expirationDays: integer(defaults.expiration.rawValue, allowed: ClipboardHistoryExpiration.allCases.map(\.rawValue)),
             Key.maximumItemByteCount: integer(defaults.maximumItemByteCount, allowed: allowedItemByteCounts),
@@ -267,13 +269,39 @@ final class ClipboardHistorySettingsStore: ObservableObject {
         ])
     }
     private var portableStore: PortablePreferencesStore { Self.portableStore(storage: storage) }
+    private static var portableKeys: Set<String> {
+        [Key.maximumItemCount, Key.expirationDays, Key.maximumItemByteCount, Key.maximumTotalPayloadByteCount,
+         Key.sequentialHUDDismissal, Key.hidesSequentialHUDPreview, Key.maximumExpandedTextByteCount, Key.excludedApplications]
+    }
+
+    var isRetentionDeferred: Bool {
+        guard portableStore.recover(),
+              let values = portableStore.currentValues(including: [Key.retentionDeferred]),
+              case let .boolean(deferred) = values[Key.retentionDeferred] else { return true }
+        return deferred
+    }
+
+    @discardableResult
+    func setRetentionDeferred(_ deferred: Bool) -> Bool {
+        guard portableStore.recover() else { return false }
+        if portableStore.currentValues(including: [Key.retentionDeferred])?[Key.retentionDeferred] == .boolean(deferred) { return true }
+        return portableStore.commit([Key.retentionDeferred: .boolean(deferred)])
+    }
+
     func portableBackup() -> Data? {
         guard let apps = try? JSONEncoder().encode(Self.normalizedApplications(excludedApplications).sorted { $0.bundleIdentifier < $1.bundleIdentifier }) else { return nil }
-        return portableStore.backup(overriding: [Key.excludedApplications: .data(apps)])
+        return portableStore.backup(including: Self.portableKeys, overriding: [Key.excludedApplications: .data(apps)])
     }
     func restorePortableBackup(_ data: Data) -> Bool {
         let previous = portableBackup()
-        guard portableStore.restore(data) else { return false }
+        guard var values = portableStore.validatedValues(from: data),
+              Set(values.keys).isSubset(of: Self.portableKeys), portableStore.recover(),
+              let current = portableStore.currentValues(including: Self.portableKeys) else { return false }
+        let retentionKeys: Set<String> = [Key.maximumItemCount, Key.expirationDays, Key.maximumItemByteCount, Key.maximumTotalPayloadByteCount]
+        if retentionKeys.contains(where: { values[$0] != nil && values[$0] != current[$0] }) {
+            values[Key.retentionDeferred] = .boolean(true)
+        }
+        guard portableStore.commit(values) else { return false }
         let restored = ClipboardHistorySettingsStore(storage: storage)
         isApplyingPortableSnapshot = true
         maximumItemCount = restored.maximumItemCount

@@ -30,25 +30,50 @@ struct PortableCredentialAuthorization {
         return Self.field.accepts(.data(data))
     }
 
-    /// Revoke before writing so an interrupted replacement cannot reuse an old endpoint grant.
-    /// Restore grants after failure only when a fresh read proves the secret is unchanged.
-    func replaceCredential(
-        for profileIDs: Set<String>? = nil,
-        store: PortablePreferencesStore,
-        load: () throws -> String?,
-        save: () throws -> Void
+    struct Replacement {
+        /// Nil covers every grant sharing one key, as in AI Assistant.
+        let profileIDs: Set<String>?
+        let load: () throws -> String?
+        let save: () throws -> Void
+
+        func covers(_ profileID: String) -> Bool { profileIDs?.contains(profileID) ?? true }
+    }
+
+    /// Keep key writes quarantined until profile settings and final grants commit together.
+    /// On any failure, restore only previous grants backed by a verified unchanged secret.
+    func replaceCredentials(
+        _ replacements: [Replacement],
+        authorizing endpoints: [String: String],
+        values: [String: PortablePreferenceValue],
+        store: PortablePreferencesStore
     ) throws {
-        let previousGrants = storage.data(forKey: Self.key)
-        let previousKey = try? load()
-        let retainedGrants = profileIDs.map { ids in grants.filter { !ids.contains($0.key) } } ?? [:]
+        guard store.recover() else { throw CocoaError(.fileWriteUnknown) }
+        guard !replacements.isEmpty else {
+            guard store.commit(values) else { throw CocoaError(.fileWriteUnknown) }
+            return
+        }
+        let previousGrants = grants
+        let previousKeys = replacements.map { try? $0.load() }
+        let retainedGrants = previousGrants.filter { profileID, _ in
+            !replacements.contains { $0.covers(profileID) }
+        }
         guard let revoked = try? JSONEncoder().encode(retainedGrants),
               store.commit([Self.key: .data(revoked)]) else { throw CocoaError(.fileWriteUnknown) }
         do {
-            try save()
+            for replacement in replacements { try replacement.save() }
+            let authorized = endpoints.filter { Self.validGrant(profileID: $0.key, endpoint: $0.value) }
+            let finalGrants = retainedGrants.merging(authorized, uniquingKeysWith: { _, local in local })
+            var candidate = values
+            candidate[Self.key] = .data(try JSONEncoder().encode(finalGrants))
+            guard store.commit(candidate) else { throw CocoaError(.fileWriteUnknown) }
         } catch {
-            if let previousKey, let currentKey = try? load(), currentKey == previousKey,
-               let previousGrants {
-                _ = store.commit([Self.key: .data(previousGrants)])
+            var recovered = retainedGrants
+            for (replacement, previousKey) in zip(replacements, previousKeys) {
+                guard let previousKey, let currentKey = try? replacement.load(), currentKey == previousKey else { continue }
+                recovered.merge(previousGrants.filter { replacement.covers($0.key) }, uniquingKeysWith: { old, _ in old })
+            }
+            if let data = try? JSONEncoder().encode(recovered) {
+                _ = store.commit([Self.key: .data(data)])
             }
             throw error
         }
@@ -68,13 +93,6 @@ struct PortableCredentialAuthorization {
         guard storage.object(forKey: Self.key) == nil else { return isInitialized }
         guard let data = try? JSONEncoder().encode(profiles.filter { Self.validGrant(profileID: $0.key, endpoint: $0.value) }) else { return false }
         return store.commit([Self.key: .data(data)])
-    }
-
-    /// Only a locally entered key may authorize a changed endpoint.
-    func granting(_ profiles: [String: String]) -> Data? {
-        let validProfiles = profiles.filter { Self.validGrant(profileID: $0.key, endpoint: $0.value) }
-        let merged = grants.merging(validProfiles, uniquingKeysWith: { _, local in local })
-        return try? JSONEncoder().encode(merged)
     }
 
     private func canonical(_ endpoint: String) -> String {
