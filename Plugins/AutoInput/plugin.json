@@ -330,5 +330,11 @@
         ]
       }
     ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "application-paths"
+    ]
   }
 }

@@ -258,5 +258,11 @@
         "dynamicTemplates": []
       }
     ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "device-state"
+    ]
   }
 }

@@ -85,6 +85,8 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
     private let openSystemAudioPrivacySettings: () -> Void
 
     private var snapshot = AudioApplicationSnapshot.empty
+    var onPersistentPreferencesChange: (() -> Void)?
+    private var sessionVolumes: [String: Double]?
     private var volumes: [String: Double]
     private var controlApplicationIDs: [String: String] = [:]
     private var isExpanded = false
@@ -236,6 +238,7 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
     }
 
     func activate(context: PluginRuntimeContext) {
+        sessionVolumes = nil
         lifecycleGeneration &+= 1
         isActive = true
         monitor.start()
@@ -388,7 +391,7 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
     }
 
     private func applyCurrentTargets() {
-        var effectiveVolumes = canonicalRoutingVolumes ?? volumes
+        var effectiveVolumes = canonicalRoutingVolumes ?? sessionVolumes ?? volumes
         for (applicationID, gain) in pendingPanelVolumes {
             effectiveVolumes[applicationID] = gain
         }
@@ -521,6 +524,8 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
             switch persistVolumes(candidateVolumes) {
             case .committed:
                 volumes = candidateVolumes
+                sessionVolumes = nil
+                if candidateVolumes != previousVolumes { onPersistentPreferencesChange?() }
                 lastRouteErrorMessage = nil
                 onStateChange?()
                 return .succeeded()
@@ -829,5 +834,41 @@ final class AppVolumePlugin: MacToolsPlugin, PluginActionProviding, PluginAction
             }
             return
         }
+    }
+}
+
+extension AppVolumePlugin: PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting,
+    PluginPersistentPreferencesChangeSignaling {
+    private struct PortableVolumes: Codable {
+        let formatVersion: Int
+        let applications: [String: Double]
+    }
+    private static func isPortableApplicationID(_ value: String) -> Bool {
+        value.utf8.count <= 255 && value.contains(".") && !value.hasPrefix("pid.")
+            && value.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-_")).contains($0) }
+    }
+    func makePortablePreferencesBackup() -> Data? {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let entries = volumes.filter { Self.isPortableApplicationID($0.key) }
+        guard entries.count <= 1_024, entries.values.allSatisfy({ $0.isFinite && (0...1).contains($0) }) else { return nil }
+        return try? encoder.encode(PortableVolumes(formatVersion: 1, applications: entries))
+    }
+    func restorePortablePreferences(from data: Data) { _ = restorePortablePreferencesReportingResult(from: data) }
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        guard !isCanonicalRouteInProgress, pendingPanelVolumes.isEmpty, data.count <= 256 * 1_024,
+              let payload = try? JSONDecoder().decode(PortableVolumes.self, from: data), payload.formatVersion == 1,
+              payload.applications.count <= 1_024,
+              payload.applications.allSatisfy({ Self.isPortableApplicationID($0.key) && $0.value.isFinite && (0...1).contains($0.value) }) else { return false }
+        let candidate = volumes.filter { !Self.isPortableApplicationID($0.key) }
+            .merging(payload.applications, uniquingKeysWith: { _, incoming in incoming })
+        guard case .committed = persistVolumes(candidate) else { return false }
+        if candidate != volumes {
+            if isActive, sessionVolumes == nil { sessionVolumes = volumes }
+            volumes = candidate
+            onPersistentPreferencesChange?()
+        }
+        onStateChange?()
+        return true
     }
 }

@@ -118,6 +118,22 @@ private final class InputRemappingLockedCounter: @unchecked Sendable {
 }
 
 final class InputRemappingModelsTests: XCTestCase {
+    @MainActor
+    func testPortableRulesKeepIdentityAndRequireLocalUnsafeAuthorization() throws {
+        let source = InputRemappingStore(storage: InputRemappingMemoryStorage())
+        source.addRule()
+        var rule = try XCTUnwrap(source.rules.first)
+        rule.replaceTrigger(.keyboard(keyCode: 0, modifiers: []))
+        rule.isUnsafeTriggerConfirmed = true
+        rule.isEnabled = true
+        source.replace(rule)
+        let destination = InputRemappingStore(storage: InputRemappingMemoryStorage())
+        XCTAssertTrue(destination.restorePortableBackup(try XCTUnwrap(source.portableBackup())))
+        XCTAssertEqual(destination.rules.first?.id, rule.id)
+        XCTAssertFalse(try XCTUnwrap(destination.rules.first).isUnsafeTriggerConfirmed)
+        XCTAssertFalse(try XCTUnwrap(destination.rules.first).isEnabled)
+    }
+
 
     func testUnsupportedPersistedSingleKeyIsDisabledWithoutDroppingRule() throws {
         var rule = InputRemappingRule(buttonNumber: 4, action: .mouseBack)

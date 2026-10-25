@@ -384,5 +384,12 @@
         "dynamicTemplates": []
       }
     ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "private-content",
+      "device-state"
+    ]
   }
 }

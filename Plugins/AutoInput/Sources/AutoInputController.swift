@@ -199,6 +199,7 @@ final class AutoInputController: ObservableObject {
     private var isFocusMonitoringActive = false
     private var applicationActivationObserver: NSObjectProtocol?
     private var operationGeneration = 0
+    private var defersAutomaticActionsUntilApplicationActivation = false
     private var inputSourceOwnerBundleIdentifier: String?
     private var hudTriggerPolicy: AutoInputHUDTriggerPolicy
     private var hudFrequencyPolicy = AutoInputHUDFrequencyPolicy()
@@ -255,7 +256,11 @@ final class AutoInputController: ObservableObject {
             self?.handleSourcesChanged()
         }
         applicationMonitor.onApplicationActivated = { [weak self] application in
-            self?.handleApplicationActivated(application)
+            guard let self else { return }
+            let wasDeferred = self.defersAutomaticActionsUntilApplicationActivation
+            self.defersAutomaticActionsUntilApplicationActivation = false
+            if wasDeferred { self.reconcileActiveServices(processCurrentApplication: false) }
+            self.handleApplicationActivated(application)
         }
         focusObserver.onEditableFocusChanged = { [weak self] focus in
             self?.handleEditableFocusChanged(focus)
@@ -270,6 +275,7 @@ final class AutoInputController: ObservableObject {
     }
 
     func stop() {
+        defersAutomaticActionsUntilApplicationActivation = false
         guard isStarted else { return }
         operationGeneration += 1
         restoreStandardFunctionKeysIfNeeded()
@@ -301,6 +307,7 @@ final class AutoInputController: ObservableObject {
     }
 
     func configurationDidChange(promptForAccessibility: Bool = false) {
+        defersAutomaticActionsUntilApplicationActivation = false
         if !store.isAutoSwitchEnabled {
             operationGeneration += 1
             errorMessage = nil
@@ -310,6 +317,24 @@ final class AutoInputController: ObservableObject {
         refreshAccessibilityPermission(prompt: promptForAccessibility && store.isInputHUDEnabled)
         reconcilePermissionObservation()
         reconcileActiveServices()
+        onStateChange?()
+    }
+
+    func configurationDidRestore() {
+        operationGeneration += 1
+        defersAutomaticActionsUntilApplicationActivation = true
+        currentApplication = applicationMonitor.frontmostApplication
+        inputSourceOwnerBundleIdentifier = currentApplication?.bundleIdentifier
+        focusedElement = nil
+        hudPresenter.dismiss()
+        hudTriggerPolicy.reset(currentSourceID: sourceController.currentSourceID)
+        hudFrequencyPolicy.reset()
+        sourceController.refresh()
+        sources = sourceController.sources
+        synchronizeHUDReminderPreferences()
+        refreshAccessibilityPermission(prompt: false)
+        reconcilePermissionObservation()
+        reconcileActiveServices(processCurrentApplication: false)
         onStateChange?()
     }
 
@@ -464,7 +489,7 @@ final class AutoInputController: ObservableObject {
     }
 
     private func rememberCurrentSourceIfNeeded() {
-        guard autoSwitchActive, store.remembersLastInputSource,
+        guard !defersAutomaticActionsUntilApplicationActivation, autoSwitchActive, store.remembersLastInputSource,
               let bundleIdentifier = inputSourceOwnerBundleIdentifier
                 ?? focusedApplicationBundleIdentifier
                 ?? currentApplication?.bundleIdentifier
@@ -476,7 +501,7 @@ final class AutoInputController: ObservableObject {
     }
 
     private func rememberCurrentSourceIfNeeded(for bundleIdentifier: String) {
-        guard autoSwitchActive, store.remembersLastInputSource,
+        guard !defersAutomaticActionsUntilApplicationActivation, autoSwitchActive, store.remembersLastInputSource,
               let sourceID = validCurrentSourceID
         else { return }
 
@@ -512,21 +537,22 @@ final class AutoInputController: ObservableObject {
         isStarted && isInteractive && store.hasKeyboardModeRules
     }
 
-    private func reconcileActiveServices() {
+    private func reconcileActiveServices(processCurrentApplication: Bool = true) {
         // Canonical input-source actions remain available even when automatic
         // switching and the optional HUD are both off.
         let shouldMonitorSources = isStarted && isInteractive
         let shouldMonitorApplications = autoSwitchActive
             || hudPermissionObservationActive
             || keyboardModeActive
+            || (isStarted && isInteractive && defersAutomaticActionsUntilApplicationActivation && appliedStandardFunctionKeys != nil)
         setSourceMonitoring(active: shouldMonitorSources)
         setApplicationMonitoring(active: shouldMonitorApplications)
 
-        if shouldMonitorApplications,
+        if processCurrentApplication, !defersAutomaticActionsUntilApplicationActivation, shouldMonitorApplications,
            let application = applicationMonitor.frontmostApplication {
             handleApplicationActivated(application)
         }
-        if !keyboardModeActive {
+        if !defersAutomaticActionsUntilApplicationActivation, !keyboardModeActive {
             restoreStandardFunctionKeysIfNeeded()
         }
         setFocusMonitoring(active: hudActive)
@@ -692,6 +718,7 @@ final class AutoInputController: ObservableObject {
     }
 
     private func transitionInputSourceOwnerIfNeeded(to bundleIdentifier: String) {
+        guard !defersAutomaticActionsUntilApplicationActivation else { return }
         guard inputSourceOwnerBundleIdentifier != bundleIdentifier else { return }
         if let previousBundleIdentifier = inputSourceOwnerBundleIdentifier {
             rememberCurrentSourceIfNeeded(for: previousBundleIdentifier)

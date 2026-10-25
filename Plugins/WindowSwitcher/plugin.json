@@ -436,5 +436,11 @@
     "includedPackIDs": [],
     "suggestedRecipeIDs": [],
     "supersedesPluginIDs": []
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "device-state"
+    ]
   }
 }

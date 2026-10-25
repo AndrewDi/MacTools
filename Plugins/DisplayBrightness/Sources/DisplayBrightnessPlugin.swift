@@ -986,3 +986,20 @@ final class DisplayBrightnessPlugin:
         return screenNumber.uint32Value
     }
 }
+
+
+extension DisplayBrightnessPlugin: PluginPortablePreferencesProviding,
+    PluginPortablePreferencesRestorationReporting, PluginPersistentPreferencesChangeSignaling {
+    var onPersistentPreferencesChange: (() -> Void)? {
+        get { shortcutPreferences.onPersistentPreferencesChange }
+        set { shortcutPreferences.onPersistentPreferencesChange = newValue }
+    }
+
+    func makePortablePreferencesBackup() -> Data? { shortcutPreferences.portableBackup() }
+    func restorePortablePreferences(from data: Data) { _ = restorePortablePreferencesReportingResult(from: data) }
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        guard shortcutPreferences.restorePortableBackup(data) else { return false }
+        onStateChange?()
+        return true
+    }
+}

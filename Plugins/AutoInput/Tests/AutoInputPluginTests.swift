@@ -441,6 +441,23 @@ final class AutoInputControllerTests: XCTestCase {
         XCTAssertEqual(fixture.functionKeys.writes, [false, true, true])
     }
 
+    func testRestoreDefersInputAndFunctionKeyChangesUntilRealApplicationActivation() throws {
+        let fixture = makeFixture(currentSourceID: "en")
+        fixture.controller.start()
+        defer { fixture.controller.stop() }
+        let incoming = AutoInputStore(storage: AutoInputMemoryStorage())
+        incoming.upsertRule(makeRule(bundleID: fixture.app.bundleIdentifier, sourceID: "zh", keyboardMode: .standardFunctionKeys))
+        XCTAssertTrue(fixture.store.restorePortableBackup(try XCTUnwrap(incoming.portableBackup())))
+        fixture.controller.configurationDidRestore()
+        fixture.controller.refresh()
+        fixture.focusObserver.refreshFocusedElement()
+        XCTAssertTrue(fixture.sources.selectedIDs.isEmpty)
+        XCTAssertTrue(fixture.functionKeys.writes.isEmpty)
+        fixture.applications.activate(fixture.app)
+        XCTAssertEqual(fixture.sources.selectedIDs, ["zh"])
+        XCTAssertEqual(fixture.functionKeys.writes, [true])
+    }
+
     private func makeFixture(
         currentSourceID: String,
         accessibilityGranted: Bool = false,

@@ -44,6 +44,9 @@ final class RightClickPlugin: MacToolsPlugin {
     var requestPermissionGuidance: ((String) -> Void)?
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
 
+    private let configurationFileURL: URL
+    private let settingsSession: RightClickSettingsSession
+    var onPersistentPreferencesChange: (() -> Void)?
     private let localization: PluginLocalization
     private let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier ?? "cc.ggbond.mactools",
@@ -51,12 +54,15 @@ final class RightClickPlugin: MacToolsPlugin {
     )
     private var activationObserver: NSObjectProtocol?
 
-    init(localization: PluginLocalization = PluginLocalization(bundle: .main)) {
+    init(localization: PluginLocalization = PluginLocalization(bundle: .main), configurationFileURL: URL = RightClickConfigurationStore.configFileURL) {
         self.localization = localization
+        self.configurationFileURL = configurationFileURL
+        self.settingsSession = RightClickSettingsSession(fileURL: configurationFileURL)
+        self.settingsSession.onCommit = { [weak self] in self?.onPersistentPreferencesChange?() }
     }
 
     func activate(context _: PluginRuntimeContext) {
-        RightClickConfigurationStore.setMenuEnabled(true)
+        RightClickConfigurationStore.setMenuEnabled(true, fileURL: configurationFileURL)
 
         guard activationObserver == nil else {
             return
@@ -75,7 +81,7 @@ final class RightClickPlugin: MacToolsPlugin {
 
     func deactivate(reason: PluginDeactivationReason) {
         if reason.requiresStateCleanup {
-            RightClickConfigurationStore.setMenuEnabled(false)
+            RightClickConfigurationStore.setMenuEnabled(false, fileURL: configurationFileURL)
         }
 
         if let activationObserver {
@@ -99,7 +105,7 @@ final class RightClickPlugin: MacToolsPlugin {
     }
 
     var settingsPage: PluginSettingsPage? {
-        let session = RightClickSettingsSession()
+        let session = settingsSession
         return .form(
             description: localization.string(
                 "configuration.description",
@@ -197,5 +203,93 @@ final class RightClickPlugin: MacToolsPlugin {
         logger.info("Opening Finder extension management interface")
         FIFinderSyncController.showExtensionManagementInterface()
         onStateChange?()
+    }
+}
+
+extension RightClickPlugin: PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting,
+    PluginPersistentPreferencesChangeSignaling {
+    private struct PortableApp: Codable {
+        let id: UUID
+        let name: String
+        let application: PortableApplicationReference
+        let fileExtensions: [String]
+    }
+    private struct PortablePreferences: Codable {
+        let formatVersion: Int
+        let newFolder: Bool
+        let copyFileName: Bool
+        let copyAbsolutePath: Bool
+        let copyRelativePath: Bool
+        let copyShellEscapedPath: Bool
+        let copyFileURL: Bool
+        let newFile: Bool
+        let openInTerminal: Bool
+        let applications: [PortableApp]
+    }
+    private func decodedPortable(_ data: Data) -> PortablePreferences? {
+        guard data.count <= 1_024 * 1_024,
+              let payload = try? JSONDecoder().decode(PortablePreferences.self, from: data), payload.formatVersion == 1,
+              payload.applications.count <= 512, Set(payload.applications.map(\.id)).count == payload.applications.count,
+              payload.applications.allSatisfy({ entry in
+                  entry.application.isValid && !entry.name.isEmpty && entry.name.utf8.count <= 256
+                      && !entry.name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+                      && entry.fileExtensions.count <= 64 && Set(entry.fileExtensions).count == entry.fileExtensions.count
+                      && entry.fileExtensions.allSatisfy { ext in
+                          !ext.isEmpty && ext.utf8.count <= 64 && ext == ext.lowercased()
+                              && ext.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-_")).contains($0) }
+                      }
+              }) else { return nil }
+        return payload
+    }
+    func makePortablePreferencesBackup() -> Data? {
+        guard let current = RightClickConfigurationStore.loadForPreferencesBackup(from: configurationFileURL),
+              current.openWithApps.count <= 512 else { return nil }
+        var applications: [PortableApp] = []
+        for entry in current.openWithApps {
+            let application: PortableApplicationReference
+            if let retainedData = entry.portableApplicationReference {
+                guard let retained = try? JSONDecoder().decode(PortableApplicationReference.self, from: retainedData) else { return nil }
+                application = retained
+            } else {
+                let url = entry.appPath.hasPrefix("/") ? URL(fileURLWithPath: entry.appPath) : nil
+                application = PortableApplicationReference(url: url)
+            }
+            applications.append(PortableApp(id: entry.id, name: entry.name, application: application, fileExtensions: entry.fileExtensions))
+        }
+        let payload = PortablePreferences(formatVersion: 1, newFolder: current.newFolder, copyFileName: current.copyFileName,
+            copyAbsolutePath: current.copyAbsolutePath, copyRelativePath: current.copyRelativePath,
+            copyShellEscapedPath: current.copyShellEscapedPath, copyFileURL: current.copyFileURL,
+            newFile: current.newFile, openInTerminal: current.openInTerminal, applications: applications)
+        guard let data = try? JSONEncoder().encode(payload), decodedPortable(data) != nil else { return nil }
+        return data
+    }
+    func restorePortablePreferences(from data: Data) { _ = restorePortablePreferencesReportingResult(from: data) }
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        guard let payload = decodedPortable(data),
+              var candidate = RightClickConfigurationStore.loadForPreferencesBackup(from: configurationFileURL) else { return false }
+        let previous = candidate
+        candidate.newFolder = payload.newFolder
+        candidate.copyFileName = payload.copyFileName
+        candidate.copyAbsolutePath = payload.copyAbsolutePath
+        candidate.copyRelativePath = payload.copyRelativePath
+        candidate.copyShellEscapedPath = payload.copyShellEscapedPath
+        candidate.copyFileURL = payload.copyFileURL
+        candidate.newFile = payload.newFile
+        candidate.openInTerminal = payload.openInTerminal
+        var resolved = Set<String>()
+        candidate.openWithApps = payload.applications.map { incoming in
+            var url = incoming.application.resolvedURL()
+            if let candidateURL = url, !resolved.insert(candidateURL.path).inserted { url = nil }
+            var entry = RightClickOpenWithApp(id: incoming.id, name: incoming.name, appPath: url?.path ?? "", fileExtensions: incoming.fileExtensions)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            entry.portableApplicationReference = try? encoder.encode(incoming.application)
+            return entry
+        }
+        guard candidate == previous || RightClickConfigurationStore.save(candidate, to: configurationFileURL) else { return false }
+        settingsSession.reload()
+        if candidate != previous { onPersistentPreferencesChange?() }
+        onStateChange?()
+        return true
     }
 }

@@ -232,7 +232,8 @@
     ],
     "dataPersisted": [
       "encrypted-clipboard-history",
-      "local-encryption-key"
+      "local-encryption-key",
+      "plugin-configuration"
     ],
     "retention": {
       "policy": "user-controlled"
@@ -495,6 +496,13 @@
         ],
         "dynamicTemplates": []
       }
+    ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "private-content",
+      "local-activation"
     ]
   }
 }

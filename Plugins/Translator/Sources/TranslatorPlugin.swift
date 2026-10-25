@@ -72,7 +72,10 @@ final class TranslatorPlugin:
     var shortcutBindingResolver: ((String) -> ShortcutBinding?)?
     var requestSettingsPresentation: (() -> Void)?
 
+    var onPersistentPreferencesChange: (() -> Void)?
     private let storage: PluginStorage
+    private var providerEditorRevision = 0
+    private var credentialAuthorization: PortableCredentialAuthorization { .init(storage: storage) }
     private let accessibilityTrustProvider: () -> Bool
     private let accessibilityTrustRequester: (Bool) -> Bool
     private let screenRecordingPermissionProvider: () -> Bool
@@ -117,6 +120,7 @@ final class TranslatorPlugin:
         let localization = localization ?? PluginLocalization(bundle: context.resourceBundle)
         self.localization = localization
         self.storage = context.storage
+        _ = Self.portableStore(storage: context.storage).recover()
         self.accessibilityTrustProvider = accessibilityTrustProvider
         self.accessibilityTrustRequester = accessibilityTrustRequester
         self.screenRecordingPermissionProvider = screenRecordingPermissionProvider
@@ -135,6 +139,9 @@ final class TranslatorPlugin:
         let providerProfiles = providerProfileStore.loadProfiles()
         self.providerProfileStore = providerProfileStore
         self.providerProfiles = providerProfiles
+        PortableCredentialAuthorization(storage: context.storage).seedIfNeeded(
+            profiles: Dictionary(providerProfiles.map { ($0.id, $0.baseURL) }, uniquingKeysWith: { first, _ in first }),
+            store: Self.portableStore(storage: context.storage))
         let languagePreferenceStore = LanguagePreferenceStore(storage: context.storage)
         self.languagePreferenceStore = languagePreferenceStore
         self.providerConfiguration = providerProfiles.first?.configuration
@@ -324,6 +331,7 @@ final class TranslatorPlugin:
 
     var settingsPage: PluginSettingsPage? {
         .form(description: metadata.defaultDescription, sections: [
+            promptBackupSection,
             PluginSettingsSection(
                 id: "translator-settings",
                 title: localization.string("settings.title", defaultValue: "翻译设置"),
@@ -333,7 +341,7 @@ final class TranslatorPlugin:
                 if let self {
                     TranslatorSettingsView(
                         profiles: self.providerProfiles,
-                        apiKeys: self.cachedAPIKeys,
+                        apiKeys: [:],
                         languagePair: self.languagePair,
                         localization: self.localization,
                         onSave: { [weak self] profiles, apiKeys, languagePair in
@@ -352,6 +360,7 @@ final class TranslatorPlugin:
                                 )
                         }
                     )
+                    .id(self.providerEditorRevision)
                 }
             }
         ])
@@ -362,7 +371,9 @@ final class TranslatorPlugin:
             return
         }
 
-        storage.set(isEnabled, forKey: TranslatorConstants.StorageKey.shortcutEnabled)
+        guard isEnabled != isShortcutEnabled,
+              portableStore.commit([TranslatorConstants.StorageKey.shortcutEnabled: .boolean(isEnabled)]) else { return }
+        onPersistentPreferencesChange?()
         onStateChange?()
     }
 
@@ -424,7 +435,10 @@ final class TranslatorPlugin:
         }
     }
 
-    func handleSettingsAction(_ action: PluginSettingsAction) {}
+    func handleSettingsAction(_ action: PluginSettingsAction) {
+        guard case let .setBoolean(controlID, value) = action, controlID == Self.promptBackupKey else { return }
+        setIncludesPromptText(value)
+    }
 
     func deactivate(reason: PluginDeactivationReason) {
         guard reason.requiresStateCleanup else {
@@ -564,11 +578,20 @@ final class TranslatorPlugin:
             let removedProfileIDs = providerProfiles
                 .map(\.id)
                 .filter { !retainedProfileIDs.contains($0) }
+            var savedCredentialEndpoints: [String: String] = [:]
 
             for profile in profiles where profile.isEnabled {
                 let apiKey = apiKeys[profile.id]
+                if Self.normalizedAPIKey(apiKey) == nil, !credentialAuthorization.allows(profileID: profile.id, baseURL: profile.baseURL) {
+                    apiKeyState = .missing
+                    onStateChange?()
+                    return localization.string("settings.error.blankAPIKey", defaultValue: "API Key 不能为空。")
+                }
                 if let normalizedAPIKey = Self.normalizedAPIKey(apiKey) {
+                    guard let revoked = credentialAuthorization.revoking([profile.id]),
+                          portableStore.commit([PortableCredentialAuthorization.key: .data(revoked)]) else { throw CocoaError(.fileWriteUnknown) }
                     try secretStore.saveAPIKey(normalizedAPIKey, forProfileID: profile.id)
+                    savedCredentialEndpoints[profile.id] = profile.baseURL
                     cachedAPIKeys[profile.id] = normalizedAPIKey
                     didLoadProfileAPIKeys.insert(profile.id)
                 } else if try secretStore.containsAPIKey(forProfileID: profile.id) {
@@ -600,9 +623,18 @@ final class TranslatorPlugin:
                 didLoadProfileAPIKeys.remove(removedID)
             }
 
-            try providerProfileStore.saveProfiles(profiles)
-            languagePreferenceStore.savePair(languagePair)
+            let previousBackup = makePortablePreferencesBackup()
+            guard let profilesData = try? JSONEncoder().encode(profiles.map { $0.normalized() }),
+                  portableStore.commit([
+                    TranslatorConstants.StorageKey.providerProfiles: .data(profilesData),
+                    TranslatorConstants.StorageKey.firstPreferredLanguage: .string(languagePair.first.rawValue),
+                    TranslatorConstants.StorageKey.secondPreferredLanguage: .string(languagePair.second.rawValue)
+                  ]) else { throw CocoaError(.fileWriteUnknown) }
             providerProfiles = providerProfileStore.loadProfiles()
+            if !savedCredentialEndpoints.isEmpty {
+                guard let grants = credentialAuthorization.granting(savedCredentialEndpoints),
+                      portableStore.commit([PortableCredentialAuthorization.key: .data(grants)]) else { throw CocoaError(.fileWriteUnknown) }
+            }
             providerConfiguration = providerProfiles.first?.configuration
                 ?? OpenAICompatibleConfiguration(
                     promptTemplate: OpenAICompatibleConfiguration.defaultPromptTemplate(localization: localization)
@@ -617,6 +649,7 @@ final class TranslatorPlugin:
                 panelController.close()
             }
             coordinator = nil
+            if previousBackup != makePortablePreferencesBackup() { onPersistentPreferencesChange?() }
             onStateChange?()
             return nil
         } catch {
@@ -690,7 +723,7 @@ final class TranslatorPlugin:
             }
 
             do {
-                let apiKey = try loadAPIKey(for: profile.id)
+                let apiKey = try loadAPIKey(for: profile)
                 guard let trimmedKey = Self.normalizedAPIKey(apiKey) else {
                     return ResolvedTranslationProvider(
                         id: profile.id,
@@ -788,7 +821,9 @@ final class TranslatorPlugin:
         }
     }
 
-    private func loadAPIKey(for profileID: String) throws -> String? {
+    private func loadAPIKey(for profile: TranslatorProviderProfile) throws -> String? {
+        guard credentialAuthorization.allows(profileID: profile.id, baseURL: profile.baseURL) else { return nil }
+        let profileID = profile.id
         if didLoadProfileAPIKeys.contains(profileID) {
             return cachedAPIKeys[profileID]
         }
@@ -825,5 +860,113 @@ final class TranslatorPlugin:
         cachedAPIKey = apiKey
         didLoadAPIKey = true
         apiKeyState = Self.hasNonEmptyAPIKey(apiKey) ? .present : .missing
+    }
+}
+
+extension TranslatorPlugin {
+    private static let promptBackupKey = "preferences-backup.include-prompt-text"
+    private var includesPromptText: Bool { storage.bool(forKey: Self.promptBackupKey) }
+    private var promptBackupSection: PluginSettingsSection {
+        PluginSettingsSection(
+            id: "preferences-backup", title: localization.string("settings.backup.title", defaultValue: "偏好设置备份"),
+            systemImage: "externaldrive", rows: [PluginSettingsRow(
+                id: Self.promptBackupKey,
+                title: localization.string("settings.backup.includePromptText", defaultValue: "将自定义提示词包含在备份中"),
+                description: localization.string("settings.backup.scope", defaultValue: "同时用于手动备份、自动备份和云同步。不包含 API 密钥。"),
+                control: .toggle(isOn: includesPromptText)
+            )]
+        )
+    }
+    private func setIncludesPromptText(_ value: Bool) {
+        guard value != includesPromptText,
+              portableStore.commit([Self.promptBackupKey: .boolean(value)]) else { return }
+        onPersistentPreferencesChange?()
+        onStateChange?()
+    }
+}
+
+extension TranslatorPlugin: PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting,
+    PluginPersistentPreferencesChangeSignaling {
+    private struct PortableProfile: Codable {
+        let id: String
+        let name: String
+        let isEnabled: Bool
+        let baseURL: String
+        let model: String
+        let promptTemplate: String?
+    }
+    private struct PortablePreferences: Codable {
+        let formatVersion: Int
+        let profiles: [PortableProfile]
+        let languagePair: TranslatorLanguagePair
+        let shortcutEnabled: Bool
+    }
+    private static func portableStore(storage: any PluginStorage) -> PortablePreferencesStore {
+        PortablePreferencesStore(storage: storage, fields: [
+            TranslatorConstants.StorageKey.providerProfiles: .data(Data("[]".utf8), maximumBytes: 1_024 * 1_024) {
+                (try? JSONDecoder().decode([TranslatorProviderProfile].self, from: $0)).map { $0.count <= 64 } == true
+            },
+            TranslatorConstants.StorageKey.shortcutEnabled: .boolean(true),
+            TranslatorConstants.StorageKey.firstPreferredLanguage: .choice("zh-Hans", allowed: TranslatorLanguage.allCases.map(\.rawValue)),
+            TranslatorConstants.StorageKey.secondPreferredLanguage: .choice("en", allowed: TranslatorLanguage.allCases.map(\.rawValue)),
+            Self.promptBackupKey: .boolean(false),
+            PortableCredentialAuthorization.key: PortableCredentialAuthorization.field
+        ])
+    }
+    private var portableStore: PortablePreferencesStore { Self.portableStore(storage: storage) }
+    private func decodedPortable(_ data: Data) -> PortablePreferences? {
+        guard data.count <= 2 * 1_024 * 1_024, let payload = try? JSONDecoder().decode(PortablePreferences.self, from: data), payload.formatVersion == 1,
+              payload.languagePair.first != payload.languagePair.second,
+              (1...64).contains(payload.profiles.count), Set(payload.profiles.map(\.id)).count == payload.profiles.count,
+              payload.profiles.allSatisfy({ profile in
+                  let template = profile.promptTemplate ?? OpenAICompatibleConfiguration.defaultPromptTemplate(localization: localization)
+                  let configuration = OpenAICompatibleConfiguration(baseURL: profile.baseURL, model: profile.model, promptTemplate: template)
+                  return PortablePreferencesValidation.identifier(profile.id) && PortablePreferencesValidation.text(profile.name, maximumBytes: 256)
+                      && PortablePreferencesValidation.endpoint(profile.baseURL) && PortablePreferencesValidation.text(profile.model, maximumBytes: 256)
+                      && template.utf8.count <= 65_536 && configuration.validationError == nil
+              }) else { return nil }
+        return payload
+    }
+    func makePortablePreferencesBackup() -> Data? {
+        guard portableStore.backup() != nil else { return nil }
+        let payload = PortablePreferences(formatVersion: 1, profiles: providerProfiles.map {
+            PortableProfile(id: $0.id, name: $0.name, isEnabled: $0.isEnabled, baseURL: $0.baseURL,
+                model: $0.model, promptTemplate: includesPromptText ? $0.promptTemplate : nil)
+        }, languagePair: languagePair, shortcutEnabled: isShortcutEnabled)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(payload), decodedPortable(data) != nil else { return nil }
+        return data
+    }
+    func restorePortablePreferences(from data: Data) { _ = restorePortablePreferencesReportingResult(from: data) }
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        guard credentialAuthorization.isInitialized, let payload = decodedPortable(data) else { return false }
+        let before = makePortablePreferencesBackup()
+        let defaultTemplate = OpenAICompatibleConfiguration.defaultPromptTemplate(localization: localization)
+        let protected = includesPromptText ? [] : providerProfiles.filter { $0.promptTemplate != defaultTemplate }
+        guard !payload.profiles.contains(where: { incoming in
+            guard let template = incoming.promptTemplate else { return false }
+            return protected.contains { $0.id == incoming.id && $0.promptTemplate != template }
+        }) else { return false }
+        let restored = payload.profiles.map { incoming in
+            TranslatorProviderProfile(id: incoming.id, name: incoming.name, isEnabled: incoming.isEnabled, baseURL: incoming.baseURL,
+                model: incoming.model, promptTemplate: incoming.promptTemplate ?? providerProfiles.first { $0.id == incoming.id }?.promptTemplate ?? defaultTemplate)
+        } + protected.filter { local in !payload.profiles.contains { $0.id == local.id } }
+        guard restored.count <= 64, let profileData = try? JSONEncoder().encode(restored), portableStore.commit([
+            TranslatorConstants.StorageKey.providerProfiles: .data(profileData),
+            TranslatorConstants.StorageKey.shortcutEnabled: .boolean(payload.shortcutEnabled),
+            TranslatorConstants.StorageKey.firstPreferredLanguage: .string(payload.languagePair.first.rawValue),
+            TranslatorConstants.StorageKey.secondPreferredLanguage: .string(payload.languagePair.second.rawValue)
+        ]) else { return false }
+        providerProfiles = providerProfileStore.loadProfiles()
+        languagePair = payload.languagePair
+        providerConfiguration = providerProfiles.first?.configuration ?? OpenAICompatibleConfiguration()
+        if let coordinator { coordinator.close() } else { panelController.close() }
+        coordinator = nil
+        providerEditorRevision += 1
+        if !providerProfiles.contains(where: { $0.isEnabled && credentialAuthorization.allows(profileID: $0.id, baseURL: $0.baseURL) }) { apiKeyState = .missing }
+        if before != makePortablePreferencesBackup() { onPersistentPreferencesChange?() }
+        onStateChange?()
+        return true
     }
 }

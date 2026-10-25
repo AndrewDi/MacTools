@@ -9,18 +9,38 @@ import MacToolsPluginKit
 /// on the next right-click — the extension reads the config on every menu build.
 @MainActor
 final class RightClickSettingsSession: ObservableObject {
+    private let fileURL: URL
+    private var isReloading = false
+    @Published private(set) var reloadRevision: UInt64 = 0
+    var onCommit: (() -> Void)?
     @Published var configuration: RightClickConfiguration {
         didSet {
+            guard !isReloading else { return }
             var value = configuration
-            let current = RightClickConfigurationStore.load()
+            let current = RightClickConfigurationStore.load(from: fileURL)
             value.menuEnabled = current.menuEnabled
             value.preferredLanguages = current.preferredLanguages
-            RightClickConfigurationStore.save(value)
+            guard value != current else { return }
+            guard RightClickConfigurationStore.save(value, to: fileURL) else {
+                isReloading = true
+                configuration = oldValue
+                isReloading = false
+                return
+            }
+            onCommit?()
         }
     }
 
-    init(configuration: RightClickConfiguration = RightClickConfigurationStore.load()) {
-        self.configuration = configuration
+    init(configuration: RightClickConfiguration? = nil, fileURL: URL = RightClickConfigurationStore.configFileURL) {
+        self.fileURL = fileURL
+        self.configuration = configuration ?? RightClickConfigurationStore.load(from: fileURL)
+    }
+
+    func reload() {
+        isReloading = true
+        configuration = RightClickConfigurationStore.load(from: fileURL)
+        isReloading = false
+        reloadRevision &+= 1
     }
 }
 
@@ -96,6 +116,7 @@ struct RightClickMenuSettingsView: View {
                         PluginSettingsListDivider()
                     }
                 }
+                .id(session.reloadRevision)
             }
         }
     }
@@ -185,10 +206,13 @@ private struct RightClickOpenWithAppRow: View {
             VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.rowTitleDescription) {
                 Text(app.name)
                     .font(PluginSettingsTheme.Typography.emphasizedRowTitle)
-                Text(app.appPath)
+                Text(app.isUnresolved
+                     ? localization.string("settings.applicationUnavailable", defaultValue: "此 Mac 上找不到应用")
+                     : app.appPath)
                     .font(PluginSettingsTheme.Typography.rowDescription)
                     .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .lineLimit(app.isUnresolved ? 2 : 1)
+                    .fixedSize(horizontal: false, vertical: true)
                     .truncationMode(.middle)
             }
 

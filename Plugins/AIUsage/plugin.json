@@ -212,5 +212,13 @@
     "includedPackIDs": [],
     "suggestedRecipeIDs": [],
     "supersedesPluginIDs": []
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "credentials",
+      "permissions",
+      "history"
+    ]
   }
 }

@@ -438,5 +438,12 @@
         ]
       }
     ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "local-activation",
+      "device-state"
+    ]
   }
 }

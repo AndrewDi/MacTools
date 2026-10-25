@@ -34,7 +34,7 @@ final class TranslatorPluginTests: XCTestCase {
 
         let message = plugin.saveConfiguration(
             OpenAICompatibleConfiguration(
-                baseURL: "https://gateway.example.com",
+                baseURL: TranslatorProviderProfile.defaultProfile().baseURL,
                 model: "gpt-test",
                 promptTemplate: "{{text}}"
             ),
@@ -87,6 +87,61 @@ final class TranslatorPluginTests: XCTestCase {
         XCTAssertEqual(selectStartCount, 1)
     }
 
+    func testImportedEndpointRemainsQuarantinedWithoutChangingLocalConsentOrKeys() throws {
+        let storage = TranslatorInMemoryPluginStorage()
+        let secret = CountingTranslatorSecretStore(apiKey: "local-secret")
+        let plugin = makePlugin(storage: storage, secretStore: secret)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(plugin.makePortablePreferencesBackup())) as? [String: Any])
+        var profiles = try XCTUnwrap(object["profiles"] as? [[String: Any]])
+        profiles[0]["baseURL"] = "https://imported.example/v1"
+        object["profiles"] = profiles
+        let incoming = try JSONSerialization.data(withJSONObject: object)
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: incoming))
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: incoming))
+        let reloaded = makePlugin(storage: storage, secretStore: secret)
+        let id = try XCTUnwrap(profiles[0]["id"] as? String)
+        XCTAssertFalse(PortableCredentialAuthorization(storage: storage).allows(profileID: id, baseURL: "https://imported.example/v1"))
+        XCTAssertEqual(secret.loadCount, 0)
+        XCTAssertEqual(secret.saveCount, 0)
+        XCTAssertFalse(storage.bool(forKey: "preferences-backup.include-prompt-text"))
+        XCTAssertNotNil(reloaded.saveConfiguration(OpenAICompatibleConfiguration(baseURL: "https://imported.example/v1", model: "test", promptTemplate: "{{text}}"), apiKey: "", languagePair: .init(first: .english, second: .simplifiedChinese)))
+    }
+
+    func testDisabledImportedProfileCannotAuthorizeUnsavedReplacementKey() throws {
+        let storage = TranslatorInMemoryPluginStorage()
+        let secret = CountingTranslatorSecretStore(apiKey: "existing-destination-secret")
+        var local = TranslatorProviderProfile.defaultProfile()
+        local.isEnabled = false
+        let other = TranslatorProviderProfile(id: "other", name: "Other", baseURL: "https://other.example/v1")
+        storage.set(try JSONEncoder().encode([local, other]), forKey: TranslatorConstants.StorageKey.providerProfiles)
+        let plugin = makePlugin(storage: storage, secretStore: secret)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(plugin.makePortablePreferencesBackup())) as? [String: Any])
+        var profiles = try XCTUnwrap(object["profiles"] as? [[String: Any]])
+        local.baseURL = "https://imported.example/v1"
+        profiles[0]["baseURL"] = local.baseURL
+        object["profiles"] = profiles
+        let incoming = try JSONSerialization.data(withJSONObject: object)
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: incoming))
+
+        XCTAssertNil(plugin.saveConfiguration(profiles: [local, other], apiKeys: [local.id: "replacement-key"],
+            languagePair: .init(first: .english, second: .simplifiedChinese)))
+        XCTAssertEqual(secret.saveCount, 0)
+        XCTAssertFalse(PortableCredentialAuthorization(storage: storage).allows(profileID: local.id, baseURL: local.baseURL))
+
+        let reopened = makePlugin(storage: storage, secretStore: secret)
+        local.isEnabled = true
+        XCTAssertNotNil(reopened.saveConfiguration(profiles: [local, other], apiKeys: [:],
+            languagePair: .init(first: .english, second: .simplifiedChinese)))
+        XCTAssertEqual(secret.loadCount, 0)
+        XCTAssertEqual(secret.saveCount, 0)
+        XCTAssertFalse(PortableCredentialAuthorization(storage: storage).allows(profileID: local.id, baseURL: local.baseURL))
+
+        XCTAssertNil(reopened.saveConfiguration(profiles: [local, other], apiKeys: [local.id: "replacement-key"],
+            languagePair: .init(first: .english, second: .simplifiedChinese)))
+        XCTAssertEqual(secret.saveCount, 1)
+        XCTAssertTrue(PortableCredentialAuthorization(storage: storage).allows(profileID: local.id, baseURL: local.baseURL))
+    }
+
     private func makePlugin(
         storage: TranslatorInMemoryPluginStorage? = nil,
         accessibilityTrustProvider: @escaping () -> Bool = { true },
@@ -110,6 +165,7 @@ final class TranslatorPluginTests: XCTestCase {
 private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unchecked Sendable {
     private var apiKey: String?
     private(set) var saveCount = 0
+    private(set) var loadCount = 0
 
     init(apiKey: String?) {
         self.apiKey = apiKey
@@ -124,11 +180,13 @@ private final class CountingTranslatorSecretStore: TranslatorSecretStoring, @unc
     }
 
     func loadAPIKey() throws -> String? {
-        apiKey
+        loadCount += 1
+        return apiKey
     }
 
     func loadAPIKey(forProfileID _: String) throws -> String? {
-        apiKey
+        loadCount += 1
+        return apiKey
     }
 
     func saveAPIKey(_ apiKey: String) throws {

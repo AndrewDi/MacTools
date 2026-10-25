@@ -10,11 +10,16 @@ struct DeviceBatteryLowBatteryNotification: Equatable {
 
 @MainActor
 protocol DeviceBatteryLowBatteryNotifying {
+    func requestAuthorization()
     func notifyLowBatteryDevices(
         _ items: [DeviceBatteryItem],
         threshold: Int,
         localization: PluginLocalization
     )
+}
+
+extension DeviceBatteryLowBatteryNotifying {
+    func requestAuthorization() {}
 }
 
 @MainActor
@@ -31,6 +36,8 @@ final class DeviceBatteryLowBatteryNotificationController {
     init(notifier: any DeviceBatteryLowBatteryNotifying) {
         self.notifier = notifier
     }
+
+    func requestAuthorization() { notifier.requestAuthorization() }
 
     func evaluate(
         snapshot: DeviceBatterySnapshot,
@@ -146,19 +153,16 @@ final class DeviceBatteryUserNotificationCenterNotifier: DeviceBatteryLowBattery
             switch settings.authorizationStatus {
             case .authorized, .provisional, .ephemeral:
                 Self.addNotification(title: title, body: body, identifier: identifier)
-            case .notDetermined:
-                UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
-                    guard granted else {
-                        return
-                    }
-                    Self.addNotification(title: title, body: body, identifier: identifier)
-                }
-            case .denied:
+            case .notDetermined, .denied:
                 break
             @unknown default:
                 break
             }
         }
+    }
+
+    func requestAuthorization() {
+        notificationCenter.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
     private nonisolated static func addNotification(title: String, body: String, identifier: String) {

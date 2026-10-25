@@ -4,6 +4,23 @@ import MacToolsPluginKit
 
 @MainActor
 final class DeviceBatteryPluginTests: XCTestCase {
+    func testPortableSettingsRetainLocalDeviceState() throws {
+        let source = DeviceBatteryStore(storage: DeviceBatteryMemoryStorage())
+        source.setLayoutMode(.list)
+        source.setShowVendorHIDDevices(false)
+        source.setLowBatteryNotificationEnabled(true)
+        source.setLowBatteryNotificationThreshold(35)
+        let storage = DeviceBatteryMemoryStorage()
+        storage.set("private-device", forKey: "device-cache")
+        let destination = DeviceBatteryStore(storage: storage)
+        XCTAssertTrue(destination.restorePortableBackup(try XCTUnwrap(source.portableBackup())))
+        XCTAssertEqual(destination.layoutMode, .list)
+        XCTAssertFalse(destination.showVendorHIDDevices)
+        XCTAssertTrue(destination.lowBatteryNotificationEnabled)
+        XCTAssertEqual(destination.lowBatteryNotificationThreshold, 35)
+        XCTAssertEqual(storage.string(forKey: "device-cache"), "private-device")
+    }
+
 
     func testStorePersistsLayoutAndSources() {
         let storage = DeviceBatteryMemoryStorage()

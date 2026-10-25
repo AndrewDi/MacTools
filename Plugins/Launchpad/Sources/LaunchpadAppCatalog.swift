@@ -13,6 +13,7 @@ final class LaunchpadAppCatalog: ObservableObject {
     @Published private(set) var apps: [LaunchpadAppItem] = []
     @Published private(set) var isLoading = false
 
+    var onAppsDidReload: (() -> Void)?
     private let iconCache = NSCache<NSString, NSImage>()
     private var reloadGeneration = 0
 
@@ -32,6 +33,7 @@ final class LaunchpadAppCatalog: ObservableObject {
             guard let self, generation == self.reloadGeneration else { return } // stale scan → drop
             self.apps = scanned
             self.isLoading = false
+            self.onAppsDidReload?()
         }
     }
 

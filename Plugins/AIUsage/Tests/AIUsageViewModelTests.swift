@@ -6,6 +6,23 @@ import XCTest
 
 @MainActor
 final class AIUsageViewModelTests: XCTestCase {
+    func testPortableSettingsKeepConsentLocalAndDoNotFetchDuringRestore() async throws {
+        let source = makeModel(AIUsageTestClient())
+        source.updatePreferences { $0.codexEnabled = false; $0.refreshInterval = 900; $0.showsMenuBar = true; $0.allowsCredentialAccess = true }
+        let client = AIUsageTestClient()
+        let destination = makeModel(client)
+        destination.start()
+        XCTAssertTrue(destination.restorePortableBackup(try XCTUnwrap(source.portableBackup())))
+        XCTAssertFalse(destination.preferences.codexEnabled)
+        XCTAssertEqual(destination.preferences.refreshInterval, 900)
+        XCTAssertTrue(destination.preferences.showsMenuBar)
+        XCTAssertFalse(destination.preferences.allowsCredentialAccess)
+        XCTAssertFalse(destination.preferences.allowsClaudeKeychain)
+        let count = await client.count
+        XCTAssertEqual(count, 0)
+        destination.stop()
+    }
+
     private var date = Date(timeIntervalSince1970: 1_800_000_000)
 
     func testConsentGatePreventsCredentialAndNetworkWork() async {

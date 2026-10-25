@@ -951,7 +951,8 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
 
     func start(preservingRestoredItems: Bool = false) {
         guard !isSuspendedForBackup else { return }
-        preservesRestoredHistory = preservingRestoredItems
+        preservesRestoredHistory = preservesRestoredHistory || preservingRestoredItems
+        let preservesExistingItems = preservesRestoredHistory
         copyEventMonitor?.start { [weak self] in self?.scheduleEventAssistedCapture() }
         if reloadAfterStop {
             reloadAfterStop = false
@@ -978,19 +979,23 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
                     settings: initialSettings,
                     protectedItemIDs: initialProtectedItemIDs,
                     shortcutRetainedItemIDs: initialShortcutRetainedItemIDs,
-                    preservingRestoredItems: preservingRestoredItems
+                    preservingRestoredItems: preservesExistingItems
                 )
                 guard !Task.isCancelled, let self else { return }
                 var retainedItems = outcome.retainedItems
                 var appliedPolicyRevision = initialPolicyRevision
                 while appliedPolicyRevision != self.capturePolicyRevision {
                     appliedPolicyRevision = self.capturePolicyRevision
-                    retainedItems = await worker.prune(
-                        outcome.loadedItems,
-                        settings: self.settings.snapshot,
-                        protectedItemIDs: self.effectiveRetentionProtectedItemIDs,
-                        shortcutRetainedItemIDs: self.shortcutRetainedItemIDs
-                    )
+                    if self.preservesRestoredHistory {
+                        retainedItems = outcome.loadedItems
+                    } else {
+                        retainedItems = await worker.prune(
+                            outcome.loadedItems,
+                            settings: self.settings.snapshot,
+                            protectedItemIDs: self.effectiveRetentionProtectedItemIDs,
+                            shortcutRetainedItemIDs: self.shortcutRetainedItemIDs
+                        )
+                    }
                     guard !Task.isCancelled else { return }
                 }
                 self.finishLoading(outcome.loadedItems, retainedItems: retainedItems)
@@ -1044,6 +1049,22 @@ final class ClipboardHistoryController: NSObject, ObservableObject {
             storageError = error as? ClipboardHistoryStoreError
             notifyChanged()
         }
+    }
+
+    var canRestorePortablePreferences: Bool {
+        !isSuspendedForBackup && loadTask == nil && !isMutatingItems && !hasPendingDurableItemIDs
+            && durableMutationTask == nil && !needsSettingsReconciliation
+    }
+
+    func portablePreferencesDidRestore() {
+        capturePolicyRevision &+= 1
+        preservesRestoredHistory = true
+        retentionTimer?.invalidate()
+        retentionTimer = nil
+        cancelPendingCaptureProcessing()
+        cancelPendingPasteboardPayloadRead()
+        refreshProtectedCapacityState()
+        notifyChanged(reschedulesRetention: false)
     }
 
     func settingsDidChange() {

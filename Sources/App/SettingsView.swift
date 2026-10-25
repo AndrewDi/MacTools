@@ -1171,6 +1171,9 @@ private struct PreferencesBackupSettingsRow: View {
     @State private var isChoosingExport = false
     @State private var exportSelection = PreferencesBackupSelection.all(pluginPreferenceIDs: [])
     @State private var exportPluginOptions: [PreferencesPluginOption] = []
+    @State private var exportCoverage: [PreferencesPluginBackupDiagnostic] = []
+    @State private var exportCoverageOptions: [PreferencesPluginOption] = []
+    @State private var exportFailure: String?
     @State private var deviceLocalAutomationRuleCount = 0
     @State private var alertMessage: String?
     @State private var isBackingUp = false
@@ -1326,12 +1329,12 @@ private struct PreferencesBackupSettingsRow: View {
             PreferencesExportSelectionSheet(
                 selection: $exportSelection,
                 pluginOptions: exportPluginOptions,
+                coverage: exportCoverage,
+                coverageOptions: exportCoverageOptions,
+                exportFailure: exportFailure,
                 deviceLocalAutomationRuleCount: deviceLocalAutomationRuleCount,
                 onCancel: { isChoosingExport = false },
-                onExport: {
-                    isChoosingExport = false
-                    savePreferences(selection: exportSelection)
-                }
+                onExport: { savePreferences(selection: exportSelection) }
             )
             .environment(\.locale, locale)
             .environment(\.layoutDirection, layoutDirection)
@@ -1475,9 +1478,12 @@ private struct PreferencesBackupSettingsRow: View {
     }
 
     private func exportPreferences() {
-        let backup = pluginHost.makePreferencesBackup()
-        exportSelection = .all(pluginPreferenceIDs: Set(backup.pluginPreferences.keys))
-        exportPluginOptions = importer.pluginOptions(for: Set(backup.pluginPreferences.keys))
+        let candidates = pluginHost.preferencesBackupCandidateIDs
+        exportSelection = .all(pluginPreferenceIDs: candidates)
+        exportPluginOptions = importer.pluginOptions(for: candidates)
+        exportCoverage = pluginHost.preferencesBackupCoverage
+        exportCoverageOptions = importer.pluginOptions(for: Set(exportCoverage.map(\.pluginID)))
+        exportFailure = nil
         deviceLocalAutomationRuleCount = pluginHost.deviceLocalAutomationRuleCount
         isChoosingExport = true
     }
@@ -1485,14 +1491,17 @@ private struct PreferencesBackupSettingsRow: View {
     private func savePreferences(selection: PreferencesBackupSelection) {
         let data: Data
         do {
+            let result = pluginHost.makePreferencesBackupExport(selection: selection)
+            exportCoverage = result.pluginOutcomes
             data = try PreferencesArchiveDocument(
                 scope: .full,
-                backup: pluginHost.makePreferencesBackup(selection: selection)
+                backup: result.requiringSuccessfulSelection()
             ).encodedJSON()
         } catch {
-            alertMessage = preferencesBackupErrorMessage(error)
+            exportFailure = preferencesBackupErrorMessage(error)
             return
         }
+        isChoosingExport = false
 
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
@@ -1913,12 +1922,23 @@ enum PreferencesBackupStatusFormatter {
     }
 }
 
-private struct PreferencesExportSelectionSheet: View {
+struct PreferencesExportSelectionSheet: View {
     @Binding var selection: PreferencesBackupSelection
     let pluginOptions: [PreferencesPluginOption]
+    let coverage: [PreferencesPluginBackupDiagnostic]
+    let coverageOptions: [PreferencesPluginOption]
+    let exportFailure: String?
     let deviceLocalAutomationRuleCount: Int
     let onCancel: () -> Void
     let onExport: () -> Void
+
+    private var displayedCoverage: [PreferencesPluginBackupDiagnostic] {
+        coverage.map { diagnostic in
+            guard pluginOptions.contains(where: { $0.id == diagnostic.pluginID }),
+                  !selection.pluginPreferenceIDs.contains(diagnostic.pluginID) else { return diagnostic }
+            return .init(pluginID: diagnostic.pluginID, status: "notSelected", exclusions: diagnostic.exclusions)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -1935,10 +1955,21 @@ private struct PreferencesExportSelectionSheet: View {
             .font(PluginSettingsTheme.Typography.rowDescription)
             .foregroundStyle(.secondary)
 
-            PreferencesSelectionFields(
-                selection: $selection,
-                pluginOptions: pluginOptions
-            )
+            ScrollView {
+                VStack(alignment: .leading, spacing: PluginSettingsTheme.Spacing.section) {
+                    PreferencesSelectionFields(selection: $selection, pluginOptions: pluginOptions)
+                    PreferencesBackupCoverageView(coverage: displayedCoverage, pluginOptions: coverageOptions)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 440)
+
+            if let exportFailure {
+                Text(exportFailure)
+                    .font(PluginSettingsTheme.Typography.rowDescription)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if selection.includesAutomation, deviceLocalAutomationRuleCount > 0 {
                 Label {
@@ -1958,11 +1989,13 @@ private struct PreferencesExportSelectionSheet: View {
                 Spacer()
                 Button(AppL10n.settings("common.cancel", defaultValue: "取消"), action: onCancel)
                     .buttonStyle(.bordered)
+                    .keyboardShortcut(.cancelAction)
                 Button(AppL10n.preferencesBackup(
                     "preferencesBackup.exportSelection.confirm",
                     defaultValue: "继续导出…"
                 ), action: onExport)
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
                     .disabled(selection.isEmpty)
             }
         }
@@ -2369,9 +2402,11 @@ struct PreferencesImportPreviewSheet: View {
 
             PreferencesSelectionFields(
                 selection: $selection,
-                pluginOptions: pluginOptions,
+                pluginOptions: pluginOptions.filter { preview.selection.pluginPreferenceIDs.contains($0.id) },
                 availableSelection: preview.selection
             )
+
+            PreferencesBackupCoverageView(coverage: currentPreview.pluginDiagnostics, pluginOptions: pluginOptions)
 
             if let previewErrorMessage {
                 Text(previewErrorMessage)
@@ -2381,7 +2416,7 @@ struct PreferencesImportPreviewSheet: View {
 
             Text(AppL10n.preferencesBackup(
                 "preferencesBackup.preview.replaceNotice",
-                defaultValue: "将替换以上偏好类别；备份中未包含的设置会恢复为默认值。"
+                defaultValue: "仅替换所选的备份设置；未包含的插件设置和本机数据会保留。"
             ))
                 .font(PluginSettingsTheme.Typography.rowDescription)
                 .foregroundStyle(.secondary)

@@ -326,5 +326,12 @@
         "dynamicTemplates": []
       }
     ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "local-activation",
+      "history"
+    ]
   }
 }

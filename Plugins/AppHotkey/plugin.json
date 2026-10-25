@@ -225,11 +225,11 @@
                 "id": "entryID",
                 "kind": "string",
                 "isRequired": true,
-                "portability": "localOnly"
+                "portability": "portable"
               }
             ],
             "parameterSummary": "@productStrings.action.launch.parameter-summary",
-            "localOnlyIdentity": true,
+            "localOnlyIdentity": false,
             "keywords": [
               "app",
               "hotkey",
@@ -247,13 +247,20 @@
               "automatic-rule",
               "action-grid",
               "trackpad-gesture",
-              "manual"
+              "manual",
+              "app-intent"
             ],
             "automaticEligible": true,
             "externalInvocation": "allowed"
           }
         ]
       }
+    ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "application-paths"
     ]
   }
 }

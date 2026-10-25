@@ -300,6 +300,34 @@ final class AppVolumePluginTests: XCTestCase {
         XCTAssertFalse(plugin.actionAvailability(for: reference).isAvailable)
     }
 
+    func testPortableRestorePreservesRunningAudioRouteAndSavesFuturePreference() async throws {
+        let storage = AppVolumeStorageMock()
+        let monitor = AppVolumeMonitorMock()
+        let router = AppVolumeRouterMock(accessResult: true)
+        let plugin = makePlugin(storage: storage, monitor: monitor, router: router)
+        plugin.activate(context: PluginRuntimeContext(pluginID: "app-volume"))
+        defer { plugin.deactivate(reason: .hostShutdown) }
+        let apps = [application(id: "com.example.music", name: "Music", objectID: 51)]
+        monitor.send(snapshot(applications: apps))
+        plugin.handleAction(.setDisclosureExpanded(true))
+        let sliderID = try XCTUnwrap(plugin.rowState.detail?.controls.first?.id)
+        plugin.handleAction(.setSlider(controlID: sliderID, value: 0.4, phase: .ended))
+        for _ in 0..<100 where router.lastTargets.first?.gain != 0.4 { await Task.yield() }
+        XCTAssertEqual(router.lastTargets.first?.gain, 0.4)
+        let updateCount = router.updates.count
+        let accessCount = router.accessRequestCount
+        let data = try JSONSerialization.data(withJSONObject: ["formatVersion": 1, "applications": ["com.example.music": 0.8]])
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: data))
+        XCTAssertEqual(router.updates.count, updateCount)
+        XCTAssertEqual(router.accessRequestCount, accessCount)
+        monitor.send(snapshot(applications: apps))
+        await Task.yield()
+        XCTAssertEqual(router.lastTargets.first?.gain, 0.4)
+        let reloaded = makePlugin(storage: storage)
+        let exported = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(reloaded.makePortablePreferencesBackup())) as? [String: Any])
+        XCTAssertEqual((exported["applications"] as? [String: Double])?["com.example.music"], 0.8)
+    }
+
     private func makePlugin(
         storage: AppVolumeStorageMock? = nil,
         monitor: AppVolumeMonitorMock? = nil,

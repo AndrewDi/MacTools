@@ -288,5 +288,11 @@
         ]
       }
     ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "private-content"
+    ]
   }
 }

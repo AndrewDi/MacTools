@@ -244,5 +244,9 @@
         "dynamicTemplates": []
       }
     ]
+  },
+  "preferencesBackup": {
+    "status": "none",
+    "exclusions": []
   }
 }

@@ -208,5 +208,12 @@
     "includedPackIDs": [],
     "suggestedRecipeIDs": [],
     "supersedesPluginIDs": []
+  },
+  "preferencesBackup": {
+    "status": "localOnly",
+    "exclusions": [
+      "local-activation",
+      "history"
+    ]
   }
 }

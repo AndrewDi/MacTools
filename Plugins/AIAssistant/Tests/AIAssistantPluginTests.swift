@@ -379,11 +379,51 @@ final class AIAssistantPluginTests: XCTestCase {
         XCTAssertTrue(panel.isVisible)
     }
 
+    func testImportedEndpointCannotReuseLocalKeyAcrossRepeatedRestoreAndRelaunch() async throws {
+        let storage = AIAssistantInMemoryPluginStorage()
+        let secret = CountingAIAssistantSecretStore(apiKey: "local-secret")
+        let plugin = makePlugin(storage: storage, secretStore: secret)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(plugin.makePortablePreferencesBackup())) as? [String: Any])
+        var profiles = try XCTUnwrap(object["profiles"] as? [[String: Any]])
+        profiles[0]["baseURL"] = "https://imported.example/v1"
+        object["profiles"] = profiles
+        let incoming = try JSONSerialization.data(withJSONObject: object)
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: incoming))
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: incoming))
+        let reloaded = makePlugin(storage: storage, secretStore: secret)
+        let profile = try JSONDecoder().decode([AIAssistantProviderProfile].self, from: JSONSerialization.data(withJSONObject: profiles))[0]
+        if case .success = await reloaded.fetchModels(profile: profile, apiKey: "") { XCTFail("Imported endpoint reused a local key") }
+        if case .success = await reloaded.testConnection(profile: profile, apiKey: "") { XCTFail("Imported endpoint reused a local key") }
+        XCTAssertEqual(secret.loadCount, 0)
+        XCTAssertEqual(secret.saveCount, 0)
+        XCTAssertNotNil(reloaded.saveProviderConfiguration(profiles: [profile], apiKey: ""))
+        XCTAssertNil(reloaded.saveProviderConfiguration(profiles: [profile], apiKey: "explicit-new-key"))
+        XCTAssertTrue(PortableCredentialAuthorization(storage: storage).allows(profileID: profile.id, baseURL: profile.baseURL))
+    }
+
+    func testPromptOptOutPreservesPrivateTextAndOmittedDefinitionsHaveNoIndex() throws {
+        let plugin = makePlugin(storage: AIAssistantInMemoryPluginStorage())
+        let local = AIAssistantPrompt(id: "private", name: "Private", template: "Private {{text}}", systemPrompt: nil, isEnabled: true)
+        XCTAssertNil(plugin.savePromptsConfiguration([local]))
+        let incomingPlugin = makePlugin(storage: AIAssistantInMemoryPluginStorage())
+        let incoming = try XCTUnwrap(incomingPlugin.makePortablePreferencesBackup())
+        XCTAssertEqual(plugin.actionReferences(inPortablePreferences: incoming), [])
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: incoming))
+        XCTAssertEqual(plugin.shortcutDefinitions.map(\.actionID), ["private"])
+        XCTAssertFalse(String(decoding: try XCTUnwrap(plugin.makePortablePreferencesBackup()), as: UTF8.self).contains("Private {{text}}"))
+        incomingPlugin.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: true))
+        XCTAssertNil(incomingPlugin.savePromptsConfiguration([AIAssistantPrompt(id: "private", name: "Other", template: "Different {{text}}", systemPrompt: nil, isEnabled: true)]))
+        let before = plugin.makePortablePreferencesBackup()
+        XCTAssertFalse(plugin.restorePortablePreferencesReportingResult(from: try XCTUnwrap(incomingPlugin.makePortablePreferencesBackup())))
+        XCTAssertEqual(plugin.makePortablePreferencesBackup(), before)
+    }
+
     // MARK: - Helpers
 
     private func makePlugin(
         storage: AIAssistantInMemoryPluginStorage? = nil,
         accessibilityTrustProvider: @escaping () -> Bool = { true },
+        secretStore: (any AIAssistantSecretStoring)? = nil,
         panelController: RecordingAIAssistantPanelController? = nil,
         clipboardTextProvider: @escaping () -> String? = { nil },
         providerFactoryOverride: AIAssistantProviderFactory? = nil,
@@ -394,7 +434,7 @@ final class AIAssistantPluginTests: XCTestCase {
             context: PluginRuntimeContext(pluginID: "ai-assistant", storage: storage),
             accessibilityTrustProvider: accessibilityTrustProvider,
             accessibilityTrustRequester: { _ in true },
-            secretStore: CountingAIAssistantSecretStore(apiKey: "sk-test"),
+            secretStore: secretStore ?? CountingAIAssistantSecretStore(apiKey: "sk-test"),
             panelController: panelController ?? RecordingAIAssistantPanelController(),
             selectedTextCapturePipeline: SelectedTextCapturePipeline(strategies: strategies),
             providerFactoryOverride: providerFactoryOverride,
@@ -438,6 +478,8 @@ private final class StaticSelectionCapture: SelectedTextCapturing {
 
 private final class CountingAIAssistantSecretStore: AIAssistantSecretStoring, @unchecked Sendable {
     private var apiKey: String?
+    private(set) var loadCount = 0
+    private(set) var saveCount = 0
 
     init(apiKey: String?) {
         self.apiKey = apiKey
@@ -448,10 +490,12 @@ private final class CountingAIAssistantSecretStore: AIAssistantSecretStoring, @u
     }
 
     func loadAPIKey() throws -> String? {
-        apiKey
+        loadCount += 1
+        return apiKey
     }
 
     func saveAPIKey(_ apiKey: String) throws {
+        saveCount += 1
         self.apiKey = apiKey
     }
 

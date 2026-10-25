@@ -1,3 +1,4 @@
 core:
   sources:
+    - ../../Sources/PluginSupport/PortableApplicationReference.swift
     - ../../Sources/Core/RightClick/RightClickConfiguration.swift

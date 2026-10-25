@@ -219,6 +219,7 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginApplicationActivityStateH
                         localization: localization,
                         onChange: {},
                         onNotificationSettingsChange: {
+                            if store.lowBatteryNotificationEnabled { lowBatteryNotificationController.requestAuthorization() }
                             viewModel.setLowBatteryMonitoringEnabled(
                                 store.lowBatteryNotificationEnabled
                             )
@@ -416,5 +417,25 @@ final class DeviceBatteryPlugin: MacToolsPlugin, PluginApplicationActivityStateH
         }
 
         NSWorkspace.shared.open(url)
+    }
+}
+
+extension DeviceBatteryPlugin: PluginPortablePreferencesProviding, PluginPortablePreferencesRestorationReporting,
+    PluginPersistentPreferencesChangeSignaling {
+    var onPersistentPreferencesChange: (() -> Void)? {
+        get { store.onPersistentPreferencesChange }
+        set { store.onPersistentPreferencesChange = newValue }
+    }
+    func makePortablePreferencesBackup() -> Data? { store.portableBackup() }
+    func restorePortablePreferences(from data: Data) { _ = restorePortablePreferencesReportingResult(from: data) }
+    func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
+        guard store.restorePortableBackup(data) else { return false }
+        viewModel.setLowBatteryMonitoringEnabled(store.lowBatteryNotificationEnabled)
+        viewModel.updateSources(
+            includeInternalBattery: store.showInternalBattery, includeBluetoothDevices: store.showBluetoothDevices,
+            includeAppleMobileDevices: store.showAppleMobileDevices, includeVendorHIDDevices: store.showVendorHIDDevices
+        )
+        onStateChange?()
+        return true
     }
 }
