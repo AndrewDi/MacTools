@@ -989,7 +989,7 @@ extension AIAssistantPlugin: PluginPortablePreferencesProviding, PluginPortableP
     }
     func actionReferences(inPortablePreferences data: Data) -> [ActionReference]? {
         guard let payload = decodedPortable(data) else { return nil }
-        return (payload.prompts ?? []).filter(\.isEnabled).map { ActionReference(key: ActionKey(providerID: metadata.id, actionID: $0.id)) }
+        return (payload.prompts ?? []).map { ActionReference(key: ActionKey(providerID: metadata.id, actionID: $0.id)) }
     }
     func backupDisposition(for reference: ActionReference) -> PluginActionReferenceBackupDisposition {
         guard reference.key.providerID == metadata.id, reference.parameters.entries.isEmpty,

@@ -5,6 +5,60 @@ import XCTest
 
 @MainActor
 final class TranslatorPluginTests: XCTestCase {
+    func testPortableRestoreRejectsInvalidEnabledMergedTemplateWithoutMutation() throws {
+        let storage = TranslatorInMemoryPluginStorage()
+        let secret = CountingTranslatorSecretStore(apiKey: "local-key")
+        let destination = makePlugin(storage: storage, secretStore: secret)
+        let active = TranslatorProviderProfile.defaultProfile()
+        let draft = TranslatorProviderProfile(id: "draft", name: "Draft", isEnabled: false,
+            promptTemplate: "Unfinished private template")
+        XCTAssertNil(destination.saveConfiguration(profiles: [active, draft], apiKeys: [:],
+            languagePair: .init(first: .english, second: .simplifiedChinese)))
+        let before = storage.data(forKey: TranslatorConstants.StorageKey.providerProfiles)
+        var enabled = draft
+        enabled.isEnabled = true
+        enabled.promptTemplate = "Translate {{text}}"
+        let sourceStorage = TranslatorInMemoryPluginStorage()
+        try TranslatorProviderProfileStore(storage: sourceStorage).saveProfiles([active, enabled])
+        let source = makePlugin(storage: sourceStorage)
+        let payload = try XCTUnwrap(source.makePortablePreferencesBackup())
+
+        XCTAssertFalse(destination.restorePortablePreferencesReportingResult(from: payload))
+        XCTAssertEqual(storage.data(forKey: TranslatorConstants.StorageKey.providerProfiles), before)
+        XCTAssertEqual(secret.loadCount, 0)
+        XCTAssertEqual(secret.saveCount, 0)
+
+        enabled.isEnabled = false
+        try TranslatorProviderProfileStore(storage: sourceStorage).saveProfiles([active, enabled])
+        let disabledPayload = try XCTUnwrap(makePlugin(storage: sourceStorage).makePortablePreferencesBackup())
+        XCTAssertTrue(destination.restorePortablePreferencesReportingResult(from: disabledPayload))
+        XCTAssertEqual(TranslatorProviderProfileStore(storage: storage).loadProfiles().first { $0.id == draft.id }, draft)
+    }
+
+    func testExcludedLegacyPromptSizeDoesNotBlockPortableExport() throws {
+        let storage = TranslatorInMemoryPluginStorage()
+        var profile = TranslatorProviderProfile.defaultProfile()
+        profile.promptTemplate = String(repeating: "x", count: 1_048_577) + " {{text}}"
+        try TranslatorProviderProfileStore(storage: storage).saveProfiles([profile])
+        let raw = storage.data(forKey: TranslatorConstants.StorageKey.providerProfiles)
+        let plugin = makePlugin(storage: storage)
+
+        let backup = try XCTUnwrap(plugin.makePortablePreferencesBackup())
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: backup) as? [String: Any])
+        let profiles = try XCTUnwrap(object["profiles"] as? [[String: Any]])
+        XCTAssertTrue(profiles.allSatisfy { $0["promptTemplate"] == nil })
+        XCTAssertEqual(storage.data(forKey: TranslatorConstants.StorageKey.providerProfiles), raw)
+        plugin.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: true))
+        XCTAssertNil(plugin.makePortablePreferencesBackup())
+        plugin.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: false))
+
+        storage.set(Data(), forKey: "preferences-backup.restore.v2")
+        XCTAssertNil(plugin.makePortablePreferencesBackup())
+        storage.removeObject(forKey: "preferences-backup.restore.v2")
+        XCTAssertNotNil(plugin.makePortablePreferencesBackup())
+        XCTAssertEqual(storage.data(forKey: TranslatorConstants.StorageKey.providerProfiles), raw)
+    }
+
 
     func testPrimaryPanelReflectsPermissionAndSetupState() {
         XCTAssertEqual(

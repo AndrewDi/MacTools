@@ -2,9 +2,42 @@ import AppKit
 import MacToolsPluginKit
 import XCTest
 @testable import AIAssistantPlugin
+@testable import class MacTools.PluginHost
+@testable import class MacTools.ShortcutStore
+@testable import class MacTools.PreferencesBackupStore
 
 @MainActor
 final class AIAssistantPluginTests: XCTestCase {
+    func testIncludedDisabledPromptRetainsCustomizedShortcutThroughBackup() throws {
+        let plugin = makePlugin()
+        var prompt = AIAssistantPrompt(id: "custom", name: "Custom prompt", template: "Process {{text}}",
+            systemPrompt: nil, isEnabled: true)
+        XCTAssertNil(plugin.savePromptsConfiguration([prompt]))
+        plugin.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: true))
+        let suite = "AIAssistantShortcutBackupTests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let shortcuts = ShortcutStore(userDefaults: defaults)
+        let host = PluginHost(plugins: [plugin], shortcutStore: shortcuts,
+            pluginOrderingStore: .init(userDefaults: defaults), preferencesBackupStore: PreferencesBackupStore(userDefaults: defaults),
+            globalShortcutManager: .init(registrar: FakeCarbonHotKeyRegistrar()), loadDynamicPluginsOnInit: false)
+        defer { host.deactivateAllPlugins() }
+        let shortcutID = "ai-assistant.shortcut." + (try XCTUnwrap(plugin.shortcutDefinitions.first)).id
+        let binding = ShortcutBinding(keyCode: 97, modifiers: [.command, .option, .control, .shift])
+        XCTAssertNil(host.setShortcutBindingAndReturnError(binding, for: shortcutID))
+        prompt.isEnabled = false
+        XCTAssertNil(plugin.savePromptsConfiguration([prompt]))
+
+        let backup = try host.makePreferencesBackupExport().requiringSuccessfulSelection()
+        XCTAssertEqual(backup.shortcutCustomizations[shortcutID], .custom(binding))
+        let result = try host.importPreferences(backup)
+
+        XCTAssertTrue(result.shortcutErrors.isEmpty)
+        XCTAssertEqual(shortcuts.customization(for: shortcutID), .custom(binding))
+        XCTAssertEqual(plugin.shortcutDefinitions.first?.scope, .whilePluginActive)
+        XCTAssertTrue(plugin.actionDefinitions.isEmpty)
+    }
+
     func testMetadataMatchesManifestContract() {
         let plugin = makePlugin()
 

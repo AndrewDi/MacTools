@@ -586,6 +586,7 @@ struct InputRemappingEventProcessor {
 @MainActor
 final class InputRemappingStore: ObservableObject {
     @Published private(set) var rules: [InputRemappingRule]
+    @Published private(set) var portableRestoreRevision: UInt64 = 0
     private static let storageKey = "input-remapping.rules.v1"
     private let storage: any PluginStorage
     private let logger: Logger
@@ -680,7 +681,10 @@ final class InputRemappingStore: ObservableObject {
               let payload = try? JSONDecoder().decode(PortablePreferences.self, from: data), payload.formatVersion == 1,
               payload.rules.count <= 256, Set(payload.rules.map(\.id)).count == payload.rules.count,
               payload.rules.allSatisfy(\.isValid) else { return false }
-        return update(payload.rules.map(\.restoredRule))
+        let previous = rules
+        guard update(payload.rules.map(\.restoredRule)) else { return false }
+        if rules != previous { portableRestoreRevision &+= 1 }
+        return true
     }
 
     @discardableResult

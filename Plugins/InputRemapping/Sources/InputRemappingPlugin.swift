@@ -697,6 +697,7 @@ private struct InputRemappingSettingsView: View {
                         isTrackpadGestureOwned: isTrackpadGestureOwned
                     )
                 }
+                .id(store.portableRestoreRevision)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

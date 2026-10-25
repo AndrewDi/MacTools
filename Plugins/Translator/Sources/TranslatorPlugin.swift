@@ -932,7 +932,10 @@ extension TranslatorPlugin: PluginPortablePreferencesProviding, PluginPortablePr
         return payload
     }
     func makePortablePreferencesBackup() -> Data? {
-        guard portableStore.backup() != nil else { return nil }
+        // Local profile records contain private prompt text; validate the portable projection below.
+        guard portableStore.backup(including: [TranslatorConstants.StorageKey.shortcutEnabled,
+            TranslatorConstants.StorageKey.firstPreferredLanguage,
+            TranslatorConstants.StorageKey.secondPreferredLanguage]) != nil else { return nil }
         let payload = PortablePreferences(formatVersion: 1, profiles: providerProfiles.map {
             PortableProfile(id: $0.id, name: $0.name, isEnabled: $0.isEnabled, baseURL: $0.baseURL,
                 model: $0.model, promptTemplate: includesPromptText ? $0.promptTemplate : nil)
@@ -956,7 +959,8 @@ extension TranslatorPlugin: PluginPortablePreferencesProviding, PluginPortablePr
             TranslatorProviderProfile(id: incoming.id, name: incoming.name, isEnabled: incoming.isEnabled, baseURL: incoming.baseURL,
                 model: incoming.model, promptTemplate: incoming.promptTemplate ?? providerProfiles.first { $0.id == incoming.id }?.promptTemplate ?? defaultTemplate)
         } + protected.filter { local in !payload.profiles.contains { $0.id == local.id } }
-        guard restored.count <= 64, let profileData = try? JSONEncoder().encode(restored), portableStore.commit([
+        guard restored.count <= 64, restored.allSatisfy({ !$0.isEnabled || $0.validationError == nil }),
+              let profileData = try? JSONEncoder().encode(restored), portableStore.commit([
             TranslatorConstants.StorageKey.providerProfiles: .data(profileData),
             TranslatorConstants.StorageKey.shortcutEnabled: .boolean(payload.shortcutEnabled),
             TranslatorConstants.StorageKey.firstPreferredLanguage: .string(payload.languagePair.first.rawValue),
