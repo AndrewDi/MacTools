@@ -8,6 +8,32 @@ import XCTest
 
 @MainActor
 final class AIAssistantPluginTests: XCTestCase {
+    func testPromptSaveResolvesPendingRecoveryBeforeAcceptingEdits() throws {
+        let storage = AIAssistantInMemoryPluginStorage()
+        let plugin = makePlugin(storage: storage)
+        let original = AIAssistantPrompt(id: "existing", name: "Existing", template: "Original {{text}}", isEnabled: true)
+        XCTAssertNil(plugin.savePromptsConfiguration([original]))
+        plugin.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: true))
+        let source = makePlugin()
+        var imported = original
+        imported.template = "Imported {{text}}"
+        XCTAssertNil(source.savePromptsConfiguration([imported]))
+        source.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: true))
+        storage.blockedRemoveKeys = ["preferences-backup.restore.v2"]
+        XCTAssertFalse(plugin.restorePortablePreferencesReportingResult(from: try XCTUnwrap(source.makePortablePreferencesBackup())))
+        XCTAssertNotNil(storage.data(forKey: "preferences-backup.restore.v2"))
+
+        var edited = original
+        edited.template = "Local edit {{text}}"
+        XCTAssertNotNil(plugin.savePromptsConfiguration([edited]))
+        XCTAssertEqual(AIAssistantPromptStore(storage: storage).loadPrompts(), [original])
+        storage.blockedRemoveKeys = []
+        XCTAssertNil(plugin.savePromptsConfiguration([edited]))
+        _ = makePlugin(storage: storage)
+        XCTAssertEqual(AIAssistantPromptStore(storage: storage).loadPrompts(), [edited])
+        XCTAssertNil(storage.object(forKey: "preferences-backup.restore.v2"))
+    }
+
     func testIncludedDisabledPromptRetainsCustomizedShortcutThroughBackup() async throws {
         let plugin = makePlugin()
         var prompt = AIAssistantPrompt(id: "custom", name: "Custom prompt", template: "Process {{text}}",
@@ -558,6 +584,8 @@ final class AIAssistantPluginTests: XCTestCase {
         plugin.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: true))
         XCTAssertNil(plugin.makePortablePreferencesBackup())
         XCTAssertEqual(storage.data(forKey: AIAssistantConstants.StorageKey.prompts), raw)
+        XCTAssertNil(plugin.savePromptsConfiguration(prompts))
+        XCTAssertEqual(AIAssistantPromptStore(storage: storage).loadPrompts(), prompts)
     }
 
     func testPromptOptOutPreservesPrivateTextAndOmittedDefinitionsHaveNoIndex() throws {

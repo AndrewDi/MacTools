@@ -80,7 +80,7 @@ struct LaunchControlManagerView: View {
                 compactPane = .items
             }
         }
-        .onChange(of: controller.metadataRevision) { noteDrafts.removeAll() }
+        .onChange(of: controller.noteRestorationRevisions, reconcileNoteDrafts)
         .onChange(of: searchFocusController.requestID) {
             isSearchFocused = true
         }
@@ -545,6 +545,10 @@ struct LaunchControlManagerView: View {
             get: { noteDrafts[item.id] ?? item.note },
             set: { noteDrafts[item.id] = $0 }
         )
+    }
+
+    private func reconcileNoteDrafts(previous: [String: UInt], current: [String: UInt]) {
+        noteDrafts = noteDrafts.filter { previous[$0.key] == current[$0.key] }
     }
 
     private func detailHeader(_ item: LaunchControlItem) -> some View {

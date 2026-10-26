@@ -920,8 +920,12 @@ extension TranslatorPlugin: PluginPortablePreferencesProviding, PluginPortablePr
     func restorePortablePreferencesReportingResult(from data: Data) -> Bool {
         guard credentialAuthorization.isInitialized, let payload = decodedPortable(data) else { return false }
         let before = makePortablePreferencesBackup()
+        let previousProfiles = providerProfiles
         let defaultTemplate = OpenAICompatibleConfiguration.defaultPromptTemplate(localization: localization)
-        let protected = includesPromptText ? [] : providerProfiles.filter { $0.promptTemplate != defaultTemplate }
+        let privateProfiles = providerProfiles.filter { $0.promptTemplate != defaultTemplate }
+        let protected = includesPromptText ? [] : privateProfiles
+        // An archive without prompt text must preserve destination-only text, regardless of export opt-in.
+        let retained = payload.profiles.allSatisfy { $0.promptTemplate == nil } ? privateProfiles : protected
         guard !payload.profiles.contains(where: { incoming in
             guard let template = incoming.promptTemplate else { return false }
             return protected.contains { $0.id == incoming.id && $0.promptTemplate != template }
@@ -929,7 +933,7 @@ extension TranslatorPlugin: PluginPortablePreferencesProviding, PluginPortablePr
         let restored = payload.profiles.map { incoming in
             TranslatorProviderProfile(id: incoming.id, name: incoming.name, isEnabled: incoming.isEnabled, baseURL: incoming.baseURL,
                 model: incoming.model, promptTemplate: incoming.promptTemplate ?? providerProfiles.first { $0.id == incoming.id }?.promptTemplate ?? defaultTemplate)
-        } + protected.filter { local in !payload.profiles.contains { $0.id == local.id } }
+        } + retained.filter { local in !payload.profiles.contains { $0.id == local.id } }
         guard restored.count <= 64, restored.allSatisfy({ !$0.isEnabled || $0.validationError == nil }),
               let profileData = try? JSONEncoder().encode(restored), portableStore.commit([
             TranslatorConstants.StorageKey.providerProfiles: .data(profileData),
@@ -942,7 +946,7 @@ extension TranslatorPlugin: PluginPortablePreferencesProviding, PluginPortablePr
         providerConfiguration = providerProfiles.first?.configuration ?? OpenAICompatibleConfiguration()
         if let coordinator { coordinator.close() } else { panelController.close() }
         coordinator = nil
-        providerEditorRevision += 1
+        if providerProfiles != previousProfiles { providerEditorRevision += 1 }
         if !providerProfiles.contains(where: { $0.isEnabled && credentialAuthorization.allows(profileID: $0.id, baseURL: $0.baseURL) }) { apiKeyState = .missing }
         if before != makePortablePreferencesBackup() { onPersistentPreferencesChange?() }
         onStateChange?()

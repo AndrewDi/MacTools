@@ -5,6 +5,25 @@ import XCTest
 
 @MainActor
 final class TranslatorPluginTests: XCTestCase {
+    func testOmittedTextPreservesDestinationOnlyTemplateRegardlessOfExportOptIn() throws {
+        let source = makePlugin()
+        let payload = try XCTUnwrap(source.makePortablePreferencesBackup())
+        for optedIn in [false, true] {
+            let storage = TranslatorInMemoryPluginStorage()
+            let destination = makePlugin(storage: storage)
+            let original = TranslatorProviderProfile.defaultProfile()
+            let draft = TranslatorProviderProfile(id: "private-draft", name: "Private draft", isEnabled: false,
+                baseURL: "", model: "", promptTemplate: "Destination-only private {{text}}")
+            XCTAssertNil(destination.saveConfiguration(profiles: [original, draft], apiKeys: [:],
+                languagePair: .init(first: .english, second: .simplifiedChinese)))
+            destination.handleSettingsAction(.setBoolean(controlID: "preferences-backup.include-prompt-text", value: optedIn))
+
+            XCTAssertTrue(destination.restorePortablePreferencesReportingResult(from: payload))
+            XCTAssertEqual(TranslatorProviderProfileStore(storage: storage).loadProfiles(), [original, draft])
+            XCTAssertEqual(storage.bool(forKey: "preferences-backup.include-prompt-text"), optedIn)
+        }
+    }
+
     func testPortableRestoreRejectsInvalidEnabledMergedTemplateWithoutMutation() throws {
         let storage = TranslatorInMemoryPluginStorage()
         let secret = CountingTranslatorSecretStore(apiKey: "local-key")

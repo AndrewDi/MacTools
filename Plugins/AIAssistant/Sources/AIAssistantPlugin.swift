@@ -840,6 +840,7 @@ final class AIAssistantPlugin:
         }
 
         do {
+            guard portableStore.recover() else { throw CocoaError(.fileWriteUnknown) }
             let previousBackup = makePortablePreferencesBackup()
             try promptStore.savePrompts(prompts)
             self.prompts = promptStore.loadPrompts()

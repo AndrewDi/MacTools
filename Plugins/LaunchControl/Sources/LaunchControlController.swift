@@ -8,7 +8,7 @@ final class LaunchControlController: ObservableObject {
 
     var onStateChange: (() -> Void)?
     var onPersistentPreferencesChange: (() -> Void)?
-    @Published private(set) var metadataRevision = 0
+    @Published private(set) var noteRestorationRevisions: [String: UInt] = [:]
     private let portablePreferences: LaunchControlPortablePreferences
 
     private let scanner: LaunchControlScanner
@@ -145,8 +145,11 @@ final class LaunchControlController: ObservableObject {
         guard !snapshot.isRefreshing, activeOperations == 0 else { return false }
         let previous = portablePreferences.backup()
         guard portablePreferences.restore(data) else { return false }
+        let previousNotes = Dictionary(uniqueKeysWithValues: snapshot.items.map { ($0.id, $0.note) })
         snapshot.items = sortedItems(snapshot.items.map(applyingPersistedState))
-        metadataRevision += 1
+        for item in snapshot.items where previousNotes[item.id] != item.note {
+            noteRestorationRevisions[item.id, default: 0] &+= 1
+        }
         onStateChange?()
         if previous != portablePreferences.backup() { onPersistentPreferencesChange?() }
         return true
