@@ -240,5 +240,9 @@
         "dynamicTemplates": []
       }
     ]
+  },
+  "preferencesBackup": {
+    "status": "portable",
+    "exclusions": []
   }
 }

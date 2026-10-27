@@ -226,5 +226,12 @@
     "includedPackIDs": [],
     "suggestedRecipeIDs": [],
     "supersedesPluginIDs": []
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "application-paths",
+      "local-activation"
+    ]
   }
 }

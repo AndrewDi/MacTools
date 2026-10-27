@@ -290,7 +290,8 @@
       "ai-requests"
     ],
     "dataPersisted": [
-      "plugin-configuration"
+      "plugin-configuration",
+      "custom-prompt-text"
     ],
     "retention": {
       "policy": "user-controlled"
@@ -417,6 +418,14 @@
         ],
         "dynamicTemplates": []
       }
+    ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "credentials",
+      "permissions",
+      "private-content"
     ]
   }
 }

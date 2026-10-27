@@ -268,5 +268,13 @@
         "dynamicTemplates": []
       }
     ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "credentials",
+      "local-activation",
+      "history"
+    ]
   }
 }

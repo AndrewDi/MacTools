@@ -1186,7 +1186,8 @@
             "ai-requests"
           ],
           "dataPersisted": [
-            "plugin-configuration"
+            "plugin-configuration",
+            "custom-prompt-text"
           ],
           "diagnosticExportsContainUserData": false,
           "networkDomains": [],
@@ -1608,7 +1609,7 @@
                     "installed",
                     "applications"
                   ],
-                  "localOnlyIdentity": true,
+                  "localOnlyIdentity": false,
                   "parameterSummary": {
                     "ar": "التطبيق",
                     "de": "App",
@@ -1628,7 +1629,7 @@
                       "id": "entryID",
                       "isRequired": true,
                       "kind": "string",
-                      "portability": "localOnly"
+                      "portability": "portable"
                     }
                   ],
                   "permissionIDs": [],
@@ -1641,7 +1642,8 @@
                     "automatic-rule",
                     "action-grid",
                     "trackpad-gesture",
-                    "manual"
+                    "manual",
+                    "app-intent"
                   ],
                   "title": {
                     "ar": "فتح التطبيق",
@@ -6003,7 +6005,8 @@
           ],
           "dataPersisted": [
             "encrypted-clipboard-history",
-            "local-encryption-key"
+            "local-encryption-key",
+            "plugin-configuration"
           ],
           "diagnosticExportsContainUserData": false,
           "networkDomains": [],
@@ -14976,7 +14979,8 @@
             "productivity-state"
           ],
           "dataPersisted": [
-            "plugin-configuration"
+            "plugin-configuration",
+            "user-notes"
           ],
           "diagnosticExportsContainUserData": false,
           "networkDomains": [],
@@ -21686,7 +21690,9 @@
             "filesystem-paths",
             "file-sizes"
           ],
-          "dataPersisted": [],
+          "dataPersisted": [
+            "plugin-configuration"
+          ],
           "diagnosticExportsContainUserData": false,
           "networkDomains": [],
           "networkUse": "none",
@@ -24182,7 +24188,8 @@
             "translation-requests"
           ],
           "dataPersisted": [
-            "plugin-configuration"
+            "plugin-configuration",
+            "custom-prompt-text"
           ],
           "diagnosticExportsContainUserData": false,
           "networkDomains": [

@@ -282,9 +282,7 @@ final class RightClickFinderSync: FIFinderSync {
         guard !configuration.openWithApps.isEmpty, !targets.isEmpty else {
             return
         }
-        let matching = configuration.openWithApps.filter { app in
-            targets.contains { app.matches(fileExtension: $0.pathExtension) }
-        }
+        let matching = configuration.openWithApplications(matching: targets)
         guard !matching.isEmpty else {
             return
         }

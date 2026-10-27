@@ -18,6 +18,7 @@ final class ScreenshotEnvironment {
 
     init(storage: any PluginStorage, localization: PluginLocalization) {
         self.storage = storage
+        _ = Self.portableStore(storage: storage).recover()
         self.localization = localization
     }
 
@@ -40,7 +41,24 @@ final class ScreenshotEnvironment {
     /// Recording auto zoom is on by default; the record bar and settings share this preference.
     var recordingAutoZoom: Bool {
         get { storage.object(forKey: "recordingAutoZoom") as? Bool ?? true }
-        set { storage.set(newValue, forKey: "recordingAutoZoom") }
+        set {
+            guard newValue != recordingAutoZoom,
+                  portableStore.commit(["recordingAutoZoom": .boolean(newValue)]) else { return }
+            onPersistentPreferencesChange?()
+        }
+    }
+
+    var onPersistentPreferencesChange: (() -> Void)?
+    private static func portableStore(storage: any PluginStorage) -> PortablePreferencesStore {
+        PortablePreferencesStore(storage: storage, fields: ["recordingAutoZoom": .boolean(true)])
+    }
+    private var portableStore: PortablePreferencesStore { Self.portableStore(storage: storage) }
+    func portableBackup() -> Data? { portableStore.backup() }
+    func restorePortableBackup(_ data: Data) -> Bool {
+        let before = recordingAutoZoom
+        guard portableStore.restore(data) else { return false }
+        if recordingAutoZoom != before { onPersistentPreferencesChange?() }
+        return true
     }
 
     var saveFolderDisplayName: String { FileManager.default.displayName(atPath: saveFolder.path) }

@@ -6,6 +6,45 @@ import MacToolsPluginKit
 
 @MainActor
 final class DisplayBrightnessPluginTests: XCTestCase {
+    func testPortableTargetModeIsDurableAndDoesNotWriteHardware() throws {
+        let source = DisplayBrightnessShortcutPreferences(storage: DisplayBrightnessMemoryStorage())
+        source.targetMode = .allDisplays
+        let storage = DisplayBrightnessMemoryStorage()
+        storage.set("local-device", forKey: "recovery")
+        let preferences = DisplayBrightnessShortcutPreferences(storage: storage)
+        let controller = MockDisplayBrightnessController()
+        let plugin = DisplayBrightnessPlugin(controller: controller, shortcutPreferences: preferences)
+        var changes = 0
+        plugin.onPersistentPreferencesChange = { changes += 1 }
+        let data = try XCTUnwrap(source.portableBackup())
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: data))
+        XCTAssertEqual(preferences.targetMode, .allDisplays)
+        XCTAssertEqual(changes, 1)
+        XCTAssertTrue(plugin.restorePortablePreferencesReportingResult(from: data))
+        XCTAssertEqual(changes, 1)
+        XCTAssertTrue(controller.brightnessWrites.isEmpty)
+        XCTAssertEqual(storage.string(forKey: "recovery"), "local-device")
+        XCTAssertEqual(DisplayBrightnessShortcutPreferences(storage: storage).targetMode, .allDisplays)
+    }
+
+    func testPortableTransactionRejectsFuturePayloadAndRollsBackFailedWrite() throws {
+        let storage = DisplayBrightnessMemoryStorage()
+        let preferences = DisplayBrightnessShortcutPreferences(storage: storage)
+        let source = DisplayBrightnessShortcutPreferences(storage: DisplayBrightnessMemoryStorage())
+        source.targetMode = .allDisplays
+        let data = try XCTUnwrap(source.portableBackup())
+        storage.rejectedWriteKey = "shortcutTargetMode"
+        XCTAssertFalse(preferences.restorePortableBackup(data))
+        XCTAssertEqual(preferences.targetMode, .followsMouse)
+        XCTAssertNil(storage.object(forKey: "shortcutTargetMode"))
+        XCTAssertNil(storage.object(forKey: "preferences-backup.restore.v1"))
+        storage.rejectedWriteKey = nil
+        var future = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        future["formatVersion"] = 99
+        XCTAssertFalse(preferences.restorePortableBackup(try JSONSerialization.data(withJSONObject: future)))
+        XCTAssertEqual(preferences.targetMode, .followsMouse)
+    }
+
     func testPendingMouseDisplayDoesNotRedirectShortcutToAnotherDisplay() {
         let controller = MockDisplayBrightnessController()
         var pending = makeBrightnessDisplay(id: 9, name: "Pending Display", brightness: 1)

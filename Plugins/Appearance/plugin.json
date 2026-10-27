@@ -460,5 +460,9 @@
     "includedPackIDs": [],
     "suggestedRecipeIDs": [],
     "supersedesPluginIDs": []
+  },
+  "preferencesBackup": {
+    "status": "none",
+    "exclusions": []
   }
 }

@@ -30,6 +30,10 @@ Custom SwiftUI sheets must explicitly forward their presenter's `locale` and `la
 
 Independent AppKit hosting views and controllers must observe the runtime locale and forward both environments to their SwiftUI roots. Refresh localized native window labels and cached previews without recreating editing or selection state. Keep physical grids, pointer coordinates, and menu-bar item ordering stable; apply the language direction to their semantic text and controls.
 
+## Preferences Backup
+
+Follow the [backup contract](preferences-backup.md) when persisting configuration. Keep the source manifest’s coverage/privacy declarations consistent with actual payloads and local exclusions. Regenerate the [inventory](preferences-backup-inventory.md), preserve custom identities and excluded private records, and verify failure/permission behavior without operating on real user data.
+
 ## Widgets
 
 A widget is a reusable presentation of plugin data. It can have no placements, one placement, or multiple independent copies.

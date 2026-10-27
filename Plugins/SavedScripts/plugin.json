@@ -250,5 +250,12 @@
         ]
       }
     ]
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "private-content",
+      "external-authorization"
+    ]
   }
 }

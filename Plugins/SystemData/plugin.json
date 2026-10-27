@@ -215,7 +215,9 @@
       "filesystem-paths",
       "file-sizes"
     ],
-    "dataPersisted": [],
+    "dataPersisted": [
+      "plugin-configuration"
+    ],
     "retention": {
       "policy": "none"
     },
@@ -238,5 +240,11 @@
     "includedPackIDs": [],
     "suggestedRecipeIDs": [],
     "supersedesPluginIDs": []
+  },
+  "preferencesBackup": {
+    "status": "partial",
+    "exclusions": [
+      "history"
+    ]
   }
 }

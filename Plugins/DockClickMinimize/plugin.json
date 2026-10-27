@@ -202,5 +202,9 @@
     "includedPackIDs": [],
     "suggestedRecipeIDs": [],
     "supersedesPluginIDs": []
+  },
+  "preferencesBackup": {
+    "status": "portable",
+    "exclusions": []
   }
 }

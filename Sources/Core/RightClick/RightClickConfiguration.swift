@@ -61,25 +61,43 @@ struct RightClickConfiguration: Codable, Equatable {
         copyFileName || copyAbsolutePath || copyRelativePath || copyShellEscapedPath || copyFileURL
     }
 
+    /// Unresolved imported apps stay in settings but cannot become Finder actions.
+    func openWithApplications(matching targets: [URL]) -> [RightClickOpenWithApp] {
+        openWithApps.filter { app in
+            !app.isUnresolved && targets.contains { app.matches(fileExtension: $0.pathExtension) }
+        }
+    }
+
+    fileprivate static let backupDecodingKey = CodingUserInfoKey(rawValue: "right-click.preferences-backup.strict")!
+
     /// Decode tolerantly: keys added after a config was first written fall back
     /// to their defaults instead of failing the whole decode.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let fallback = RightClickConfiguration.activeDefault
-        func flag(_ key: CodingKeys, _ defaultValue: Bool) -> Bool {
-            (try? container.decode(Bool.self, forKey: key)) ?? defaultValue
+        let strict = decoder.userInfo[Self.backupDecodingKey] as? Bool == true
+        func flag(_ key: CodingKeys, _ defaultValue: Bool) throws -> Bool {
+            if strict, container.contains(key) {
+                return try container.decode(Bool.self, forKey: key)
+            }
+            return (try? container.decode(Bool.self, forKey: key)) ?? defaultValue
         }
-        menuEnabled = flag(.menuEnabled, fallback.menuEnabled)
-        preferredLanguages = try? container.decodeIfPresent([String].self, forKey: .preferredLanguages)
-        newFolder = flag(.newFolder, fallback.newFolder)
-        copyFileName = flag(.copyFileName, fallback.copyFileName)
-        copyAbsolutePath = flag(.copyAbsolutePath, fallback.copyAbsolutePath)
-        copyRelativePath = flag(.copyRelativePath, fallback.copyRelativePath)
-        copyShellEscapedPath = flag(.copyShellEscapedPath, fallback.copyShellEscapedPath)
-        copyFileURL = flag(.copyFileURL, fallback.copyFileURL)
-        newFile = flag(.newFile, fallback.newFile)
-        openInTerminal = flag(.openInTerminal, fallback.openInTerminal)
-        openWithApps = (try? container.decode([RightClickOpenWithApp].self, forKey: .openWithApps)) ?? []
+        menuEnabled = try flag(.menuEnabled, fallback.menuEnabled)
+        newFolder = try flag(.newFolder, fallback.newFolder)
+        copyFileName = try flag(.copyFileName, fallback.copyFileName)
+        copyAbsolutePath = try flag(.copyAbsolutePath, fallback.copyAbsolutePath)
+        copyRelativePath = try flag(.copyRelativePath, fallback.copyRelativePath)
+        copyShellEscapedPath = try flag(.copyShellEscapedPath, fallback.copyShellEscapedPath)
+        copyFileURL = try flag(.copyFileURL, fallback.copyFileURL)
+        newFile = try flag(.newFile, fallback.newFile)
+        openInTerminal = try flag(.openInTerminal, fallback.openInTerminal)
+        if strict {
+            preferredLanguages = try container.decodeIfPresent([String].self, forKey: .preferredLanguages)
+            openWithApps = container.contains(.openWithApps) ? try container.decode([RightClickOpenWithApp].self, forKey: .openWithApps) : []
+        } else {
+            preferredLanguages = try? container.decodeIfPresent([String].self, forKey: .preferredLanguages)
+            openWithApps = (try? container.decode([RightClickOpenWithApp].self, forKey: .openWithApps)) ?? []
+        }
     }
 }
 
@@ -90,12 +108,17 @@ struct RightClickOpenWithApp: Codable, Equatable, Identifiable {
     var appPath: String
     /// Lowercased file extensions this entry applies to; empty = all files.
     var fileExtensions: [String]
+    /// Opaque portable identity retained when the app is missing on this Mac.
+    var portableApplicationReference: Data?
+
+    var isUnresolved: Bool { appPath.isEmpty }
 
     init(id: UUID = UUID(), name: String, appPath: String, fileExtensions: [String] = []) {
         self.id = id
         self.name = name
         self.appPath = appPath
         self.fileExtensions = fileExtensions
+        self.portableApplicationReference = nil
     }
 
     /// Whether this entry should appear for a file with the given (lowercased)
@@ -151,6 +174,20 @@ enum RightClickConfigurationStore {
         return configuration
     }
 
+    /// Missing files use defaults; existing unreadable or malformed state must not become a backup.
+    static func loadForPreferencesBackup(from fileURL: URL = configFileURL) -> RightClickConfiguration? {
+        do {
+            let data = try Data(contentsOf: fileURL)
+            let decoder = JSONDecoder()
+            decoder.userInfo[RightClickConfiguration.backupDecodingKey] = true
+            return try decoder.decode(RightClickConfiguration.self, from: data)
+        } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
+            return .inactiveDefault
+        } catch {
+            return nil
+        }
+    }
+
     static func setMenuEnabled(_ enabled: Bool, fileURL: URL = configFileURL) {
         var configuration = load(from: fileURL)
         if enabled, configuration == .inactiveDefault {
@@ -168,7 +205,13 @@ enum RightClickConfigurationStore {
                 withIntermediateDirectories: true
             )
             let data = try JSONEncoder().encode(configuration)
+            let previous = try? Data(contentsOf: fileURL)
             try data.write(to: fileURL, options: .atomic)
+            guard (try? Data(contentsOf: fileURL)) == data else {
+                if let previous { try? previous.write(to: fileURL, options: .atomic) }
+                else { try? FileManager.default.removeItem(at: fileURL) }
+                return false
+            }
             return true
         } catch {
             return false

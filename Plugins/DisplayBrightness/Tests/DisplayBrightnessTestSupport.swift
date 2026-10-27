@@ -98,6 +98,7 @@ final class MockDisplayBrightnessController: DisplayBrightnessControlling {
 
 @MainActor
 final class DisplayBrightnessMemoryStorage: PluginStorage {
+    var rejectedWriteKey: String?
     private var values: [String: Any] = [:]
 
     func object(forKey key: String) -> Any? { values[key] }
@@ -108,6 +109,7 @@ final class DisplayBrightnessMemoryStorage: PluginStorage {
     func bool(forKey key: String) -> Bool { values[key] as? Bool ?? false }
 
     func set(_ value: Any?, forKey key: String) {
+        guard key != rejectedWriteKey else { return }
         guard let value else {
             removeObject(forKey: key)
             return
