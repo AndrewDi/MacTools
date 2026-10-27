@@ -34,6 +34,10 @@ final class ContainerIndicatorPlugin: MacToolsPlugin {
     let localization: PluginLocalization
 
     private var visibleItemIDs = Set<String>()
+    /// The configuration window keeps polling alive on its own: the panel is
+    /// often dismissed while the inspector stays on screen.
+    private let detailPresenter = ContainerIndicatorDetailPresenter()
+    private var detailWindowIsOpen = false
 
     private enum ItemID {
         static let widget = "overview"
@@ -56,6 +60,17 @@ final class ContainerIndicatorPlugin: MacToolsPlugin {
         controller.onStateChange = { [weak self] in
             self?.onStateChange?()
         }
+        detailPresenter.onVisibilityChange = { [weak self] isVisible in
+            guard let self else { return }
+            let wasMonitoring = detailWindowIsOpen || !visibleItemIDs.isEmpty
+            detailWindowIsOpen = isVisible
+            let isMonitoring = isVisible || !visibleItemIDs.isEmpty
+            if isMonitoring, !wasMonitoring {
+                controller.startMonitoring()
+            } else if !isMonitoring, wasMonitoring {
+                controller.stopMonitoring()
+            }
+        }
     }
 
     // MARK: - Panel
@@ -74,7 +89,10 @@ final class ContainerIndicatorPlugin: MacToolsPlugin {
                             controller: controller,
                             localization: localization,
                             pluginTitle: metadata.title,
-                            reportContentHeight: context.reportContentHeight
+                            reportContentHeight: context.reportContentHeight,
+                            openDetails: { [weak self] container in
+                                self?.openDetails(container)
+                            }
                         )
                     )
                 }
@@ -109,15 +127,28 @@ final class ContainerIndicatorPlugin: MacToolsPlugin {
     }
 
     private func updateVisibility(of itemID: String, isVisible: Bool) {
+        let wasMonitoring = detailWindowIsOpen || !visibleItemIDs.isEmpty
         if isVisible {
-            let wasHidden = visibleItemIDs.isEmpty
             visibleItemIDs.insert(itemID)
-            if wasHidden {
-                controller.startMonitoring()
-            }
-        } else if visibleItemIDs.remove(itemID) != nil, visibleItemIDs.isEmpty {
+        } else {
+            visibleItemIDs.remove(itemID)
+        }
+        let isMonitoring = detailWindowIsOpen || !visibleItemIDs.isEmpty
+        if isMonitoring, !wasMonitoring {
+            controller.startMonitoring()
+        } else if !isMonitoring, wasMonitoring {
             controller.stopMonitoring()
         }
+    }
+
+    // MARK: - Details
+
+    private func openDetails(_ container: ContainerInstance) {
+        detailPresenter.present(
+            container: container,
+            controller: controller,
+            localization: localization
+        )
     }
 
     // MARK: - Lifecycle
@@ -127,6 +158,8 @@ final class ContainerIndicatorPlugin: MacToolsPlugin {
     }
 
     func deactivate(reason: PluginDeactivationReason) {
+        detailPresenter.close()
+        detailWindowIsOpen = false
         controller.stopMonitoring()
     }
 

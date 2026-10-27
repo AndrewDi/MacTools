@@ -422,16 +422,353 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         XCTAssertFalse(controller.isMonitoring)
     }
 
+    // MARK: - Configuration and live performance
+
+    func testParserReadsFullContainerConfiguration() throws {
+        let containers = ContainerIndicatorParser.containers(fromJSON: """
+        [{
+          "id": "abc123",
+          "configuration": {
+            "id": "web",
+            "image": {
+              "reference": "docker.io/library/nginx:latest",
+              "descriptor": {"digest": "sha256:deadbeef"}
+            },
+            "initProcess": {
+              "executable": "/usr/sbin/nginx",
+              "arguments": ["-g", "daemon off;"],
+              "environment": ["PATH=/usr/bin", "DB_PASSWORD=secret"],
+              "workingDirectory": "/app",
+              "user": {"raw": {"userString": "www-data"}}
+            },
+            "publishedPorts": [
+              {"hostAddress": "127.0.0.1", "hostPort": 8080, "containerPort": 80, "proto": "tcp"}
+            ],
+            "mounts": [{"type": "bind", "source": "/tmp/data", "destination": "/data"}],
+            "networks": [{"network": "default", "options": {"hostname": "web-host", "mtu": 1500}}],
+            "dns": {"domain": "example.test", "nameservers": ["1.1.1.1"]},
+            "platform": {"os": "linux", "architecture": "arm64"},
+            "runtimeHandler": "container-runtime",
+            "readOnly": true,
+            "rosetta": false,
+            "ssh": true,
+            "creationDate": "2026-10-01T12:00:00Z",
+            "resources": {"cpus": 4, "memoryInBytes": 1073741824, "storage": 10737418240}
+          },
+          "status": {"state": "running"}
+        }]
+        """)
+
+        let configuration = try XCTUnwrap(containers.first).configuration
+        XCTAssertEqual(configuration.command, "/usr/sbin/nginx -g daemon off;")
+        XCTAssertEqual(configuration.workingDirectory, "/app")
+        XCTAssertEqual(configuration.user, "www-data")
+        XCTAssertEqual(
+            configuration.environmentKeys,
+            ["PATH", "DB_PASSWORD"],
+            "Only variable names are kept so secrets never reach the UI"
+        )
+        XCTAssertEqual(configuration.ports, ["127.0.0.1:8080 → 80/tcp"])
+        XCTAssertEqual(configuration.mounts, ["/tmp/data → /data"])
+        XCTAssertEqual(configuration.networks, ["default"])
+        XCTAssertEqual(configuration.hostname, "web-host")
+        XCTAssertEqual(configuration.dnsDomain, "example.test")
+        XCTAssertEqual(configuration.dnsServers, ["1.1.1.1"])
+        XCTAssertEqual(configuration.platform, "linux/arm64")
+        XCTAssertEqual(configuration.runtimeHandler, "container-runtime")
+        XCTAssertTrue(configuration.readOnly)
+        XCTAssertFalse(configuration.rosetta)
+        XCTAssertTrue(configuration.ssh)
+        XCTAssertEqual(configuration.imageDigest, "sha256:deadbeef")
+        XCTAssertNotNil(configuration.createdAt)
+        XCTAssertEqual(configuration.storageQuotaBytes, 10737418240)
+    }
+
+    func testParserReadsStatsCounters() throws {
+        let counters = ContainerIndicatorParser.stats(fromJSON: """
+        [{
+          "id": "abc123",
+          "cpuUsageUsec": 1500000,
+          "memoryUsageBytes": 2048,
+          "memoryLimitBytes": 4096,
+          "blockReadBytes": 100,
+          "blockWriteBytes": 200,
+          "networkRxBytes": 300,
+          "networkTxBytes": 400,
+          "numProcesses": 5
+        }]
+        """)
+
+        let counter = try XCTUnwrap(counters["abc123"])
+        XCTAssertEqual(counter.cpuUsageUsec, 1_500_000)
+        XCTAssertEqual(counter.memoryUsageBytes, 2048)
+        XCTAssertEqual(counter.memoryLimitBytes, 4096)
+        XCTAssertEqual(counter.blockReadBytes, 100)
+        XCTAssertEqual(counter.blockWriteBytes, 200)
+        XCTAssertEqual(counter.networkRxBytes, 300)
+        XCTAssertEqual(counter.networkTxBytes, 400)
+        XCTAssertEqual(counter.numProcesses, 5)
+        XCTAssertTrue(ContainerIndicatorParser.stats(fromJSON: "not json").isEmpty)
+    }
+
+    func testStatsMathDerivesQuotaRelativeCPUAndRates() {
+        // Four CPU seconds used over four wall seconds on two cores: both
+        // allotted cores were busy half the time.
+        XCTAssertEqual(
+            ContainerIndicatorStatsMath.cpuPercent(
+                previous: 1_000_000,
+                current: 5_000_000,
+                elapsed: 4,
+                cores: 2
+            ) ?? -1,
+            50,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            ContainerIndicatorStatsMath.rate(previous: 1000, current: 5000, elapsed: 2) ?? -1,
+            2000,
+            accuracy: 0.001
+        )
+    }
+
+    func testStatsMathRejectsFirstSampleResetsAndEmptyInterval() {
+        XCTAssertNil(
+            ContainerIndicatorStatsMath.cpuPercent(
+                previous: nil, current: 1_000_000, elapsed: 5, cores: 2
+            ),
+            "The first sample has no baseline"
+        )
+        XCTAssertNil(
+            ContainerIndicatorStatsMath.cpuPercent(
+                previous: 5_000_000, current: 1_000_000, elapsed: 5, cores: 2
+            ),
+            "A counter reset must not turn into a negative percentage"
+        )
+        XCTAssertNil(
+            ContainerIndicatorStatsMath.cpuPercent(
+                previous: 1_000_000, current: 2_000_000, elapsed: 0, cores: 2
+            )
+        )
+        XCTAssertNil(
+            ContainerIndicatorStatsMath.rate(previous: 5000, current: 1000, elapsed: 2)
+        )
+    }
+
+    func testSecondRefreshAddsLivePerformance() async throws {
+        let probe = CommandProbe()
+        await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
+        await probe.stubContainers(
+            """
+            [{"id":"c1","configuration":{"id":"web","resources":{"cpus":2}},\
+            "status":{"state":"running"}}]
+            """
+        )
+        await probe.stubStats(output: statsJSON(cpu: 1_000_000, read: 1000, write: 2000))
+        var clock = Date(timeIntervalSince1970: 1000)
+        let controller = makeController(probe: probe, now: { clock })
+
+        await controller.refresh()
+        let first = try XCTUnwrap(controller.snapshot.containers.first?.performance)
+        XCTAssertEqual(first.memoryBytes, 2048)
+        XCTAssertNil(first.cpuPercent, "CPU needs two samples before it can be derived")
+        XCTAssertNil(first.diskReadBytesPerSecond)
+
+        clock.addTimeInterval(4)
+        await probe.stubStats(output: statsJSON(cpu: 5_000_000, read: 5000, write: 10_000))
+        await controller.refresh()
+
+        let second = try XCTUnwrap(controller.snapshot.containers.first?.performance)
+        XCTAssertEqual(second.cpuPercent ?? -1, 50, accuracy: 0.001)
+        XCTAssertEqual(second.diskReadBytesPerSecond ?? -1, 1000, accuracy: 0.001)
+        XCTAssertEqual(second.diskWriteBytesPerSecond ?? -1, 2000, accuracy: 0.001)
+        XCTAssertNil(controller.snapshot.statsFailure)
+    }
+
+    func testStatsFailureKeepsPreviousPerformanceAndReportsWhy() async throws {
+        let probe = CommandProbe()
+        await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
+        await probe.stubContainers(
+            """
+            [{"id":"c1","configuration":{"id":"web","resources":{"cpus":2}},\
+            "status":{"state":"running"}}]
+            """
+        )
+        await probe.stubStats(output: statsJSON(cpu: 1_000_000, read: 1000, write: 2000))
+        let controller = makeController(probe: probe)
+
+        await controller.refresh()
+        XCTAssertEqual(controller.snapshot.containers.first?.performance?.memoryBytes, 2048)
+
+        await probe.stubStats(exitCode: 1, output: "", error: "error: stats unavailable")
+        await controller.refresh()
+
+        XCTAssertEqual(
+            controller.snapshot.statsFailure,
+            "性能数据读取失败：error: stats unavailable"
+        )
+        XCTAssertEqual(
+            controller.snapshot.containers.first?.performance?.memoryBytes,
+            2048,
+            "A failed stats read keeps the last numbers on screen"
+        )
+    }
+
+    func testStatsCommandIsSkippedWhenNothingRuns() async {
+        let probe = CommandProbe()
+        await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
+        await probe.stubContainers(
+            "[{\"id\":\"c1\",\"configuration\":{\"id\":\"web\"},\"status\":{\"state\":\"stopped\"}}]"
+        )
+        let controller = makeController(probe: probe)
+
+        await controller.refresh()
+
+        let invocations = await probe.recordedInvocations()
+        XCTAssertFalse(
+            invocations.contains(["stats", "--format", "json", "--no-stream"]),
+            "A stopped container must not pay the two-second stats sampling cost"
+        )
+        XCTAssertNil(controller.snapshot.containers.first?.performance)
+    }
+
+    // MARK: - Terminal
+
+    func testContainerTerminalScriptPrefersBashAndFallsBackToShell() {
+        let script = ContainerTerminalLauncher.script(
+            for: .container(id: "web"),
+            executable: "/opt/homebrew/bin/container"
+        )
+        XCTAssertTrue(script.contains("CONTAINER='/opt/homebrew/bin/container'"))
+        XCTAssertTrue(script.contains("ID='web'"))
+        XCTAssertTrue(script.contains("exec -it \"$ID\" /bin/bash"))
+        XCTAssertTrue(script.contains("exec -it \"$ID\" /bin/sh"))
+        XCTAssertTrue(script.contains("test -x /bin/bash"))
+    }
+
+    func testMachineTerminalScriptUsesMachineRun() {
+        let script = ContainerTerminalLauncher.script(
+            for: .machine(id: "default"),
+            executable: "/opt/homebrew/bin/container"
+        )
+        XCTAssertTrue(script.contains("exec '/opt/homebrew/bin/container' machine run -n 'default'"))
+        XCTAssertFalse(script.contains("exec -it"))
+    }
+
+    func testShellQuotingEscapesEmbeddedQuotes() {
+        XCTAssertEqual(ContainerTerminalLauncher.shellQuoted("it's"), #"'it'\''s'"#)
+        XCTAssertFalse(
+            ContainerTerminalLauncher.isValidIdentifier("web; rm -rf /"),
+            "Shell metacharacters never reach the generated script"
+        )
+        XCTAssertFalse(ContainerTerminalLauncher.isValidIdentifier(""))
+        XCTAssertTrue(ContainerTerminalLauncher.isValidIdentifier("web-1.local"))
+        XCTAssertFalse(ContainerTerminalLauncher.isValidExecutablePath("container"))
+        XCTAssertFalse(ContainerTerminalLauncher.isValidExecutablePath("/usr/bin/container\nrm"))
+    }
+
+    func testTerminalLauncherWritesExecutableScriptAndOpensIt() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var openedURL: URL?
+        let launcher = ContainerTerminalLauncher(
+            directory: directory,
+            openURL: { url in
+                openedURL = url
+                return true
+            }
+        )
+
+        try launcher.launch(
+            target: .container(id: "web"),
+            executable: "/opt/homebrew/bin/container"
+        )
+
+        let url = try XCTUnwrap(openedURL)
+        XCTAssertEqual(url.lastPathComponent, "container-web.command")
+        let script = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(script.contains("ID='web'"))
+        XCTAssertTrue(script.contains("exec -it \"$ID\""))
+        let permissions = try FileManager.default
+            .attributesOfItem(atPath: url.path)[.posixPermissions] as? Int
+        XCTAssertEqual(permissions, 0o755, "The script must be executable by the terminal")
+    }
+
+    func testTerminalLauncherRejectsInvalidIdentifierBeforeWriting() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let launcher = ContainerTerminalLauncher(
+            directory: directory,
+            openURL: { _ in true }
+        )
+
+        XCTAssertThrowsError(
+            try launcher.launch(
+                target: .container(id: "web; rm -rf /"),
+                executable: "/opt/homebrew/bin/container"
+            )
+        ) { error in
+            XCTAssertEqual(error as? ContainerTerminalLaunchError, .invalidIdentifier)
+        }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
+    }
+
+    func testTerminalOpenFailureSurfacesMessage() {
+        let probe = CommandProbe()
+        let launcher = ContainerTerminalLauncher(openURL: { _ in false })
+        let controller = ContainerIndicatorController(
+            commandRunner: probe,
+            localization: PluginLocalization(bundle: .main),
+            commandPathProvider: { "/opt/homebrew/bin/container" },
+            terminalLauncher: launcher
+        )
+
+        controller.openTerminal(target: .container(id: "web"))
+
+        XCTAssertEqual(controller.lastErrorMessage, "无法打开终端")
+    }
+
+    func testTerminalOpenRejectsInvalidIdentifierWithClearMessage() {
+        let probe = CommandProbe()
+        let controller = ContainerIndicatorController(
+            commandRunner: probe,
+            localization: PluginLocalization(bundle: .main),
+            commandPathProvider: { "/opt/homebrew/bin/container" }
+        )
+
+        controller.openTerminal(target: .container(id: "web; rm -rf /"))
+
+        XCTAssertEqual(controller.lastErrorMessage, "容器标识无效")
+    }
+
     // MARK: - Helpers
+
+    private func statsJSON(
+        cpu: UInt64,
+        read: UInt64,
+        write: UInt64,
+        memory: UInt64 = 2048,
+        limit: UInt64 = 4096
+    ) -> String {
+        """
+        [{"id":"c1","cpuUsageUsec":\(cpu),"memoryUsageBytes":\(memory),\
+        "memoryLimitBytes":\(limit),"blockReadBytes":\(read),\
+        "blockWriteBytes":\(write),"networkRxBytes":0,"networkTxBytes":0,\
+        "numProcesses":3}]
+        """
+    }
 
     private func makeController(
         probe: CommandProbe,
-        commandPath: String? = "/opt/homebrew/bin/container"
+        commandPath: String? = "/opt/homebrew/bin/container",
+        now: @escaping () -> Date = Date.init
     ) -> ContainerIndicatorController {
         ContainerIndicatorController(
             commandRunner: probe,
             localization: PluginLocalization(bundle: .main),
-            commandPathProvider: { commandPath }
+            commandPathProvider: { commandPath },
+            now: now
         )
     }
 
@@ -473,6 +810,9 @@ private actor CommandProbe: ContainerCommandRunning {
     private var containersOutput = "[]"
     private var machinesOutput = "[]"
     private var imagesOutput = "[]"
+    private var statsOutput = "[]"
+    private var statsExitCode: Int32 = 0
+    private var statsError = ""
     private var machineInspectOutputs: [String: String] = [:]
     private var overrides: [String: ContainerCommandResult] = [:]
     private var heldCommands: Set<String> = []
@@ -539,6 +879,12 @@ private actor CommandProbe: ContainerCommandRunning {
         imagesOutput = output
     }
 
+    func stubStats(exitCode: Int32 = 0, output: String, error: String = "") {
+        statsExitCode = exitCode
+        statsOutput = output
+        statsError = error
+    }
+
     func stubMachineInspect(_ id: String, _ output: String) {
         machineInspectOutputs[id] = output
     }
@@ -577,6 +923,12 @@ private actor CommandProbe: ContainerCommandRunning {
             return ContainerCommandResult(exitCode: 0, standardOutput: await machinesOutputValue(), standardError: "")
         case ["image", "list", "--format", "json"]:
             return ContainerCommandResult(exitCode: 0, standardOutput: await imagesOutputValue(), standardError: "")
+        case ["stats", "--format", "json", "--no-stream"]:
+            return ContainerCommandResult(
+                exitCode: await statsExitCodeValue(),
+                standardOutput: await statsOutputValue(),
+                standardError: await statsErrorValue()
+            )
         case ["system", "stop"]:
             await applyServiceState(exitCode: 1, output: "")
             return ContainerCommandResult(exitCode: 0, standardOutput: "", standardError: "")
@@ -614,6 +966,9 @@ private actor CommandProbe: ContainerCommandRunning {
     private func containersOutputValue() -> String { containersOutput }
     private func machinesOutputValue() -> String { machinesOutput }
     private func imagesOutputValue() -> String { imagesOutput }
+    private func statsExitCodeValue() -> Int32 { statsExitCode }
+    private func statsOutputValue() -> String { statsOutput }
+    private func statsErrorValue() -> String { statsError }
     private func machineInspectValue(for id: String) -> String {
         machineInspectOutputs[id] ?? ""
     }
