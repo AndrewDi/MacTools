@@ -510,6 +510,10 @@ final class MenuBarPanelPresenter: NSObject {
 
         guard let resolvedPanel = resolvedPanelForAnchor(panelID: panelID) else { return false }
 
+        // If the user is actively editing the panel layout, do not auto-hide.
+        // The panel must remain visible until editing concludes.
+        if panelModel.preventDismissalWhileEditing() { return true }
+
         let anchorView = hoverAnchorView(for: anchorRect)
         isHoverPanelPresentation = true
         isHidingHoverPanel = false

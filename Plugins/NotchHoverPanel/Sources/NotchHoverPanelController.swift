@@ -437,7 +437,9 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
 
     private func applyMenuBarIconVisibility() {
         // A disabled plugin must not keep the host icon hidden.
-        requestAppMenuBarIconVisibility?(isEnabled ? showsMenuBarIcon : true)
+        // Also restore the icon if there is no display that supports the hover trigger.
+        let hasSupportedDisplay = !displays.isEmpty
+        requestAppMenuBarIconVisibility?(isEnabled ? showsMenuBarIcon && hasSupportedDisplay : true)
     }
 
     private func installScreenObserver() {
