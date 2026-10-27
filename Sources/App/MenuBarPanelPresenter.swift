@@ -1,6 +1,7 @@
 import AppKit
 import Carbon
 import Combine
+import QuartzCore
 import SwiftUI
 import MacToolsPluginKit
 
@@ -289,6 +290,11 @@ final class MenuBarPanelPresenter: NSObject {
         height: MenuBarPanelLayout.minimumPanelHeight
     )
     private var popoverSafeAreaInsets = MenuBarPopoverGeometry.fallbackSafeAreaInsets
+    private var hoverAnchorPanel: NSPanel?
+    private var isHoverPanelPresentation = false
+    private var isHidingHoverPanel = false
+    private var hoverPanelRestingFrame: NSRect?
+    private var hoverDismissGeneration: UInt = 0
 
     init(
         pluginHost: PluginHost,
@@ -450,9 +456,114 @@ final class MenuBarPanelPresenter: NSObject {
         else { present(panel, relativeTo: button) }
     }
 
+    /// Fallback for a hidden status item: the same presentation using an
+    /// invisible anchor at the menu-bar end instead of a status-item button.
+    func toggleFeaturePanel(anchorRect: NSRect) {
+        toggle(.features, relativeTo: hoverAnchorView(for: anchorRect))
+    }
+
+    func toggleComponentPanel(anchorRect: NSRect) {
+        toggle(.components, relativeTo: hoverAnchorView(for: anchorRect))
+    }
+
+    func showFeaturePanel(anchorRect: NSRect) {
+        present(.features, relativeTo: hoverAnchorView(for: anchorRect))
+    }
+
+    func showDashboard(anchorRect: NSRect) {
+        present(.components, relativeTo: hoverAnchorView(for: anchorRect))
+    }
+
+    func showPanel(id: String, toggle shouldToggle: Bool, anchorRect: NSRect) {
+        guard pluginHost.menuBarPanels.contains(where: { $0.id == id }) else { return }
+        let panel = MenuBarPanelTab(id: id)
+        if shouldToggle,
+           popover.isShown,
+           tab(for: selectedPanel).id == id {
+            if panelModel.preventDismissalWhileEditing() {
+                focus(popover)
+            } else {
+                dismissPanels()
+            }
+            return
+        }
+        present(panel, relativeTo: hoverAnchorView(for: anchorRect))
+    }
+
+    /// Presents the regular panel below an explicit screen rectangle. Used by
+    /// plugin-owned hover surfaces such as the notch trigger.
+    @discardableResult
+    func presentPanelBelowAnchor(panelID: String?, anchorRect: NSRect) -> Bool {
+        guard !anchorRect.isEmpty,
+              anchorRect.width.isFinite,
+              anchorRect.height.isFinite,
+              !anchorRect.isNull else { return false }
+        guard NSScreen.screens.contains(where: { $0.frame.intersects(anchorRect) }) else {
+            return false
+        }
+
+        if popover.isShown {
+            guard isHoverPanelPresentation else { return false }
+            cancelHoverPanelDismissalIfNeeded()
+            return true
+        }
+
+        guard let resolvedPanel = resolvedPanelForAnchor(panelID: panelID) else { return false }
+
+        let anchorView = hoverAnchorView(for: anchorRect)
+        isHoverPanelPresentation = true
+        isHidingHoverPanel = false
+        hoverPanelRestingFrame = nil
+        present(resolvedPanel, relativeTo: anchorView, animates: true)
+        return popover.isShown
+    }
+
+    func dismissPanelBelowAnchor(animated: Bool) {
+        guard popover.isShown else {
+            cleanupHoverAnchor()
+            return
+        }
+        guard isHoverPanelPresentation, animated,
+              let window = popover.contentViewController?.view.window else {
+            popover.performClose(nil)
+            return
+        }
+
+        hoverDismissGeneration &+= 1
+        let generation = hoverDismissGeneration
+        let restingFrame = window.frame
+        hoverPanelRestingFrame = restingFrame
+        isHidingHoverPanel = true
+
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = 0.16
+            context.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            window.animator().setFrame(
+                restingFrame.offsetBy(dx: 0, dy: Self.hoverPanelSlideDistance),
+                display: true
+            )
+            window.animator().alphaValue = 0
+        }, completionHandler: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, self.hoverDismissGeneration == generation else { return }
+                self.isHidingHoverPanel = false
+                self.hoverPanelRestingFrame = nil
+                self.popover.performClose(nil)
+            }
+        })
+    }
+
+    var presentedPanelScreenFrame: NSRect? {
+        guard popover.isShown else { return nil }
+        return popover.contentViewController?.view.window?.frame
+    }
+
     func dismissPanels() {
         nativeMenuPresenter.cancel()
         guard !panelModel.preventDismissalWhileEditing() else { return }
+        hoverDismissGeneration &+= 1
+        isHidingHoverPanel = false
+        hoverPanelRestingFrame = nil
         popover.performClose(nil)
     }
 
@@ -463,7 +574,7 @@ final class MenuBarPanelPresenter: NSObject {
             || MenuBarPanelWindowRegistry.containsAuxiliaryPanelWindow(window)
     }
 
-    private func toggle(_ panel: PanelKind, relativeTo button: NSStatusBarButton) {
+    private func toggle(_ panel: PanelKind, relativeTo anchorView: NSView) {
         let action = MenuBarPanelToggleAction.resolve(
             isPanelShown: popover.isShown,
             selectedTab: tab(for: selectedPanel),
@@ -479,10 +590,10 @@ final class MenuBarPanelPresenter: NSObject {
             return
         }
 
-        present(panel, relativeTo: button)
+        present(panel, relativeTo: anchorView)
     }
 
-    private func present(_ panel: PanelKind, relativeTo button: NSStatusBarButton) {
+    private func present(_ panel: PanelKind, relativeTo anchorView: NSView, animates: Bool = false) {
         let action = MenuBarPanelPresentationAction.resolve(
             isPanelShown: popover.isShown,
             selectedTab: tab(for: selectedPanel),
@@ -491,7 +602,7 @@ final class MenuBarPanelPresenter: NSObject {
         selectedPanel = panel
         updateContent(
             selectedTab: tab(for: panel),
-            screen: button.window?.screen ?? NSScreen.main,
+            screen: anchorView.window?.screen ?? NSScreen.main,
             isPanelVisible: true
         )
         updatePanelSurfaceVisibility(for: tab(for: panel), isPanelVisible: true)
@@ -502,7 +613,8 @@ final class MenuBarPanelPresenter: NSObject {
             return
         }
 
-        show(popover, relativeTo: button)
+        isHoverPanelPresentation = animates
+        show(popover, relativeTo: anchorView, animates: animates)
         scheduleHeightRefresh(for: tab(for: panel))
     }
 
@@ -531,12 +643,104 @@ final class MenuBarPanelPresenter: NSObject {
         containerController.view.setFrameSize(popover.contentSize)
     }
 
-    private func show(_ popover: NSPopover, relativeTo button: NSStatusBarButton) {
+    private func show(_ popover: NSPopover, relativeTo anchorView: NSView, animates: Bool) {
         applyCurrentAppearance()
         PluginPresentationSafety.prepareForWindowOrdering()
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.show(relativeTo: anchorView.bounds, of: anchorView, preferredEdge: .minY)
         applyCurrentAppearance()
+        if animates {
+            animateHoverPanelIn()
+        }
         focus(popover)
+    }
+
+    private static let hoverPanelSlideDistance: CGFloat = 18
+
+    private func animateHoverPanelIn() {
+        guard let window = popover.contentViewController?.view.window else { return }
+        let targetFrame = window.frame
+        hoverPanelRestingFrame = targetFrame
+        window.setFrame(
+            targetFrame.offsetBy(dx: 0, dy: Self.hoverPanelSlideDistance),
+            display: false
+        )
+        window.alphaValue = 0
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.22
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().setFrame(targetFrame, display: true)
+            window.animator().alphaValue = 1
+        }
+    }
+
+    private func cancelHoverPanelDismissalIfNeeded() {
+        guard isHidingHoverPanel else { return }
+        hoverDismissGeneration &+= 1
+        isHidingHoverPanel = false
+        guard let window = popover.contentViewController?.view.window,
+              let restingFrame = hoverPanelRestingFrame else { return }
+        hoverPanelRestingFrame = nil
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.14
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            window.animator().setFrame(restingFrame, display: true)
+            window.animator().alphaValue = 1
+        }
+    }
+
+    private func resolvedPanelForAnchor(panelID: String?) -> MenuBarPanelTab? {
+        let visiblePanels = pluginHost.visibleMenuBarPanels
+        guard !visiblePanels.isEmpty else { return nil }
+        let requestedID = panelID ?? pluginHost.lastSelectedMenuBarPanelID
+        let resolvedID = visiblePanels.first(where: { $0.id == requestedID })?.id
+            ?? visiblePanels.first(where: { $0.id == MenuBarPanelDefinition.componentsID })?.id
+            ?? visiblePanels.first?.id
+        guard let resolvedID else { return nil }
+        return MenuBarPanelTab(id: resolvedID)
+    }
+
+    private func hoverAnchorView(for anchorRect: NSRect) -> NSView {
+        let panel: NSPanel
+        if let hoverAnchorPanel {
+            panel = hoverAnchorPanel
+        } else {
+            let created = NSPanel(
+                contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            created.isFloatingPanel = true
+            created.level = .statusBar
+            created.isOpaque = false
+            created.backgroundColor = .clear
+            created.hasShadow = false
+            created.ignoresMouseEvents = true
+            created.hidesOnDeactivate = false
+            created.isReleasedWhenClosed = false
+            created.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+            created.contentView = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
+            hoverAnchorPanel = created
+            panel = created
+        }
+
+        panel.setFrame(
+            NSRect(x: anchorRect.midX - 0.5, y: anchorRect.minY - 1, width: 1, height: 1),
+            display: false
+        )
+        panel.orderFrontRegardless()
+        return panel.contentView ?? NSView(frame: .zero)
+    }
+
+    private func cleanupHoverAnchor() {
+        hoverAnchorPanel?.orderOut(nil)
+        hoverAnchorPanel = nil
+        isHoverPanelPresentation = false
+        isHidingHoverPanel = false
+        hoverPanelRestingFrame = nil
+        hoverDismissGeneration &+= 1
     }
 
     private func installKeyboardShortcutMonitorIfNeeded() {
@@ -944,6 +1148,7 @@ extension MenuBarPanelPresenter: NSPopoverDelegate {
         if let closedPopover = notification.object as? NSPopover, closedPopover === popover {
             nativeMenuPresenter.cancel()
             removeKeyboardShortcutMonitorIfNeeded()
+            cleanupHoverAnchor()
             updateContent(
                 selectedTab: tab(for: selectedPanel),
                 screen: NSScreen.main,

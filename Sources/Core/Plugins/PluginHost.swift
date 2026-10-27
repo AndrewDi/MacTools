@@ -399,6 +399,13 @@ final class PluginHost: ObservableObject {
     /// Emitted after a complete panel update, including layout-only mutations.
     let menuBarPanelContentDidChange = PassthroughSubject<Void, Never>()
     var menuBarPanelPresentationHandler: ((String, Bool) -> Void)?
+    /// Injected by the app shell for plugins that present the regular menu-bar
+    /// panel at an explicit screen anchor.
+    var anchoredMenuBarPanelPresentationHandler:
+        ((PluginMenuBarPanelPresentationRequest) -> Bool)?
+    var anchoredMenuBarPanelDismissalHandler: ((_ animated: Bool) -> Void)?
+    var anchoredMenuBarPanelFrameProvider: (() -> NSRect?)?
+    var anchoredMenuBarPanelVisibilityProvider: (() -> Bool)?
     private let preferencesBackupStore: any PreferencesBackupApplicationStoring
     private let automaticPreferencesBackupCoordinator: AutomaticPreferencesBackupCoordinator?
     private let cloudPreferencesSyncCoordinator: CloudPreferencesSyncCoordinator?
@@ -547,6 +554,17 @@ final class PluginHost: ObservableObject {
             configureHostStatusItemCallbacks(for: activePlugins)
         }
     }
+
+    /// Installed by `MenuBarStatusItemController`. Receives the effective
+    /// visibility of the app's main menu-bar icon after plugin requests change.
+    var appMenuBarIconVisibilityHandler: ((Bool) -> Void)? = nil {
+        didSet {
+            appMenuBarIconVisibilityHandler?(isAppMenuBarIconVisible)
+        }
+    }
+
+    private var appMenuBarIconHiddenRequesters: Set<String> = []
+    var isAppMenuBarIconVisible: Bool { appMenuBarIconHiddenRequesters.isEmpty }
 
     convenience init(
         loadDynamicPluginsOnInit: Bool = true,
@@ -732,6 +750,7 @@ final class PluginHost: ObservableObject {
                 self.deactivatedPluginInstances.formUnion(self.dynamicPlugins
                     .filter { $0.metadata.id == pluginID }.map { ObjectIdentifier($0) })
                 self.menuBarIconCoordinator.unregister(pluginID: pluginID, reason: reason)
+                self.clearAppMenuBarIconVisibilityRequest(for: pluginID)
             }
             let legacyHiddenPluginIDs = dynamicPluginManager.legacyHiddenPluginIDs()
             if menuBarPanelStore.migrateLegacyHiddenPlugins(legacyHiddenPluginIDs) {
@@ -925,6 +944,7 @@ final class PluginHost: ObservableObject {
     func deactivateAllPlugins(reason: PluginDeactivationReason = .hostShutdown) {
         trackpadInputService.shutdown()
         menuBarIconCoordinator.deactivateAll(reason: reason)
+        appMenuBarIconHiddenRequesters.removeAll()
         pluginStateChangeRebuildTask?.cancel()
         pluginStateChangeRebuildTask = nil
         hideAllPanelItems()
@@ -3490,6 +3510,25 @@ final class PluginHost: ObservableObject {
                     self?.appPresentationHandler?(.showDashboard)
                 }
             }
+            if let anchoredPanelPresenting = plugin as? any PluginMenuBarPanelPresenting {
+                anchoredPanelPresenting.requestMenuBarPanelPresentation = { [weak self] request in
+                    self?.anchoredMenuBarPanelPresentationHandler?(request) ?? false
+                }
+                anchoredPanelPresenting.requestMenuBarPanelDismissal = { [weak self] animated in
+                    self?.anchoredMenuBarPanelDismissalHandler?(animated)
+                }
+                anchoredPanelPresenting.presentedMenuBarPanelScreenFrame = { [weak self] in
+                    self?.anchoredMenuBarPanelFrameProvider?()
+                }
+                anchoredPanelPresenting.isPresentedMenuBarPanelVisible = { [weak self] in
+                    self?.anchoredMenuBarPanelVisibilityProvider?() ?? false
+                }
+            }
+            if let appIconVisibility = plugin as? any PluginAppMenuBarIconVisibilityControlling {
+                appIconVisibility.requestAppMenuBarIconVisibility = { [weak self] isVisible in
+                    self?.setAppMenuBarIconVisibility(isVisible, for: pluginID)
+                }
+            }
             if let actionGridConsumer = plugin as? any ActionGridHostContextConsuming {
                 actionGridConsumer.actionGridHostContext = makeActionGridHostContext()
             }
@@ -3578,6 +3617,26 @@ final class PluginHost: ObservableObject {
         }
     }
 
+    private func setAppMenuBarIconVisibility(_ isVisible: Bool, for pluginID: String) {
+        let changed = isVisible
+            ? appMenuBarIconHiddenRequesters.remove(pluginID) != nil
+            : appMenuBarIconHiddenRequesters.insert(pluginID).inserted
+        guard changed else { return }
+        appMenuBarIconVisibilityHandler?(isAppMenuBarIconVisible)
+    }
+
+    private func clearAppMenuBarIconVisibilityRequest(for pluginID: String) {
+        guard appMenuBarIconHiddenRequesters.remove(pluginID) != nil else { return }
+        appMenuBarIconVisibilityHandler?(isAppMenuBarIconVisible)
+    }
+
+    private func pruneAppMenuBarIconVisibilityRequests(activePluginIDs: Set<String>) {
+        let stalePluginIDs = appMenuBarIconHiddenRequesters.subtracting(activePluginIDs)
+        guard !stalePluginIDs.isEmpty else { return }
+        appMenuBarIconHiddenRequesters.subtract(stalePluginIDs)
+        appMenuBarIconVisibilityHandler?(isAppMenuBarIconVisible)
+    }
+
     private func configureHostStatusItemCallbacks(for plugins: [any MacToolsPlugin]) {
         for plugin in plugins {
             guard let recoverable = plugin as? any MenuBarHostStatusItemRecovering else { continue }
@@ -3606,6 +3665,9 @@ final class PluginHost: ObservableObject {
         }
         deactivatedPluginInstances.formIntersection(dynamicPlugins.map { ObjectIdentifier($0) })
         configureCallbacks(for: dynamicPlugins)
+        pruneAppMenuBarIconVisibilityRequests(
+            activePluginIDs: Set(activePlugins.map(\.metadata.id))
+        )
         rebuildDerivedState(synchronizingShortcuts: true)
     }
 
@@ -4838,6 +4900,15 @@ final class PluginHost: ObservableObject {
         }
         (plugin as? any PluginSettingsPresenting)?.requestSettingsPresentation = nil
         (plugin as? any PluginDashboardPresenting)?.requestDashboardPresentation = nil
+        if let anchoredPanelPresenting = plugin as? any PluginMenuBarPanelPresenting {
+            anchoredPanelPresenting.requestMenuBarPanelPresentation = nil
+            anchoredPanelPresenting.requestMenuBarPanelDismissal = nil
+            anchoredPanelPresenting.presentedMenuBarPanelScreenFrame = nil
+            anchoredPanelPresenting.isPresentedMenuBarPanelVisible = nil
+        }
+        (plugin as? any PluginAppMenuBarIconVisibilityControlling)?
+            .requestAppMenuBarIconVisibility = nil
+        clearAppMenuBarIconVisibilityRequest(for: pluginID)
         (plugin as? any ActionGridHostContextConsuming)?.actionGridHostContext = nil
         (plugin as? any TrackpadActionHostContextConsuming)?.trackpadActionHostContext = nil
         (plugin as? any PluginActionExecutionHostContextConsuming)?.actionExecutionHostContext = nil
