@@ -28,6 +28,7 @@ protocol NotchHoverPanelControlling: AnyObject, PluginMenuBarPanelPresenting,
     func setVerticalTriggerReach(_ reach: Double)
     func setShowDelay(_ delay: Double)
     func setHideDelay(_ delay: Double)
+    func resetToDefaults()
 }
 
 @MainActor
@@ -39,6 +40,15 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
         static let verticalTriggerReach = "notch-hover.vertical-reach"
         static let showDelay = "notch-hover.show-delay"
         static let hideDelay = "notch-hover.hide-delay"
+    }
+
+    private enum Defaults {
+        static let isEnabled = true
+        static let showsMenuBarIcon = false
+        static let triggerWidth = Double(NotchHoverGeometry.defaultTriggerWidth)
+        static let verticalTriggerReach = Double(NotchHoverGeometry.defaultVerticalTriggerReach)
+        static let showDelay = 0.18
+        static let hideDelay = 0.28
     }
 
     private static let panelHitInset: CGFloat = 8
@@ -92,19 +102,19 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
         self.mouseLocationProvider = mouseLocationProvider
 
         if storage.object(forKey: StorageKey.enabled) == nil {
-            isEnabled = true
+            isEnabled = Defaults.isEnabled
         } else {
             isEnabled = storage.bool(forKey: StorageKey.enabled)
         }
 
         if storage.object(forKey: StorageKey.showsMenuBarIcon) == nil {
-            showsMenuBarIcon = false
+            showsMenuBarIcon = Defaults.showsMenuBarIcon
         } else {
             showsMenuBarIcon = storage.bool(forKey: StorageKey.showsMenuBarIcon)
         }
 
         if storage.object(forKey: StorageKey.triggerWidth) == nil {
-            triggerWidth = Double(NotchHoverGeometry.defaultTriggerWidth)
+            triggerWidth = Defaults.triggerWidth
         } else {
             triggerWidth = Self.clampedTriggerWidth(
                 Double(storage.integer(forKey: StorageKey.triggerWidth))
@@ -112,7 +122,7 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
         }
 
         if storage.object(forKey: StorageKey.verticalTriggerReach) == nil {
-            verticalTriggerReach = Double(NotchHoverGeometry.defaultVerticalTriggerReach)
+            verticalTriggerReach = Defaults.verticalTriggerReach
         } else {
             verticalTriggerReach = Self.clampedVerticalTriggerReach(
                 Double(storage.integer(forKey: StorageKey.verticalTriggerReach))
@@ -120,15 +130,19 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
         }
 
         if storage.object(forKey: StorageKey.showDelay) == nil {
-            showDelay = 0.18
+            showDelay = Defaults.showDelay
         } else {
-            showDelay = Self.clampedShowDelay(storage.object(forKey: StorageKey.showDelay) as? Double ?? 0.18)
+            showDelay = Self.clampedShowDelay(
+                storage.object(forKey: StorageKey.showDelay) as? Double ?? Defaults.showDelay
+            )
         }
 
         if storage.object(forKey: StorageKey.hideDelay) == nil {
-            hideDelay = 0.28
+            hideDelay = Defaults.hideDelay
         } else {
-            hideDelay = Self.clampedHideDelay(storage.object(forKey: StorageKey.hideDelay) as? Double ?? 0.28)
+            hideDelay = Self.clampedHideDelay(
+                storage.object(forKey: StorageKey.hideDelay) as? Double ?? Defaults.hideDelay
+            )
         }
 
         refreshDisplays()
@@ -182,6 +196,9 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
 
     func refresh() {
         refreshDisplays()
+        // Display hot-plugging can remove the only notch-capable screen, so the
+        // host icon state must follow the refreshed trigger inventory.
+        applyMenuBarIconVisibility()
         if ownsPanelPresentation,
            let activeDisplay,
            !displays.contains(where: { $0.displayID == activeDisplay.displayID }) {
@@ -248,6 +265,33 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
         guard hideDelay != clamped else { return }
         hideDelay = clamped
         storage.set(clamped, forKey: StorageKey.hideDelay)
+        onStateChange?()
+    }
+
+    func resetToDefaults() {
+        isEnabled = Defaults.isEnabled
+        showsMenuBarIcon = Defaults.showsMenuBarIcon
+        triggerWidth = Defaults.triggerWidth
+        verticalTriggerReach = Defaults.verticalTriggerReach
+        showDelay = Defaults.showDelay
+        hideDelay = Defaults.hideDelay
+
+        storage.set(isEnabled, forKey: StorageKey.enabled)
+        storage.set(showsMenuBarIcon, forKey: StorageKey.showsMenuBarIcon)
+        storage.set(Int(triggerWidth.rounded()), forKey: StorageKey.triggerWidth)
+        storage.set(Int(verticalTriggerReach.rounded()), forKey: StorageKey.verticalTriggerReach)
+        storage.set(showDelay, forKey: StorageKey.showDelay)
+        storage.set(hideDelay, forKey: StorageKey.hideDelay)
+
+        refreshDisplays()
+        if isEnabled {
+            startMouseMonitoring()
+        } else {
+            cancelScheduledInteractions()
+            stopMouseMonitoring()
+            dismissOwnedPanel(animated: true)
+        }
+        applyMenuBarIconVisibility()
         onStateChange?()
     }
 
@@ -436,10 +480,10 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
     }
 
     private func applyMenuBarIconVisibility() {
-        // A disabled plugin must not keep the host icon hidden.
-        // Also restore the icon if there is no display that supports the hover trigger.
-        let hasSupportedDisplay = !displays.isEmpty
-        requestAppMenuBarIconVisibility?(isEnabled ? showsMenuBarIcon && hasSupportedDisplay : true)
+        // Keep the host icon visible when the plugin is disabled or when no
+        // display can host the hover trigger, so the panel stays reachable.
+        let shouldShowIcon = !isEnabled || showsMenuBarIcon || displays.isEmpty
+        requestAppMenuBarIconVisibility?(shouldShowIcon)
     }
 
     private func installScreenObserver() {

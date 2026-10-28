@@ -50,11 +50,80 @@ final class NotchHoverPanelControllerTests: XCTestCase {
         XCTAssertEqual(requests, [true, true], "Disabling the plugin must restore the host icon.")
     }
 
+    func testDisplayRemovalRestoresMenuBarIconVisibility() {
+        var screens = [Self.notchScreenSnapshot()]
+        let controller = NotchHoverPanelController(
+            storage: NotchHoverMemoryStorage(),
+            screensProvider: { screens },
+            mouseLocationProvider: { .zero }
+        )
+        var requests: [Bool] = []
+        controller.requestAppMenuBarIconVisibility = { requests.append($0) }
+
+        XCTAssertTrue(controller.snapshot.hasSupportedDisplay)
+        controller.refresh()
+        XCTAssertEqual(
+            requests,
+            [false],
+            "With a supported display the host icon stays hidden by default."
+        )
+
+        screens = []
+        controller.refresh()
+
+        XCTAssertFalse(controller.snapshot.hasSupportedDisplay)
+        XCTAssertEqual(
+            requests,
+            [false, true],
+            "Removing the last supported display must restore the host icon."
+        )
+    }
+
+    func testResetToDefaultsRestoresInitialPreferences() {
+        let storage = NotchHoverMemoryStorage()
+        let controller = makeController(storage: storage)
+        controller.setShowsMenuBarIcon(true)
+        controller.setTriggerWidth(NotchHoverGeometry.allowedTriggerWidthRange.upperBound)
+        controller.setVerticalTriggerReach(NotchHoverGeometry.allowedVerticalTriggerReachRange.upperBound)
+        controller.setShowDelay(0.8)
+        controller.setHideDelay(1)
+
+        controller.resetToDefaults()
+
+        let snapshot = controller.snapshot
+        XCTAssertTrue(snapshot.isEnabled)
+        XCTAssertFalse(snapshot.showsMenuBarIcon)
+        XCTAssertEqual(snapshot.triggerWidth, Double(NotchHoverGeometry.defaultTriggerWidth))
+        XCTAssertEqual(
+            snapshot.verticalTriggerReach,
+            Double(NotchHoverGeometry.defaultVerticalTriggerReach)
+        )
+        XCTAssertEqual(snapshot.showDelay, 0.18)
+        XCTAssertEqual(snapshot.hideDelay, 0.28)
+        XCTAssertFalse(storage.bool(forKey: "notch-hover.show-menu-bar-icon"))
+    }
+
     private func makeController(storage: NotchHoverMemoryStorage) -> NotchHoverPanelController {
         NotchHoverPanelController(
             storage: storage,
             screensProvider: { [] },
             mouseLocationProvider: { .zero }
+        )
+    }
+
+    private static func notchScreenSnapshot() -> NotchHoverScreenSnapshot {
+        let frame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        // 220 pt of usable menu bar on each side of a 180 pt notch.
+        let leftArea = CGRect(x: 0, y: frame.maxY - 32, width: 666, height: 32)
+        let rightArea = CGRect(x: 846, y: frame.maxY - 32, width: 666, height: 32)
+        return NotchHoverScreenSnapshot(
+            displayID: 1,
+            frame: frame,
+            auxiliaryTopLeftArea: leftArea,
+            auxiliaryTopRightArea: rightArea,
+            isBuiltin: true,
+            isMain: true,
+            isInMirrorSet: false
         )
     }
 }

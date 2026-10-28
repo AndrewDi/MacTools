@@ -33,6 +33,7 @@ final class NotchHoverPanelPlugin: MacToolsPlugin, PluginMenuBarPanelPresenting,
         static let verticalTriggerReach = "vertical-trigger-reach"
         static let showDelay = "show-delay"
         static let hideDelay = "hide-delay"
+        static let reset = "reset"
         static let status = "status"
     }
 
@@ -173,6 +174,25 @@ final class NotchHoverPanelPlugin: MacToolsPlugin, PluginMenuBarPanelPresenting,
                     valueFormat: PluginSettingsSliderValueFormat(suffix: " s")
                 )
             ),
+            PluginSettingsRow(
+                id: SettingsID.reset,
+                title: localization.string(
+                    "settings.reset.title",
+                    defaultValue: "恢复默认设置"
+                ),
+                description: localization.string(
+                    "settings.reset.description",
+                    defaultValue: "将触发范围、显示延迟和菜单栏图标恢复为初始状态。"
+                ),
+                systemImage: "arrow.counterclockwise",
+                control: .action(
+                    title: localization.string(
+                        "settings.reset.action",
+                        defaultValue: "恢复默认"
+                    ),
+                    role: .normal
+                )
+            ),
         ]
 
         if !snapshot.hasSupportedDisplay {
@@ -307,6 +327,8 @@ final class NotchHoverPanelPlugin: MacToolsPlugin, PluginMenuBarPanelPresenting,
             controller.setEnabled(value)
         case let .setBoolean(controlID, value) where controlID == SettingsID.showsMenuBarIcon:
             controller.setShowsMenuBarIcon(value)
+        case let .invoke(controlID) where controlID == SettingsID.reset:
+            controller.resetToDefaults()
         case let .setNumber(controlID, value, phase) where phase == .committed:
             switch controlID {
             case SettingsID.triggerWidth:
