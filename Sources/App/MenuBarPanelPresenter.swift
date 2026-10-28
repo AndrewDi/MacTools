@@ -510,10 +510,6 @@ final class MenuBarPanelPresenter: NSObject {
 
         guard let resolvedPanel = resolvedPanelForAnchor(panelID: panelID) else { return false }
 
-        // If the user is actively editing the panel layout, do not auto-hide.
-        // The panel must remain visible until editing concludes.
-        if panelModel.preventDismissalWhileEditing() { return true }
-
         let anchorView = hoverAnchorView(for: anchorRect)
         isHoverPanelPresentation = true
         isHidingHoverPanel = false
@@ -522,15 +518,23 @@ final class MenuBarPanelPresenter: NSObject {
         return popover.isShown
     }
 
-    func dismissPanelBelowAnchor(animated: Bool) {
+    /// Dismisses the panel presented below a plugin-owned anchor. Returns
+    /// `false` when the host declines because the panel layout is being edited,
+    /// so the caller can keep ownership and retry later.
+    @discardableResult
+    func dismissPanelBelowAnchor(animated: Bool) -> Bool {
+        // Check the editing guard before any hide animation starts. Fading the
+        // panel out first would leave it open but transparent after the close
+        // is rejected.
+        guard !panelModel.preventDismissalWhileEditing() else { return false }
         guard popover.isShown else {
             cleanupHoverAnchor()
-            return
+            return true
         }
         guard isHoverPanelPresentation, animated,
               let window = popover.contentViewController?.view.window else {
             popover.performClose(nil)
-            return
+            return true
         }
 
         hoverDismissGeneration &+= 1
@@ -555,6 +559,7 @@ final class MenuBarPanelPresenter: NSObject {
                 self.popover.performClose(nil)
             }
         })
+        return true
     }
 
     var presentedPanelScreenFrame: NSRect? {

@@ -403,7 +403,7 @@ final class PluginHost: ObservableObject {
     /// panel at an explicit screen anchor.
     var anchoredMenuBarPanelPresentationHandler:
         ((PluginMenuBarPanelPresentationRequest) -> Bool)?
-    var anchoredMenuBarPanelDismissalHandler: ((_ animated: Bool) -> Void)?
+    var anchoredMenuBarPanelDismissalHandler: ((_ animated: Bool) -> Bool)?
     var anchoredMenuBarPanelFrameProvider: (() -> NSRect?)?
     var anchoredMenuBarPanelVisibilityProvider: (() -> Bool)?
     private let preferencesBackupStore: any PreferencesBackupApplicationStoring
@@ -3515,7 +3515,7 @@ final class PluginHost: ObservableObject {
                     self?.anchoredMenuBarPanelPresentationHandler?(request) ?? false
                 }
                 anchoredPanelPresenting.requestMenuBarPanelDismissal = { [weak self] animated in
-                    self?.anchoredMenuBarPanelDismissalHandler?(animated)
+                    self?.anchoredMenuBarPanelDismissalHandler?(animated) ?? false
                 }
                 anchoredPanelPresenting.presentedMenuBarPanelScreenFrame = { [weak self] in
                     self?.anchoredMenuBarPanelFrameProvider?()

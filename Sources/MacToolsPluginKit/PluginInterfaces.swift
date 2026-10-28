@@ -189,7 +189,10 @@ public struct PluginMenuBarPanelPresentationRequest {
 public protocol PluginMenuBarPanelPresenting: AnyObject {
     var requestMenuBarPanelPresentation:
         ((PluginMenuBarPanelPresentationRequest) -> Bool)? { get set }
-    var requestMenuBarPanelDismissal: ((_ animated: Bool) -> Void)? { get set }
+    /// Returns `true` when the host accepted the dismissal. The host declines
+    /// while the panel layout is being edited, so the plugin keeps ownership
+    /// and can retry once editing concludes.
+    var requestMenuBarPanelDismissal: ((_ animated: Bool) -> Bool)? { get set }
     var presentedMenuBarPanelScreenFrame: (() -> NSRect?)? { get set }
     var isPresentedMenuBarPanelVisible: (() -> Bool)? { get set }
 }

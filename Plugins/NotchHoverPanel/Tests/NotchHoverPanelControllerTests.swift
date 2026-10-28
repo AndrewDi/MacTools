@@ -1,3 +1,4 @@
+import AppKit
 import MacToolsPluginKit
 import XCTest
 @testable import NotchHoverPanelPlugin
@@ -18,6 +19,15 @@ private final class NotchHoverMemoryStorage: PluginStorage {
         guard legacyKey != key, values[key] == nil, let value = values[legacyKey] else { return }
         values[key] = value
         values.removeValue(forKey: legacyKey)
+    }
+}
+
+@MainActor
+private final class TestState<Value> {
+    var value: Value
+
+    init(_ value: Value) {
+        self.value = value
     }
 }
 
@@ -50,35 +60,6 @@ final class NotchHoverPanelControllerTests: XCTestCase {
         XCTAssertEqual(requests, [true, true], "Disabling the plugin must restore the host icon.")
     }
 
-    func testDisplayRemovalRestoresMenuBarIconVisibility() {
-        var screens = [Self.notchScreenSnapshot()]
-        let controller = NotchHoverPanelController(
-            storage: NotchHoverMemoryStorage(),
-            screensProvider: { screens },
-            mouseLocationProvider: { .zero }
-        )
-        var requests: [Bool] = []
-        controller.requestAppMenuBarIconVisibility = { requests.append($0) }
-
-        XCTAssertTrue(controller.snapshot.hasSupportedDisplay)
-        controller.refresh()
-        XCTAssertEqual(
-            requests,
-            [false],
-            "With a supported display the host icon stays hidden by default."
-        )
-
-        screens = []
-        controller.refresh()
-
-        XCTAssertFalse(controller.snapshot.hasSupportedDisplay)
-        XCTAssertEqual(
-            requests,
-            [false, true],
-            "Removing the last supported display must restore the host icon."
-        )
-    }
-
     func testResetToDefaultsRestoresInitialPreferences() {
         let storage = NotchHoverMemoryStorage()
         let controller = makeController(storage: storage)
@@ -103,12 +84,106 @@ final class NotchHoverPanelControllerTests: XCTestCase {
         XCTAssertFalse(storage.bool(forKey: "notch-hover.show-menu-bar-icon"))
     }
 
+    func testDisplayRemovalRestoresMenuBarIconVisibility() {
+        let screens = TestState([Self.notchScreenSnapshot()])
+        let controller = NotchHoverPanelController(
+            storage: NotchHoverMemoryStorage(),
+            screensProvider: { screens.value },
+            mouseLocationProvider: { .zero }
+        )
+        var requests: [Bool] = []
+        controller.requestAppMenuBarIconVisibility = { requests.append($0) }
+
+        XCTAssertTrue(controller.snapshot.hasSupportedDisplay)
+        controller.refresh()
+        XCTAssertEqual(
+            requests,
+            [false],
+            "With a supported display the host icon stays hidden by default."
+        )
+
+        screens.value = []
+        controller.refresh()
+
+        XCTAssertFalse(controller.snapshot.hasSupportedDisplay)
+        XCTAssertEqual(
+            requests,
+            [false, true],
+            "Removing the last supported display must restore the host icon."
+        )
+    }
+
+    func testRejectedDismissalKeepsOwnershipAndRetriesOnNextHover() {
+        let mouse = TestState(NSPoint.zero)
+        let controller = NotchHoverPanelController(
+            storage: NotchHoverMemoryStorage(),
+            screensProvider: { [Self.notchScreenSnapshot()] },
+            mouseLocationProvider: { mouse.value }
+        )
+        controller.setShowDelay(0)
+        controller.setHideDelay(0.05)
+
+        var isPanelVisible = false
+        var dismissalRequests = 0
+        controller.isPresentedMenuBarPanelVisible = { isPanelVisible }
+        controller.requestMenuBarPanelPresentation = { _ in
+            isPanelVisible = true
+            return true
+        }
+        // Simulates the host rejecting dismissal while the layout is edited.
+        controller.requestMenuBarPanelDismissal = { _ in
+            dismissalRequests += 1
+            return false
+        }
+
+        mouse.value = Self.triggerPoint
+        controller.handlePointerLocation(mouse.value)
+        waitForScheduledWork()
+
+        XCTAssertTrue(
+            controller.snapshot.isPanelVisible,
+            "Hovering the trigger should take ownership of the panel."
+        )
+
+        mouse.value = NSPoint(x: 40, y: 40)
+        controller.handlePointerLocation(mouse.value)
+        waitForScheduledWork()
+
+        XCTAssertEqual(dismissalRequests, 1)
+        XCTAssertTrue(
+            controller.snapshot.isPanelVisible,
+            "A dismissal rejected by the host must keep plugin ownership."
+        )
+
+        // Hovering again must still be able to restore or keep the panel.
+        mouse.value = Self.triggerPoint
+        controller.handlePointerLocation(mouse.value)
+        XCTAssertTrue(controller.snapshot.isPanelVisible)
+
+        mouse.value = NSPoint(x: 40, y: 40)
+        controller.handlePointerLocation(mouse.value)
+        waitForScheduledWork()
+
+        XCTAssertEqual(
+            dismissalRequests,
+            2,
+            "Ownership should let a later pointer update retry the dismissal."
+        )
+        XCTAssertTrue(controller.snapshot.isPanelVisible)
+    }
+
     private func makeController(storage: NotchHoverMemoryStorage) -> NotchHoverPanelController {
         NotchHoverPanelController(
             storage: storage,
             screensProvider: { [] },
             mouseLocationProvider: { .zero }
         )
+    }
+
+    private static let triggerPoint = NSPoint(x: 700, y: 960)
+
+    private func waitForScheduledWork() {
+        RunLoop.current.run(until: Date().addingTimeInterval(0.15))
     }
 
     private static func notchScreenSnapshot() -> NotchHoverScreenSnapshot {

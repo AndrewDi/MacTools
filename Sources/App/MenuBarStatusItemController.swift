@@ -181,7 +181,7 @@ final class MenuBarStatusItemController: NSObject {
             return presented
         }
         pluginHost.anchoredMenuBarPanelDismissalHandler = { [weak self] animated in
-            self?.panelPresenter.dismissPanelBelowAnchor(animated: animated)
+            self?.panelPresenter.dismissPanelBelowAnchor(animated: animated) ?? false
         }
         pluginHost.anchoredMenuBarPanelFrameProvider = { [weak self] in
             self?.panelPresenter.presentedPanelScreenFrame

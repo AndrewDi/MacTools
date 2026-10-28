@@ -61,7 +61,7 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
     var onStateChange: (() -> Void)?
     var requestMenuBarPanelPresentation:
         ((PluginMenuBarPanelPresentationRequest) -> Bool)?
-    var requestMenuBarPanelDismissal: ((_ animated: Bool) -> Void)?
+    var requestMenuBarPanelDismissal: ((_ animated: Bool) -> Bool)?
     var presentedMenuBarPanelScreenFrame: (() -> NSRect?)?
     var isPresentedMenuBarPanelVisible: (() -> Bool)?
     var requestAppMenuBarIconVisibility: ((Bool) -> Void)?
@@ -191,6 +191,10 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
         menuTrackingObservers.removeAll()
         menuTrackingCount = 0
         dismissOwnedPanel(animated: false)
+        // Deactivation must not keep stale ownership when the host declines to
+        // close the panel, for example while the panel layout is being edited.
+        ownsPanelPresentation = false
+        activeDisplay = nil
         requestAppMenuBarIconVisibility?(true)
     }
 
@@ -454,10 +458,16 @@ final class NotchHoverPanelController: NotchHoverPanelControlling {
 
     private func dismissOwnedPanel(animated: Bool) {
         guard ownsPanelPresentation else { return }
+        cancelScheduledInteractions()
+
+        // A rejected dismissal (for example while the panel layout is being
+        // edited) must not clear ownership, otherwise a later pointer update
+        // cannot retry or cancel the close.
+        let accepted = requestMenuBarPanelDismissal?(animated) ?? true
+        guard accepted else { return }
+
         ownsPanelPresentation = false
         activeDisplay = nil
-        cancelScheduledInteractions()
-        requestMenuBarPanelDismissal?(animated)
         onStateChange?()
     }
 

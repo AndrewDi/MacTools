@@ -255,7 +255,7 @@ final class NotchHoverPanelPlugin: MacToolsPlugin, PluginMenuBarPanelPresenting,
         set { controller.requestMenuBarPanelPresentation = newValue }
     }
 
-    var requestMenuBarPanelDismissal: ((_ animated: Bool) -> Void)? {
+    var requestMenuBarPanelDismissal: ((_ animated: Bool) -> Bool)? {
         get { controller.requestMenuBarPanelDismissal }
         set { controller.requestMenuBarPanelDismissal = newValue }
     }
