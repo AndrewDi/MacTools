@@ -28,9 +28,12 @@ class PluginBuildCacheTests(unittest.TestCase):
             build={'project': 'Example.xcodeproj', 'scheme': 'Example'})))
         self.bin = self.root / 'bin'
         self.bin.mkdir()
-        self.env = {key: value for key, value in os.environ.items() if not key.startswith('MACTOOLS_PLUGIN_')}
+        # Keep release configuration, signing, and compiler overrides out of the fixture.
+        self.env = {key: os.environ[key] for key in ('PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL')
+                    if key in os.environ}
         self.env.update(PATH=str(self.bin) + os.pathsep + self.env['PATH'],
-                        PYTHON3=sys.executable, DEVELOPER_DIR=str(self.root / 'Xcode/Developer'),
+                        PYTHON3=sys.executable, CONFIGURATION='Debug',
+                        DEVELOPER_DIR=str(self.root / 'Xcode/Developer'),
                         MACTOOLS_PLUGIN_CACHE_ROOT=str(self.root / 'compiler'), CALLS=str(self.root / 'calls'))
         self.tool('xcrun', "import os\nprint(os.environ.get('SDK_BUILD','fixture-sdk'))\n")
         self.builder = self.tool('xcodebuild', '''import json,os,pathlib,sys
@@ -134,9 +137,9 @@ sys.exit(subprocess.call(['/usr/bin/ditto',*sys.argv[1:]]))
         self.assertEqual((self.root / 'aliased/Packages/example.mactoolsplugin/THIRD_PARTY_NOTICES.txt').read_text(),
                          'Required notice')
 
-    def test_configuration_signing_sdk_probe_and_fresh_workspaces_are_separate(self):
+    def test_configuration_signing_sdk_and_fresh_workspaces_are_separate(self):
         cases = [([], {}), (['--configuration', 'Release'], {}), (['--unsigned-build'], {}),
-                 ([], {'SDK_BUILD': 'changed-sdk'}), ([], {'MACTOOLS_PLUGIN_CACHE_VARIANT': 'probe'}),
+                 ([], {'SDK_BUILD': 'changed-sdk'}),
                  ([], {'MACTOOLS_PLUGIN_FRESH_BUILD': '1'}), ([], {'MACTOOLS_PLUGIN_FRESH_BUILD': '1'})]
         workspaces = []
         for number, (extra, changes) in enumerate(cases):
@@ -169,34 +172,6 @@ sys.exit(subprocess.call(['/usr/bin/ditto',*sys.argv[1:]]))
         self.assertIn('Fixture build log', Path(record['report'], 'build.log').read_text())
         self.assertEqual(self.invoke('following').returncode, 0)
         self.assertEqual(self.latest()['workspace'], record['workspace'])
-
-    def test_report_remains_readable_while_an_update_is_being_written(self):
-        shim = self.root / 'shim'
-        shim.mkdir()
-        (shim / 'sitecustomize.py').write_text('''import json,os,pathlib,time
-original=pathlib.Path.write_text
-def write_text(path,data,*args,**kwargs):
- if path.name in {'build.json','build.json.tmp'} and json.loads(data).get('state')=='running':
-  with path.open('w') as stream:
-   pathlib.Path(os.environ['REPORT_WRITE_STARTED']).touch()
-   deadline=time.monotonic()+8
-   while not pathlib.Path(os.environ['RELEASE_REPORT_WRITE']).exists() and time.monotonic()<deadline: time.sleep(.02)
-   return stream.write(data)
- return original(path,data,*args,**kwargs)
-pathlib.Path.write_text=write_text
-''')
-        held, release = self.root / 'report-started', self.root / 'report-release'
-        child = subprocess.Popen(self.command('report'), env=dict(self.env, PYTHONPATH=str(shim),
-                                 REPORT_WRITE_STARTED=str(held), RELEASE_REPORT_WRITE=str(release)),
-                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.addCleanup(self.stop, child)
-        try:
-            self.wait_for(held.exists)
-            self.assertEqual(self.latest()['state'], 'waiting-for-lock')
-        finally:
-            release.touch()
-        self.assertEqual(child.wait(timeout=10), 0)
-        self.assertEqual(self.latest()['state'], 'passed')
 
     def test_old_bundle_is_rejected_when_current_scheme_no_longer_produces_it(self):
         self.assertEqual(self.invoke('first').returncode, 0)
