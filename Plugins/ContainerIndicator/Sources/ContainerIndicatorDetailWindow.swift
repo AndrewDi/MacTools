@@ -36,10 +36,15 @@ final class ContainerIndicatorDetailPresenter {
             self?.onVisibilityChange?(false)
         }
 
+        // The card lives in a menu-bar popover, whose window is ordered above
+        // ordinary floating panels. Without lifting the inspector above that
+        // level it opens behind the popover the user just clicked.
+        window.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
         PluginPresentationSafety.prepareForWindowOrdering(window)
         position(window)
-        window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
         self.window = window
         onVisibilityChange?(true)
     }
