@@ -631,6 +631,152 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         XCTAssertNil(controller.snapshot.containers.first?.performance)
     }
 
+    // MARK: - Performance history
+
+    func testPerformanceHistoryRetainsSamplesAndCapsLength() async throws {
+        let probe = CommandProbe()
+        await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
+        await probe.stubContainers(
+            """
+            [{"id":"c1","configuration":{"id":"web","resources":{"cpus":2}},\
+            "status":{"state":"running"}}]
+            """
+        )
+        var clock = Date(timeIntervalSince1970: 1000)
+        let controller = makeController(probe: probe, now: { clock })
+        let limit = ContainerIndicatorController.performanceHistoryLimit
+
+        for index in 0...(limit + 4) {
+            clock.addTimeInterval(ContainerIndicatorController.pollInterval)
+            await probe.stubStats(
+                output: statsJSON(
+                    cpu: UInt64(1_000_000 + index * 1_000_000),
+                    read: 1000,
+                    write: 2000
+                )
+            )
+            await controller.refresh()
+        }
+
+        let history = try XCTUnwrap(controller.performanceHistory["c1"])
+        XCTAssertEqual(
+            history.count,
+            limit,
+            "The chart keeps a bounded window instead of growing without limit"
+        )
+        XCTAssertEqual(
+            history.map(\.sampledAt),
+            history.map(\.sampledAt).sorted(),
+            "Samples stay in the order they were collected"
+        )
+        XCTAssertEqual(
+            history.last?.sampledAt,
+            clock,
+            "The newest sample is the one just published"
+        )
+    }
+
+    func testPerformanceHistoryDropsContainersThatStop() async throws {
+        let probe = CommandProbe()
+        await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
+        await probe.stubContainers(
+            """
+            [{"id":"c1","configuration":{"id":"web","resources":{"cpus":2}},\
+            "status":{"state":"running"}}]
+            """
+        )
+        await probe.stubStats(output: statsJSON(cpu: 1_000_000, read: 1000, write: 2000))
+        let controller = makeController(probe: probe)
+
+        await controller.refresh()
+        XCTAssertEqual(controller.performanceHistory["c1"]?.count, 1)
+
+        await probe.stubContainers(
+            "[{\"id\":\"c1\",\"configuration\":{\"id\":\"web\"},\"status\":{\"state\":\"stopped\"}}]"
+        )
+        await controller.refresh()
+
+        XCTAssertNil(
+            controller.performanceHistory["c1"],
+            "A stopped container has no live series to chart"
+        )
+    }
+
+    func testStoppingMonitoringClearsPerformanceHistory() async throws {
+        let probe = CommandProbe()
+        await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
+        await probe.stubContainers(
+            """
+            [{"id":"c1","configuration":{"id":"web","resources":{"cpus":2}},\
+            "status":{"state":"running"}}]
+            """
+        )
+        await probe.stubStats(output: statsJSON(cpu: 1_000_000, read: 1000, write: 2000))
+        let controller = makeController(probe: probe)
+
+        await controller.refresh()
+        XCTAssertFalse(controller.performanceHistory.isEmpty)
+
+        controller.stopMonitoring()
+
+        XCTAssertTrue(
+            controller.performanceHistory.isEmpty,
+            "A paused monitor cannot bridge the gap honestly, so the chart restarts"
+        )
+    }
+
+    func testMetricSeriesSkipsSamplesWithoutDerivedRates() {
+        let sampledAt = Date(timeIntervalSince1970: 0)
+        let later = Date(timeIntervalSince1970: 5)
+        let history = [
+            ContainerPerformance(
+                cpuPercent: nil,
+                memoryBytes: 2_097_152,
+                memoryLimitBytes: 4_194_304,
+                diskReadBytesPerSecond: nil,
+                diskWriteBytesPerSecond: nil,
+                sampledAt: sampledAt
+            ),
+            ContainerPerformance(
+                cpuPercent: 25,
+                memoryBytes: 1_048_576,
+                memoryLimitBytes: 4_194_304,
+                diskReadBytesPerSecond: 1024,
+                diskWriteBytesPerSecond: 2048,
+                sampledAt: later
+            ),
+            ContainerPerformance(
+                cpuPercent: 75,
+                memoryBytes: nil,
+                memoryLimitBytes: nil,
+                diskReadBytesPerSecond: 512,
+                diskWriteBytesPerSecond: 512,
+                sampledAt: later
+            ),
+        ]
+
+        let cpu = ContainerIndicatorMetricSeries.cpu(history)
+        XCTAssertEqual(
+            cpu.map(\.value),
+            [25, 75],
+            "The first sample has no CPU baseline and must not plot a zero"
+        )
+        XCTAssertEqual(
+            cpu.map(\.timestamp),
+            [later, later],
+            "Hovering needs the moment each sample was read"
+        )
+        XCTAssertEqual(
+            ContainerIndicatorMetricSeries.memoryMegabytes(history).map(\.value),
+            [2, 1]
+        )
+        XCTAssertEqual(
+            ContainerIndicatorMetricSeries.diskKilobytesPerSecond(history).map(\.value),
+            [3, 1],
+            "Read and write are charted as one combined throughput"
+        )
+    }
+
     // MARK: - Terminal
 
     func testContainerTerminalScriptPrefersBashAndFallsBackToShell() {

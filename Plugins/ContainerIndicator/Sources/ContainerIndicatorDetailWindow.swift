@@ -1,4 +1,5 @@
 import AppKit
+import Charts
 import MacToolsPluginKit
 import SwiftUI
 
@@ -86,7 +87,7 @@ final class ContainerIndicatorDetailWindow: NSPanel {
         let size = NSSize(width: 520, height: 620)
         super.init(
             contentRect: NSRect(origin: .zero, size: size),
-            styleMask: [.titled, .closable, .resizable],
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -97,17 +98,44 @@ final class ContainerIndicatorDetailWindow: NSPanel {
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        backgroundColor = .windowBackgroundColor
+        isMovableByWindowBackground = true
+        titlebarAppearsTransparent = true
+        titleVisibility = .hidden
+        titlebarSeparatorStyle = .none
+        backgroundColor = .clear
+        isOpaque = false
+        hasShadow = true
+        animationBehavior = .utilityWindow
         minSize = NSSize(width: 440, height: 420)
         setContentSize(size)
 
-        contentView = NSHostingView(
+        let effectView = NSVisualEffectView()
+        effectView.material = .popover
+        effectView.blendingMode = .behindWindow
+        effectView.state = .active
+        effectView.wantsLayer = true
+        effectView.layer?.cornerRadius = 14
+        effectView.layer?.masksToBounds = true
+
+        let hostingView = NSHostingView(
             rootView: ContainerIndicatorDetailView(
                 containerID: containerID,
                 controller: controller,
                 localization: localization
             )
         )
+        hostingView.translatesAutoresizingMaskIntoConstraints = false
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+        effectView.addSubview(hostingView)
+        NSLayoutConstraint.activate([
+            hostingView.leadingAnchor.constraint(equalTo: effectView.leadingAnchor),
+            hostingView.trailingAnchor.constraint(equalTo: effectView.trailingAnchor),
+            hostingView.topAnchor.constraint(equalTo: effectView.topAnchor),
+            hostingView.bottomAnchor.constraint(equalTo: effectView.bottomAnchor),
+        ])
+
+        contentView = effectView
     }
 
     override var canBecomeKey: Bool { true }
@@ -154,11 +182,13 @@ private struct ContainerIndicatorDetailView: View {
                         }
                     }
                     .formStyle(.grouped)
+                    .scrollContentBackground(.hidden)
                 }
             } else {
                 missingState
             }
         }
+        .background(Color.clear)
         .environment(\.locale, runtimeLocale.locale)
         .environment(
             \.layoutDirection,
@@ -192,7 +222,9 @@ private struct ContainerIndicatorDetailView: View {
             }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 16)
+        // Clear the traffic lights that float over the full-size glass
+        // content view.
+        .padding(.top, 34)
         .padding(.bottom, 10)
     }
 
@@ -360,19 +392,48 @@ private struct ContainerIndicatorDetailView: View {
     }
 
     private func liveSection(_ container: ContainerInstance) -> some View {
-        Section {
-            field(
-                localization.string("detail.field.cpu", defaultValue: "CPU"),
-                container.performance?.cpuPercent.map(ContainerIndicatorFormatting.percent) ?? placeholder
-            )
-            field(
-                localization.string("detail.field.memory", defaultValue: "内存"),
-                memoryUsage(container.performance)
-            )
-            field(
-                localization.string("detail.field.disk", defaultValue: "磁盘"),
-                diskUsage(container.performance)
-            )
+        let history = controller.performanceHistory[container.id] ?? []
+        return Section {
+            VStack(spacing: 10) {
+                ContainerIndicatorLiveMetricCard(
+                    title: localization.string("detail.field.cpu", defaultValue: "CPU"),
+                    value: container.performance?.cpuPercent
+                        .map(ContainerIndicatorFormatting.percent) ?? placeholder,
+                    points: ContainerIndicatorMetricSeries.cpu(history),
+                    color: Color(nsColor: .systemBlue),
+                    locale: runtimeLocale.locale,
+                    collectingText: localization.string(
+                        "detail.live.collecting",
+                        defaultValue: "采集中…"
+                    ),
+                    format: ContainerIndicatorFormatting.percent
+                )
+                ContainerIndicatorLiveMetricCard(
+                    title: localization.string("detail.field.memory", defaultValue: "内存"),
+                    value: memoryUsage(container.performance),
+                    points: ContainerIndicatorMetricSeries.memoryMegabytes(history),
+                    color: Color(nsColor: .systemPurple),
+                    locale: runtimeLocale.locale,
+                    collectingText: localization.string(
+                        "detail.live.collecting",
+                        defaultValue: "采集中…"
+                    ),
+                    format: { ContainerIndicatorFormatting.bytes(Int($0 * 1_048_576)) }
+                )
+                ContainerIndicatorLiveMetricCard(
+                    title: localization.string("detail.field.disk", defaultValue: "磁盘"),
+                    value: diskUsage(container.performance),
+                    points: ContainerIndicatorMetricSeries.diskKilobytesPerSecond(history),
+                    color: Color(nsColor: .systemOrange),
+                    locale: runtimeLocale.locale,
+                    collectingText: localization.string(
+                        "detail.live.collecting",
+                        defaultValue: "采集中…"
+                    ),
+                    format: { ContainerIndicatorFormatting.rate($0 * 1024) }
+                )
+            }
+            .padding(.vertical, 2)
         } header: {
             sectionTitle(localization.string("detail.section.live", defaultValue: "实时"))
         }
@@ -464,5 +525,148 @@ private struct ContainerIndicatorDetailView: View {
             ContainerIndicatorFormatting.rate(read),
             ContainerIndicatorFormatting.rate(write)
         )
+    }
+}
+
+// MARK: - Live metric card
+
+/// One live metric: the latest reading next to a sparkline of the retained
+/// samples. The axes stay hidden because the value above carries the number
+/// and the shape carries the trend. Hovering a chart replaces the reading with
+/// the hovered sample's time and value.
+private struct ContainerIndicatorLiveMetricCard: View {
+    let title: String
+    let value: String
+    let points: [ContainerIndicatorMetricPoint]
+    let color: Color
+    let locale: Locale
+    let collectingText: String
+    let format: (Double) -> String
+
+    @State private var hoveredIndex: Int?
+
+    private var hoveredPoint: ContainerIndicatorMetricPoint? {
+        guard let hoveredIndex, points.indices.contains(hoveredIndex) else {
+            return nil
+        }
+        return points[hoveredIndex]
+    }
+
+    private var displayValue: String {
+        guard let hoveredPoint else { return value }
+        let time = hoveredPoint.timestamp.formatted(
+            Date.FormatStyle(date: .omitted, time: .standard).locale(locale)
+        )
+        return "\(time) · \(format(hoveredPoint.value))"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title)
+                    .font(PluginTypography.caption.font)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Text(displayValue)
+                    .font(PluginTypography.value.font)
+                    .lineLimit(1)
+                    .monospacedDigit()
+            }
+            chart
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.primary.opacity(0.04))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+        )
+    }
+
+    @ViewBuilder
+    private var chart: some View {
+        if points.count >= 2 {
+            Chart {
+                ForEach(points) { point in
+                    AreaMark(
+                        x: .value("Sample", point.index),
+                        y: .value("Value", point.value)
+                    )
+                    .foregroundStyle(color.opacity(0.15))
+                    LineMark(
+                        x: .value("Sample", point.index),
+                        y: .value("Value", point.value)
+                    )
+                    .foregroundStyle(color)
+                    .interpolationMethod(.monotone)
+                }
+                if let hoveredPoint {
+                    RuleMark(x: .value("Sample", hoveredPoint.index))
+                        .foregroundStyle(color.opacity(0.35))
+                        .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                    PointMark(
+                        x: .value("Sample", hoveredPoint.index),
+                        y: .value("Value", hoveredPoint.value)
+                    )
+                    .foregroundStyle(color)
+                    .symbolSize(28)
+                }
+            }
+            .chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            // Zero-anchored areas turn a nearly constant series into a solid
+            // block; the padded range keeps the line's shape visible.
+            .chartYScale(domain: .automatic(includesZero: false))
+            .frame(height: 46)
+            .chartOverlay { proxy in
+                GeometryReader { geometry in
+                    Rectangle()
+                        .fill(.clear)
+                        .contentShape(Rectangle())
+                        .onContinuousHover { phase in
+                            updateHover(phase, proxy: proxy, geometry: geometry)
+                        }
+                }
+            }
+        } else {
+            RoundedRectangle(cornerRadius: 5)
+                .fill(color.opacity(0.08))
+                .frame(height: 46)
+                .overlay {
+                    Text(collectingText)
+                        .font(PluginTypography.caption.font)
+                        .foregroundStyle(.tertiary)
+                }
+        }
+    }
+
+    private func updateHover(
+        _ phase: HoverPhase,
+        proxy: ChartProxy,
+        geometry: GeometryProxy
+    ) {
+        switch phase {
+        case .active(let location):
+            guard let plotFrame = proxy.plotFrame else {
+                hoveredIndex = nil
+                return
+            }
+            let frame = geometry[plotFrame]
+            guard frame.contains(location) else {
+                hoveredIndex = nil
+                return
+            }
+            let sample: Double? = proxy.value(atX: location.x - frame.origin.x)
+            guard let sample else { return }
+            hoveredIndex = min(max(Int(sample.rounded()), 0), points.count - 1)
+        case .ended:
+            hoveredIndex = nil
+        @unknown default:
+            hoveredIndex = nil
+        }
     }
 }

@@ -4,4 +4,4 @@ type: added
 area: Container Indicator
 ---
 
-The Apple Container status card now shows live CPU, memory, and disk usage. Containers gain a configuration window and one-click terminal access, and machines can also open a terminal in the app chosen in settings.
+The Apple Container card now shows live CPU, memory, and disk usage. Containers gain a configuration window with CPU, memory, and disk I/O charts plus terminal access, and machines can open a terminal too.

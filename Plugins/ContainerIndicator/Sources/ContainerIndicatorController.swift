@@ -7,6 +7,8 @@ import MacToolsPluginKit
 @MainActor
 public final class ContainerIndicatorController: ObservableObject {
     public static let pollInterval: TimeInterval = 5
+    /// At the five-second poll this covers roughly twelve minutes of history.
+    public static let performanceHistoryLimit = 150
 
     @Published public private(set) var snapshot: ContainerSnapshot = .unavailable
     @Published public private(set) var commandPath: String?
@@ -16,6 +18,9 @@ public final class ContainerIndicatorController: ObservableObject {
     /// the follow-up refresh so the user can still read what went wrong.
     @Published public private(set) var operationErrorMessage: String?
     @Published public private(set) var checkErrorMessage: String?
+    /// Retained live samples per running container, oldest first. The detail
+    /// window charts them; entries disappear as soon as a container stops.
+    @Published public private(set) var performanceHistory: [String: [ContainerPerformance]] = [:]
 
     public var lastErrorMessage: String? {
         operationErrorMessage ?? checkErrorMessage
@@ -119,6 +124,9 @@ public final class ContainerIndicatorController: ObservableObject {
         // gap would describe an average instead of the current load.
         previousStats = [:]
         previousStatsAt = nil
+        // The chart has no honest way to bridge the pause: a resumed line
+        // would describe a gap it never sampled.
+        performanceHistory = [:]
         // Cancelling the refresh also cancels the CLI command it is waiting on,
         // so a hidden panel never leaves a `container` process running behind it.
         cancelInFlightRefresh()
@@ -350,6 +358,7 @@ public final class ContainerIndicatorController: ObservableObject {
                 }
                 previousStats = counters
                 previousStatsAt = sampledAt
+                recordPerformanceHistory(containers)
             } else {
                 statsFailure = listFailureMessage(
                     label: localization.string(
@@ -377,6 +386,7 @@ public final class ContainerIndicatorController: ObservableObject {
         } else {
             previousStats = [:]
             previousStatsAt = nil
+            performanceHistory = [:]
         }
 
         isChecking = false
@@ -393,6 +403,25 @@ public final class ContainerIndicatorController: ObservableObject {
             ),
             generation: generation
         )
+    }
+
+    /// Appends the newest sample per running container and drops entries for
+    /// containers that stopped, so the charts only ever describe what is live.
+    private func recordPerformanceHistory(_ containers: [ContainerInstance]) {
+        var history = performanceHistory
+        var runningIDs: Set<String> = []
+        for container in containers where container.isRunning {
+            runningIDs.insert(container.id)
+            guard let performance = container.performance else { continue }
+            var samples = history[container.id, default: []]
+            samples.append(performance)
+            if samples.count > Self.performanceHistoryLimit {
+                samples.removeFirst(samples.count - Self.performanceHistoryLimit)
+            }
+            history[container.id] = samples
+        }
+        history = history.filter { runningIDs.contains($0.key) }
+        performanceHistory = history
     }
 
     // MARK: - Operations
