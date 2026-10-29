@@ -22,6 +22,9 @@ public final class ContainerIndicatorController: ObservableObject {
     }
 
     public var onStateChange: (() -> Void)?
+    /// The terminal chosen in settings. The launcher falls back to the system
+    /// default if the app has since been removed.
+    public var terminalApplication: ContainerTerminalApplication = .systemDefault
 
     private let commandRunner: any ContainerCommandRunning
     private let commandPathProvider: () -> String?
@@ -445,7 +448,11 @@ public final class ContainerIndicatorController: ObservableObject {
 
         operationErrorMessage = nil
         do {
-            try terminalLauncher.launch(target: target, executable: path)
+            try terminalLauncher.launch(
+                target: target,
+                executable: path,
+                application: terminalApplication
+            )
         } catch ContainerTerminalLaunchError.invalidIdentifier {
             operationErrorMessage = localization.string(
                 "panel.error.terminalInvalidIdentifier",

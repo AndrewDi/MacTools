@@ -670,21 +670,23 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
-        var openedURL: URL?
+        var openedArguments: [String]?
         let launcher = ContainerTerminalLauncher(
             directory: directory,
-            openURL: { url in
-                openedURL = url
+            defaultApplicationResolver: { _ in nil },
+            runOpen: { arguments in
+                openedArguments = arguments
                 return true
             }
         )
 
         try launcher.launch(
             target: .container(id: "web"),
-            executable: "/opt/homebrew/bin/container"
+            executable: "/opt/homebrew/bin/container",
+            application: .systemDefault
         )
 
-        let url = try XCTUnwrap(openedURL)
+        let url = try XCTUnwrap(openedArguments?.first.map(URL.init(fileURLWithPath:)))
         XCTAssertEqual(url.lastPathComponent, "container-web.command")
         let script = try String(contentsOf: url, encoding: .utf8)
         XCTAssertTrue(script.contains("ID='web'"))
@@ -700,13 +702,14 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let launcher = ContainerTerminalLauncher(
             directory: directory,
-            openURL: { _ in true }
+            runOpen: { _ in true }
         )
 
         XCTAssertThrowsError(
             try launcher.launch(
                 target: .container(id: "web; rm -rf /"),
-                executable: "/opt/homebrew/bin/container"
+                executable: "/opt/homebrew/bin/container",
+                application: .systemDefault
             )
         ) { error in
             XCTAssertEqual(error as? ContainerTerminalLaunchError, .invalidIdentifier)
@@ -716,7 +719,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
 
     func testTerminalOpenFailureSurfacesMessage() {
         let probe = CommandProbe()
-        let launcher = ContainerTerminalLauncher(openURL: { _ in false })
+        let launcher = ContainerTerminalLauncher(runOpen: { _ in false })
         let controller = ContainerIndicatorController(
             commandRunner: probe,
             localization: PluginLocalization(bundle: .main),
@@ -740,6 +743,235 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         controller.openTerminal(target: .container(id: "web; rm -rf /"))
 
         XCTAssertEqual(controller.lastErrorMessage, "容器标识无效")
+    }
+
+    func testTerminalApplicationArgumentsTargetTheSelectedApp() {
+        let script = URL(fileURLWithPath: "/tmp/container-web.command")
+        let terminal = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
+        let iterm = URL(fileURLWithPath: "/Applications/iTerm.app")
+        let ghostty = URL(fileURLWithPath: "/Applications/Ghostty.app")
+        let wezterm = URL(fileURLWithPath: "/Applications/WezTerm.app")
+        let kitty = URL(fileURLWithPath: "/Applications/kitty.app")
+        let alacritty = URL(fileURLWithPath: "/Applications/Alacritty.app")
+
+        XCTAssertEqual(
+            ContainerTerminalLauncher.openArguments(
+                application: .systemDefault,
+                applicationURL: nil,
+                scriptURL: script
+            ),
+            [script.path]
+        )
+        XCTAssertEqual(
+            ContainerTerminalLauncher.openArguments(
+                application: .terminal,
+                applicationURL: terminal,
+                scriptURL: script
+            ),
+            ["-a", terminal.path, script.path]
+        )
+        XCTAssertEqual(
+            ContainerTerminalLauncher.openArguments(
+                application: .iterm,
+                applicationURL: iterm,
+                scriptURL: script
+            ),
+            ["-a", iterm.path, script.path]
+        )
+        XCTAssertEqual(
+            ContainerTerminalLauncher.openArguments(
+                application: .ghostty,
+                applicationURL: ghostty,
+                scriptURL: script
+            ),
+            ["-na", ghostty.path, "--args", "-e", script.path]
+        )
+        XCTAssertEqual(
+            ContainerTerminalLauncher.openArguments(
+                application: .wezterm,
+                applicationURL: wezterm,
+                scriptURL: script
+            ),
+            ["-na", wezterm.path, "--args", "start", "--", script.path]
+        )
+        XCTAssertEqual(
+            ContainerTerminalLauncher.openArguments(
+                application: .kitty,
+                applicationURL: kitty,
+                scriptURL: script
+            ),
+            ["-na", kitty.path, "--args", script.path]
+        )
+        XCTAssertEqual(
+            ContainerTerminalLauncher.openArguments(
+                application: .alacritty,
+                applicationURL: alacritty,
+                scriptURL: script
+            ),
+            ["-na", alacritty.path, "--args", "-e", script.path]
+        )
+    }
+
+    func testGhosttyOpensANewTabWithAppleScript() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let ghostty = URL(fileURLWithPath: "/Applications/Ghostty.app")
+        var source: String?
+        var openedArguments: [String]?
+        let launcher = ContainerTerminalLauncher(
+            directory: directory,
+            applicationResolver: { application in
+                application == .ghostty ? ghostty : nil
+            },
+            runOpen: { arguments in
+                openedArguments = arguments
+                return true
+            },
+            runAppleScript: { script in
+                source = script
+                return true
+            }
+        )
+
+        try launcher.launch(
+            target: .container(id: "web"),
+            executable: "/opt/homebrew/bin/container",
+            application: .ghostty
+        )
+
+        let script = try XCTUnwrap(source)
+        XCTAssertTrue(script.contains("new tab in win with configuration cfg"))
+        XCTAssertTrue(script.contains("set command of cfg to"))
+        XCTAssertTrue(script.contains("container-web.command"))
+        XCTAssertNil(openedArguments, "A scripted terminal must not fall back to open")
+    }
+
+    func testITermOpensANewTabWithAppleScript() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let iterm = URL(fileURLWithPath: "/Applications/iTerm.app")
+        var source: String?
+        let launcher = ContainerTerminalLauncher(
+            directory: directory,
+            applicationResolver: { application in
+                application == .iterm ? iterm : nil
+            },
+            runAppleScript: { script in
+                source = script
+                return true
+            }
+        )
+
+        try launcher.launch(
+            target: .machine(id: "default"),
+            executable: "/opt/homebrew/bin/container",
+            application: .iterm
+        )
+
+        let script = try XCTUnwrap(source)
+        XCTAssertTrue(script.contains("create tab with default profile command"))
+        XCTAssertTrue(script.contains("machine-default.command"))
+    }
+
+    func testTerminalLauncherFallsBackToSystemDefaultWhenAppIsMissing() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var openedArguments: [String]?
+        let launcher = ContainerTerminalLauncher(
+            directory: directory,
+            applicationResolver: { _ in nil },
+            runOpen: { arguments in
+                openedArguments = arguments
+                return true
+            }
+        )
+
+        try launcher.launch(
+            target: .machine(id: "default"),
+            executable: "/opt/homebrew/bin/container",
+            application: .iterm
+        )
+
+        XCTAssertEqual(openedArguments?.count, 1, "A missing app falls back to the system default")
+        XCTAssertEqual(openedArguments?.first?.hasSuffix(".command"), true)
+    }
+
+    func testSettingsListInstalledTerminalsAndPersistSelection() throws {
+        let storage = InMemoryPluginStorage()
+        let plugin = makePlugin(
+            probe: CommandProbe(),
+            storage: storage,
+            installedApplications: [.systemDefault, .ghostty]
+        )
+
+        let row = try XCTUnwrap(settingsRows(of: plugin).first)
+        guard case let .picker(selectionID, options, _) = row.control else {
+            return XCTFail("Expected a terminal picker")
+        }
+        XCTAssertEqual(
+            selectionID,
+            "ghostty",
+            "An installed tab-capable terminal becomes the initial default"
+        )
+        XCTAssertEqual(options.map(\.id), ["systemDefault", "ghostty"])
+
+        plugin.handleSettingsAction(
+            .setSelection(controlID: row.id, optionID: "systemDefault")
+        )
+
+        XCTAssertEqual(storage.string(forKey: "terminal.application.v1"), "systemDefault")
+        XCTAssertEqual(plugin.controller.terminalApplication, .systemDefault)
+
+        let updatedRow = try XCTUnwrap(settingsRows(of: plugin).first)
+        guard case let .picker(updatedSelection, _, _) = updatedRow.control else {
+            return XCTFail("Expected a terminal picker")
+        }
+        XCTAssertEqual(updatedSelection, "systemDefault")
+    }
+
+    func testDefaultTerminalPrefersInstalledTabCapableApp() {
+        let plugin = makePlugin(
+            probe: CommandProbe(),
+            installedApplications: [.systemDefault, .terminal, .ghostty]
+        )
+
+        XCTAssertEqual(
+            plugin.controller.terminalApplication,
+            .ghostty,
+            "A tab-capable terminal is the initial default when installed"
+        )
+    }
+
+    func testDefaultTerminalFallsBackToSystemDefaultWithoutTabCapableApp() {
+        let plugin = makePlugin(
+            probe: CommandProbe(),
+            installedApplications: [.systemDefault, .terminal]
+        )
+
+        XCTAssertEqual(plugin.controller.terminalApplication, .systemDefault)
+    }
+
+    func testSettingsFallBackToSystemDefaultWhenSavedTerminalIsGone() throws {
+        let storage = InMemoryPluginStorage()
+        storage.set("iterm", forKey: "terminal.application.v1")
+        let plugin = makePlugin(
+            probe: CommandProbe(),
+            storage: storage,
+            installedApplications: [.systemDefault, .ghostty]
+        )
+
+        let row = try XCTUnwrap(settingsRows(of: plugin).first)
+        guard case let .picker(selectionID, _, _) = row.control else {
+            return XCTFail("Expected a terminal picker")
+        }
+        XCTAssertEqual(
+            selectionID,
+            "systemDefault",
+            "A terminal removed since the setting was saved is not offered"
+        )
     }
 
     // MARK: - Helpers
@@ -774,13 +1006,33 @@ final class ContainerIndicatorPluginTests: XCTestCase {
 
     private func makePlugin(
         probe: CommandProbe,
-        commandPath: String? = "/opt/homebrew/bin/container"
+        commandPath: String? = "/opt/homebrew/bin/container",
+        storage: (any PluginStorage)? = nil,
+        installedApplications: [ContainerTerminalApplication] = ContainerTerminalApplication.allCases
     ) -> ContainerIndicatorPlugin {
         let controller = makeController(probe: probe, commandPath: commandPath)
         return ContainerIndicatorPlugin(
             controller: controller,
-            localization: PluginLocalization(bundle: .main)
+            localization: PluginLocalization(bundle: .main),
+            storage: storage ?? InMemoryPluginStorage(),
+            installedTerminalApplications: { installedApplications }
         )
+    }
+
+    private func settingsRows(
+        of plugin: ContainerIndicatorPlugin
+    ) throws -> [PluginSettingsRow] {
+        let page = try XCTUnwrap(plugin.settingsPage)
+        guard case let .form(sections) = page.body else {
+            XCTFail("Expected a form settings page")
+            return []
+        }
+        let section = try XCTUnwrap(sections.first)
+        guard case let .rows(rows) = section.content else {
+            XCTFail("Expected declarative settings rows")
+            return []
+        }
+        return rows
     }
 
     private func waitUntil(
@@ -971,5 +1223,24 @@ private actor CommandProbe: ContainerCommandRunning {
     private func statsErrorValue() -> String { statsError }
     private func machineInspectValue(for id: String) -> String {
         machineInspectOutputs[id] ?? ""
+    }
+}
+
+@MainActor
+private final class InMemoryPluginStorage: PluginStorage {
+    private var store: [String: Any] = [:]
+
+    func object(forKey key: String) -> Any? { store[key] }
+    func data(forKey key: String) -> Data? { store[key] as? Data }
+    func string(forKey key: String) -> String? { store[key] as? String }
+    func stringArray(forKey key: String) -> [String]? { store[key] as? [String] }
+    func integer(forKey key: String) -> Int { store[key] as? Int ?? 0 }
+    func bool(forKey key: String) -> Bool { store[key] as? Bool ?? false }
+    func set(_ value: Any?, forKey key: String) { store[key] = value }
+    func removeObject(forKey key: String) { store.removeValue(forKey: key) }
+    func migrateValueIfNeeded(fromLegacyKey legacyKey: String, to key: String) {
+        guard store[key] == nil, let value = store[legacyKey] else { return }
+        store[key] = value
+        store.removeValue(forKey: legacyKey)
     }
 }
