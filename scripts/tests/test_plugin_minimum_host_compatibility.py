@@ -20,6 +20,9 @@ PLUGIN_INTERFACES = REPO_ROOT / "Sources/MacToolsPluginKit/PluginInterfaces.swif
 PLUGIN_SETTINGS_MODELS = REPO_ROOT / "Sources/MacToolsPluginKit/PluginSettingsModels.swift"
 APP_VERSION_CONFIG = REPO_ROOT / "Configs/AppVersion.xcconfig"
 NEW_API_MINIMUM_HOSTS = {
+    "PluginAppMenuBarIconVisibilityControlling": "2.2.0",
+    "PluginMenuBarPanelPresentationRequest": "2.2.0",
+    "PluginMenuBarPanelPresenting": "2.2.0",
     "PluginPanelCompactSwitchProviding": "2.1.0",
     "TrackpadSensorContact": "2.1.0",
     "TrackpadSensorFrame": "2.1.0",
@@ -425,6 +428,20 @@ class PluginMinimumHostCompatibilityTests(unittest.TestCase):
             self.assertEqual(NEW_API_MINIMUM_HOSTS[symbol], "1.2.1")
             self.assertEqual(len(minimum_host_violations("probe", "1.2.0", symbol)), 1)
             self.assertEqual(minimum_host_violations("probe", "1.2.1", symbol), [])
+
+    def test_host_2_2_0_apis_require_host_2_2_0(self) -> None:
+        symbols = {
+            "PluginAppMenuBarIconVisibilityControlling",
+            "PluginMenuBarPanelPresentationRequest",
+            "PluginMenuBarPanelPresenting",
+        }
+        interfaces = PLUGIN_INTERFACES.read_text(encoding="utf-8")
+        self.assertTrue(symbols <= public_top_level_type_names(interfaces))
+        for symbol in symbols:
+            with self.subTest(symbol=symbol):
+                self.assertEqual(NEW_API_MINIMUM_HOSTS[symbol], "2.2.0")
+                self.assertEqual(len(minimum_host_violations("probe", "2.1.0", symbol)), 1)
+                self.assertEqual(minimum_host_violations("probe", "2.2.0", symbol), [])
 
     def test_global_panel_inventory_requires_host_1_3_1(self) -> None:
         source = (REPO_ROOT / "Sources/MacToolsPluginKit/PluginPanelPresentation.swift").read_text(encoding="utf-8")
