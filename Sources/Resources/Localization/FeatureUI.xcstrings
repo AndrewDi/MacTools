@@ -8092,13 +8092,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Add content in Edit Panels"
+            "value": "Choose Edit Panel to add content"
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "İçerik eklemek için Panelleri Düzenle'yi kullanın"
+            "value": "İçerik eklemek için “Paneli Düzenle”yi seçin"
           }
         },
         "zh-Hans": {
@@ -8110,25 +8110,25 @@
         "ar": {
           "stringUnit": {
             "state": "translated",
-            "value": "أضف محتوى من «تعديل التخطيط»"
+            "value": "اختر «تعديل اللوحة» لإضافة محتوى"
           }
         },
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Unter „Layout bearbeiten“ Inhalte hinzufügen"
+            "value": "Unter „Panel bearbeiten“ Inhalte hinzufügen"
           }
         },
         "es": {
           "stringUnit": {
             "state": "translated",
-            "value": "Añade contenido al editar los paneles"
+            "value": "Elige «Editar panel» para añadir contenido"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ajoutez du contenu via « Modifier la disposition »"
+            "value": "Choisissez « Modifier le panneau » pour ajouter du contenu"
           }
         },
         "ja": {
@@ -8140,19 +8140,19 @@
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "‘레이아웃 편집’에서 콘텐츠 추가"
+            "value": "‘패널 편집’에서 콘텐츠를 추가하세요"
           }
         },
         "pt": {
           "stringUnit": {
             "state": "translated",
-            "value": "Adicionar conteúdo em Editar painéis"
+            "value": "Selecione “Editar painel” para adicionar conteúdo"
           }
         },
         "ru": {
           "stringUnit": {
             "state": "translated",
-            "value": "Добавьте содержимое в разделе «Редактировать панели»"
+            "value": "Выберите «Редактировать панель», чтобы добавить содержимое"
           }
         },
         "zh-Hant": {

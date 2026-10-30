@@ -1490,6 +1490,7 @@ struct MenuBarUnifiedPanelContent: View {
             ConfiguredMenuBarPanelsContent(
                 pluginHost: pluginHost, model: model, contentBodyHeight: contentBodyHeight,
                 onDismiss: onDismiss, onOpenSettings: onOpenSettings,
+                onEditLayout: toggleLayoutEditing,
                 onPresentDiskCleanConfiguration: onPresentDiskCleanConfiguration,
                 onPresentLaunchControlConfiguration: onPresentLaunchControlConfiguration
             )
