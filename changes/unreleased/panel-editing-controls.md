@@ -4,4 +4,4 @@ type: fixed
 area: Menu Bar Panel
 ---
 
-Panel editing keeps navigation centered by moving width controls to the bottom action bar and removes redundant drag handles from components.
+Panel editing keeps navigation centered, places a text-only Panel Width button after Add Widgets in the bottom action bar, and removes redundant component drag handles.

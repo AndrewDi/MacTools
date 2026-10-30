@@ -1423,8 +1423,7 @@ struct MenuBarUnifiedPanelContent: View {
     private var panelWidthControl: some View {
         let columnTitle = MenuBarPanelWidth.columnTitle(MenuBarPanelWidth.columns(
             forSurfaceWidth: model.contentWidth - MenuBarPanelLayout.outerPadding * 2))
-        return MenuBarPanelEditingButton(title: columnTitle, systemImage: "arrow.left.and.right",
-                                         emphasis: .standard) {
+        return MenuBarPanelEditingButton(title: MenuBarPanelWidth.title, emphasis: .standard) {
             showsWidthPicker = true
         }
         .help(MenuBarPanelWidth.title)
@@ -1724,10 +1723,15 @@ struct MenuBarPanelEditingActionBar<WidthControl: View>: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            widthControl
             ViewThatFits(in: .horizontal) {
-                actions(compact: false)
-                actions(compact: true)
+                addComponentsButton(compact: false)
+                addComponentsButton(compact: true)
+            }
+            widthControl
+            Spacer(minLength: 8)
+            ViewThatFits(in: .horizontal) {
+                panelActions(compact: false)
+                panelActions(compact: true)
             }
         }
         .padding(.horizontal, MenuBarPanelLayout.outerPadding)
@@ -1747,14 +1751,17 @@ struct MenuBarPanelEditingActionBar<WidthControl: View>: View {
         .onChange(of: selectedPanel?.id) { _, _ in panelToDelete = nil }
     }
 
-    private func actions(compact: Bool) -> some View {
+    private func addComponentsButton(compact: Bool) -> some View {
+        MenuBarPanelEditingButton(title: FeatureL10n.string("添加组件"),
+                                  systemImage: compact ? "square.grid.2x2" : nil,
+                                  emphasis: .standard, action: onAddComponents)
+            .labelStyle(.iconOnly)
+            .help(FeatureL10n.string("添加组件"))
+            .accessibilityIdentifier("panel.layout.add")
+    }
+
+    private func panelActions(compact: Bool) -> some View {
         HStack(spacing: 6) {
-            MenuBarPanelEditingButton(title: FeatureL10n.string("添加组件"),
-                                      systemImage: compact ? "square.grid.2x2" : nil,
-                                      emphasis: .standard, action: onAddComponents)
-                .help(FeatureL10n.string("添加组件"))
-                .accessibilityIdentifier("panel.layout.add")
-            Spacer(minLength: 8)
             MenuBarPanelEditingButton(title: FeatureL10n.string("删除面板"),
                                       systemImage: compact ? "trash" : nil, emphasis: .standard,
                                       role: .destructive, isEnabled: selectedPanel?.isDefault == false) {
