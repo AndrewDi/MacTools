@@ -476,24 +476,29 @@ public final class ContainerIndicatorController: ObservableObject {
         }
 
         operationErrorMessage = nil
-        do {
-            try terminalLauncher.launch(
-                target: target,
-                executable: path,
-                application: terminalApplication
-            )
-        } catch ContainerTerminalLaunchError.invalidIdentifier {
-            operationErrorMessage = localization.string(
-                "panel.error.terminalInvalidIdentifier",
-                defaultValue: "容器标识无效"
-            )
-        } catch {
-            operationErrorMessage = localization.string(
-                "panel.error.terminalOpenFailed",
-                defaultValue: "无法打开终端"
-            )
+        let application = terminalApplication
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.terminalLauncher.launch(
+                    target: target,
+                    executable: path,
+                    application: application
+                )
+            } catch ContainerTerminalLaunchError.invalidIdentifier {
+                self.operationErrorMessage = self.localization.string(
+                    "panel.error.terminalInvalidIdentifier",
+                    defaultValue: "容器标识无效"
+                )
+                self.onStateChange?()
+            } catch {
+                self.operationErrorMessage = self.localization.string(
+                    "panel.error.terminalOpenFailed",
+                    defaultValue: "无法打开终端"
+                )
+                self.onStateChange?()
+            }
         }
-        onStateChange?()
     }
 
     /// Runs a command sequence as one operation: it stops at the first failure

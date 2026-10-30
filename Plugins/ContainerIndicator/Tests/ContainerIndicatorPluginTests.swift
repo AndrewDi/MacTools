@@ -597,6 +597,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         let controller = makeController(probe: probe)
 
         await controller.refresh()
+        let firstSampleTime = controller.snapshot.containers.first?.performance?.sampledAt
         XCTAssertEqual(controller.snapshot.containers.first?.performance?.memoryBytes, 2048)
 
         await probe.stubStats(exitCode: 1, output: "", error: "error: stats unavailable")
@@ -610,6 +611,11 @@ final class ContainerIndicatorPluginTests: XCTestCase {
             controller.snapshot.containers.first?.performance?.memoryBytes,
             2048,
             "A failed stats read keeps the last numbers on screen"
+        )
+        XCTAssertEqual(
+            controller.snapshot.containers.first?.performance?.sampledAt,
+            firstSampleTime,
+            "The retained reading keeps the time it was actually sampled"
         )
     }
 
@@ -812,7 +818,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         XCTAssertFalse(ContainerTerminalLauncher.isValidExecutablePath("/usr/bin/container\nrm"))
     }
 
-    func testTerminalLauncherWritesExecutableScriptAndOpensIt() throws {
+    func testTerminalLauncherWritesExecutableScriptAndOpensIt() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -826,7 +832,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
             }
         )
 
-        try launcher.launch(
+        try await launcher.launch(
             target: .container(id: "web"),
             executable: "/opt/homebrew/bin/container",
             application: .systemDefault
@@ -842,7 +848,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         XCTAssertEqual(permissions, 0o755, "The script must be executable by the terminal")
     }
 
-    func testTerminalLauncherRejectsInvalidIdentifierBeforeWriting() throws {
+    func testTerminalLauncherRejectsInvalidIdentifierBeforeWriting() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -851,19 +857,20 @@ final class ContainerIndicatorPluginTests: XCTestCase {
             runOpen: { _ in true }
         )
 
-        XCTAssertThrowsError(
-            try launcher.launch(
+        do {
+            try await launcher.launch(
                 target: .container(id: "web; rm -rf /"),
                 executable: "/opt/homebrew/bin/container",
                 application: .systemDefault
             )
-        ) { error in
+            XCTFail("A shell metacharacter identifier must be rejected")
+        } catch {
             XCTAssertEqual(error as? ContainerTerminalLaunchError, .invalidIdentifier)
         }
         XCTAssertFalse(FileManager.default.fileExists(atPath: directory.path))
     }
 
-    func testTerminalOpenFailureSurfacesMessage() {
+    func testTerminalOpenFailureSurfacesMessage() async {
         let probe = CommandProbe()
         let launcher = ContainerTerminalLauncher(runOpen: { _ in false })
         let controller = ContainerIndicatorController(
@@ -874,11 +881,12 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         )
 
         controller.openTerminal(target: .container(id: "web"))
+        await waitUntil { controller.lastErrorMessage != nil }
 
         XCTAssertEqual(controller.lastErrorMessage, "无法打开终端")
     }
 
-    func testTerminalOpenRejectsInvalidIdentifierWithClearMessage() {
+    func testTerminalOpenRejectsInvalidIdentifierWithClearMessage() async {
         let probe = CommandProbe()
         let controller = ContainerIndicatorController(
             commandRunner: probe,
@@ -887,6 +895,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         )
 
         controller.openTerminal(target: .container(id: "web; rm -rf /"))
+        await waitUntil { controller.lastErrorMessage != nil }
 
         XCTAssertEqual(controller.lastErrorMessage, "容器标识无效")
     }
@@ -958,7 +967,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         )
     }
 
-    func testGhosttyOpensANewTabWithAppleScript() throws {
+    func testGhosttyOpensANewTabWithAppleScript() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -980,7 +989,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
             }
         )
 
-        try launcher.launch(
+        try await launcher.launch(
             target: .container(id: "web"),
             executable: "/opt/homebrew/bin/container",
             application: .ghostty
@@ -993,7 +1002,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         XCTAssertNil(openedArguments, "A scripted terminal must not fall back to open")
     }
 
-    func testITermOpensANewTabWithAppleScript() throws {
+    func testITermOpensANewTabWithAppleScript() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -1010,7 +1019,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
             }
         )
 
-        try launcher.launch(
+        try await launcher.launch(
             target: .machine(id: "default"),
             executable: "/opt/homebrew/bin/container",
             application: .iterm
@@ -1021,7 +1030,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         XCTAssertTrue(script.contains("machine-default.command"))
     }
 
-    func testTerminalLauncherFallsBackToSystemDefaultWhenAppIsMissing() throws {
+    func testTerminalLauncherFallsBackToSystemDefaultWhenAppIsMissing() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -1035,7 +1044,7 @@ final class ContainerIndicatorPluginTests: XCTestCase {
             }
         )
 
-        try launcher.launch(
+        try await launcher.launch(
             target: .machine(id: "default"),
             executable: "/opt/homebrew/bin/container",
             application: .iterm

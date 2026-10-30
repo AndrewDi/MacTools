@@ -395,6 +395,12 @@ private struct ContainerIndicatorDetailView: View {
         let history = controller.performanceHistory[container.id] ?? []
         return Section {
             VStack(spacing: 10) {
+                if let failure = controller.snapshot.statsFailure {
+                    staleBanner(
+                        failure: failure,
+                        sampledAt: container.performance?.sampledAt
+                    )
+                }
                 ContainerIndicatorLiveMetricCard(
                     title: localization.string("detail.field.cpu", defaultValue: "CPU"),
                     value: container.performance?.cpuPercent
@@ -437,6 +443,41 @@ private struct ContainerIndicatorDetailView: View {
         } header: {
             sectionTitle(localization.string("detail.section.live", defaultValue: "实时"))
         }
+    }
+
+    /// A failed stats read keeps the last numbers and chart visible, so the
+    /// window has to say that they are retained rather than live.
+    private func staleBanner(failure: String, sampledAt: Date?) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(Color(nsColor: .systemOrange))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(localization.string("detail.live.stale", defaultValue: "数据已过期"))
+                    .font(PluginTypography.caption.font.weight(.semibold))
+                Text(failure)
+                    .font(PluginTypography.caption.font)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let sampledAt {
+                    Text(
+                        localization.format(
+                            "detail.live.lastSampleFormat",
+                            defaultValue: "最后采样 %@",
+                            formattedTime(sampledAt)
+                        )
+                    )
+                    .font(PluginTypography.caption.font)
+                    .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(nsColor: .systemOrange).opacity(0.12))
+        )
     }
 
     // MARK: Rows
@@ -493,6 +534,13 @@ private struct ContainerIndicatorDetailView: View {
         guard let date else { return none }
         return date.formatted(
             Date.FormatStyle(date: .abbreviated, time: .shortened)
+                .locale(runtimeLocale.locale)
+        )
+    }
+
+    private func formattedTime(_ date: Date) -> String {
+        date.formatted(
+            Date.FormatStyle(date: .omitted, time: .standard)
                 .locale(runtimeLocale.locale)
         )
     }

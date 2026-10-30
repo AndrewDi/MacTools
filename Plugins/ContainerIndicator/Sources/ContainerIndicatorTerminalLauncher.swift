@@ -27,25 +27,31 @@ public protocol ContainerTerminalLaunching {
         target: ContainerTerminalTarget,
         executable: String,
         application: ContainerTerminalApplication
-    ) throws
+    ) async throws
 }
 
 /// Opens an interactive shell in the user's selected terminal. The plugin runs
 /// inside the host app and has no PTY, so it writes a small `.command` script
 /// and hands it to LaunchServices: that avoids AppleScript automation prompts
 /// and keeps the terminal window attached to the user's own session.
+///
+/// Launching talks to another application and can take seconds or hang, so the
+/// blocking work runs off the main thread behind a timeout.
 @MainActor
 public struct ContainerTerminalLauncher: ContainerTerminalLaunching {
     /// Container and machine identifiers are user-chosen names; anything
     /// outside this set never reaches the script.
     private static let identifierPattern = "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+    /// A terminal that has not accepted the script by now is treated as failed
+    /// instead of keeping the action pending forever.
+    public static let launchTimeout: TimeInterval = 10
 
     private let directory: URL
     private let fileManager: FileManager
     private let applicationResolver: (ContainerTerminalApplication) -> URL?
     private let defaultApplicationResolver: (URL) -> URL?
-    private let runOpen: ([String]) -> Bool
-    private let runAppleScript: (String) -> Bool
+    private let runOpen: ([String]) async -> Bool
+    private let runAppleScript: (String) async -> Bool
 
     public init(
         directory: URL = FileManager.default.temporaryDirectory
@@ -55,31 +61,25 @@ public struct ContainerTerminalLauncher: ContainerTerminalLaunching {
             ContainerTerminalApplicationCatalog.applicationURL(for: $0)
         },
         defaultApplicationResolver: ((URL) -> URL?)? = nil,
-        runOpen: @escaping ([String]) -> Bool = { arguments in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-            process.arguments = arguments
-            do {
-                try process.run()
-                process.waitUntilExit()
-                return process.terminationStatus == 0
-            } catch {
-                return false
-            }
-        },
-        runAppleScript: ((String) -> Bool)? = nil
+        runOpen: (([String]) async -> Bool)? = nil,
+        runAppleScript: ((String) async -> Bool)? = nil
     ) {
         self.directory = directory
         self.fileManager = fileManager
         self.applicationResolver = applicationResolver
         self.defaultApplicationResolver = defaultApplicationResolver
             ?? { NSWorkspace.shared.urlForApplication(toOpen: $0) }
-        self.runOpen = runOpen
+        self.runOpen = runOpen ?? { arguments in
+            await ContainerTerminalLauncher.open(
+                arguments,
+                timeout: ContainerTerminalLauncher.launchTimeout
+            )
+        }
         self.runAppleScript = runAppleScript ?? { source in
-            var error: NSDictionary?
-            let script = NSAppleScript(source: source)
-            _ = script?.executeAndReturnError(&error)
-            return error == nil
+            await ContainerTerminalLauncher.executeAppleScript(
+                source,
+                timeout: ContainerTerminalLauncher.launchTimeout
+            )
         }
     }
 
@@ -87,7 +87,7 @@ public struct ContainerTerminalLauncher: ContainerTerminalLaunching {
         target: ContainerTerminalTarget,
         executable: String,
         application: ContainerTerminalApplication
-    ) throws {
+    ) async throws {
         guard Self.isValidIdentifier(target.identifier) else {
             throw ContainerTerminalLaunchError.invalidIdentifier
         }
@@ -139,7 +139,7 @@ public struct ContainerTerminalLauncher: ContainerTerminalLaunching {
             application: effectiveApplication,
             scriptURL: fileURL
         ) {
-            guard runAppleScript(source) else {
+            guard await runAppleScript(source) else {
                 throw ContainerTerminalLaunchError.openFailed
             }
             return
@@ -151,8 +151,59 @@ public struct ContainerTerminalLauncher: ContainerTerminalLaunching {
             scriptURL: fileURL
         )
 
-        guard runOpen(arguments) else {
+        guard await runOpen(arguments) else {
             throw ContainerTerminalLaunchError.openFailed
+        }
+    }
+
+    // MARK: - Off-main launch
+
+    /// Runs `/usr/bin/open` without blocking the caller. The continuation is
+    /// resumed by whichever finishes first: the process or the timeout.
+    private static func open(_ arguments: [String], timeout: TimeInterval) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let completion = TerminalLaunchCompletion()
+            let box = TerminalProcessBox()
+            let process = box.process
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.arguments = arguments
+            process.terminationHandler = { finished in
+                completion.resume(continuation, value: finished.terminationStatus == 0)
+            }
+            do {
+                try process.run()
+            } catch {
+                completion.resume(continuation, value: false)
+                return
+            }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeout) {
+                let process = box.process
+                if process.isRunning {
+                    process.terminate()
+                }
+                completion.resume(continuation, value: false)
+            }
+        }
+    }
+
+    /// NSAppleScript blocks until the target app answers. It runs on a
+    /// background queue so a stalled terminal cannot freeze the host, and the
+    /// caller stops waiting after the timeout.
+    private static func executeAppleScript(_ source: String, timeout: TimeInterval) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let completion = TerminalLaunchCompletion()
+            DispatchQueue.global(qos: .userInitiated).async {
+                var error: NSDictionary?
+                let script = NSAppleScript(source: source)
+                let result = script?.executeAndReturnError(&error)
+                completion.resume(
+                    continuation,
+                    value: result != nil && error == nil
+                )
+            }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeout) {
+                completion.resume(continuation, value: false)
+            }
         }
     }
 
@@ -291,4 +342,25 @@ public struct ContainerTerminalLauncher: ContainerTerminalLaunching {
         )
         return "\(prefix)-\(sanitized).command"
     }
+}
+
+/// Resumes a checked continuation exactly once. The process and the timeout
+/// both try to finish the launch, and a second resume would trap.
+private final class TerminalLaunchCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hasResumed = false
+
+    func resume(_ continuation: CheckedContinuation<Bool, Never>, value: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !hasResumed else { return }
+        hasResumed = true
+        continuation.resume(returning: value)
+    }
+}
+
+/// `Process` is not `Sendable`, but the timeout closure only needs to ask
+/// whether it is still running and stop it.
+private final class TerminalProcessBox: @unchecked Sendable {
+    let process = Process()
 }
