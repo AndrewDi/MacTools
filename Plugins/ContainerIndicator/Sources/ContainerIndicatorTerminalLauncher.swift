@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 
 /// A running resource that can open an interactive shell.
@@ -70,8 +71,9 @@ public struct ContainerTerminalLauncher: ContainerTerminalLaunching {
         self.defaultApplicationResolver = defaultApplicationResolver
             ?? { NSWorkspace.shared.urlForApplication(toOpen: $0) }
         self.runOpen = runOpen ?? { arguments in
-            await ContainerTerminalLauncher.open(
-                arguments,
+            await ContainerTerminalLauncher.runProcess(
+                executable: URL(fileURLWithPath: "/usr/bin/open"),
+                arguments: arguments,
                 timeout: ContainerTerminalLauncher.launchTimeout
             )
         }
@@ -158,15 +160,22 @@ public struct ContainerTerminalLauncher: ContainerTerminalLaunching {
 
     // MARK: - Off-main launch
 
-    /// Runs `/usr/bin/open` without blocking the caller. The continuation is
-    /// resumed by whichever finishes first: the process or the timeout.
-    private static func open(_ arguments: [String], timeout: TimeInterval) async -> Bool {
+    /// Runs a short-lived helper without blocking the caller. The continuation
+    /// is resumed by whichever finishes first: the process or the timeout. A
+    /// timed-out process is terminated, then force-killed if it ignores SIGTERM.
+    static func runProcess(
+        executable: URL,
+        arguments: [String],
+        timeout: TimeInterval
+    ) async -> Bool {
         await withCheckedContinuation { continuation in
             let completion = TerminalLaunchCompletion()
             let box = TerminalProcessBox()
             let process = box.process
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            process.executableURL = executable
             process.arguments = arguments
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = FileHandle.nullDevice
             process.terminationHandler = { finished in
                 completion.resume(continuation, value: finished.terminationStatus == 0)
             }
@@ -180,31 +189,27 @@ public struct ContainerTerminalLauncher: ContainerTerminalLaunching {
                 let process = box.process
                 if process.isRunning {
                     process.terminate()
+                    DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2) {
+                        let process = box.process
+                        if process.isRunning {
+                            Darwin.kill(process.processIdentifier, SIGKILL)
+                        }
+                    }
                 }
                 completion.resume(continuation, value: false)
             }
         }
     }
 
-    /// NSAppleScript blocks until the target app answers. It runs on a
-    /// background queue so a stalled terminal cannot freeze the host, and the
-    /// caller stops waiting after the timeout.
+    /// NSAppleScript blocks until the target app answers, so the script runs as
+    /// an `osascript` subprocess that can be stopped when it exceeds the
+    /// timeout instead of lingering behind a reported failure.
     private static func executeAppleScript(_ source: String, timeout: TimeInterval) async -> Bool {
-        await withCheckedContinuation { continuation in
-            let completion = TerminalLaunchCompletion()
-            DispatchQueue.global(qos: .userInitiated).async {
-                var error: NSDictionary?
-                let script = NSAppleScript(source: source)
-                let result = script?.executeAndReturnError(&error)
-                completion.resume(
-                    continuation,
-                    value: result != nil && error == nil
-                )
-            }
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeout) {
-                completion.resume(continuation, value: false)
-            }
-        }
+        await runProcess(
+            executable: URL(fileURLWithPath: "/usr/bin/osascript"),
+            arguments: ["-e", source],
+            timeout: timeout
+        )
     }
 
     /// AppleScript that opens a new tab when the terminal already has a

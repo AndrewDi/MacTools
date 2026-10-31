@@ -26,6 +26,21 @@ public final class ContainerIndicatorController: ObservableObject {
         operationErrorMessage ?? checkErrorMessage
     }
 
+    /// Retained live readings stay visible when a refresh fails, so the detail
+    /// window uses this to label them instead of presenting them as current.
+    /// An inconclusive service check keeps the last entries on screen just like
+    /// a failed stats read does.
+    public var retainedDataWarning: String? {
+        if let statsFailure = snapshot.statsFailure {
+            return statsFailure
+        }
+        guard snapshot.status == .unknown else { return nil }
+        return checkErrorMessage ?? localization.string(
+            "panel.error.commandFailed",
+            defaultValue: "命令执行失败"
+        )
+    }
+
     public var onStateChange: (() -> Void)?
     /// The terminal chosen in settings. The launcher falls back to the system
     /// default if the app has since been removed.

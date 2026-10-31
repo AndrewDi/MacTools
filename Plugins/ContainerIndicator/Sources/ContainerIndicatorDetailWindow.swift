@@ -395,7 +395,7 @@ private struct ContainerIndicatorDetailView: View {
         let history = controller.performanceHistory[container.id] ?? []
         return Section {
             VStack(spacing: 10) {
-                if let failure = controller.snapshot.statsFailure {
+                if let failure = controller.retainedDataWarning {
                     staleBanner(
                         failure: failure,
                         sampledAt: container.performance?.sampledAt

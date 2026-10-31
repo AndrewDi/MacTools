@@ -619,6 +619,38 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         )
     }
 
+    func testServiceCheckFailureMarksRetainedReadingsAsStale() async throws {
+        let probe = CommandProbe()
+        await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
+        await probe.stubContainers(
+            """
+            [{"id":"c1","configuration":{"id":"web","resources":{"cpus":2}},\
+            "status":{"state":"running"}}]
+            """
+        )
+        await probe.stubStats(output: statsJSON(cpu: 1_000_000, read: 1000, write: 2000))
+        let controller = makeController(probe: probe)
+
+        await controller.refresh()
+        XCTAssertNil(controller.retainedDataWarning)
+        let sampledAt = try XCTUnwrap(
+            controller.snapshot.containers.first?.performance?.sampledAt
+        )
+
+        // An inconclusive status keeps the last entries on screen, so the
+        // retained readings must still be labeled as stale.
+        await probe.stubService(exitCode: 2, output: "")
+        await controller.refresh()
+
+        XCTAssertEqual(controller.snapshot.status, .unknown)
+        XCTAssertEqual(controller.retainedDataWarning, "操作失败：命令执行失败")
+        XCTAssertEqual(
+            controller.snapshot.containers.first?.performance?.sampledAt,
+            sampledAt,
+            "The retained reading keeps the time it was actually sampled"
+        )
+    }
+
     func testStatsCommandIsSkippedWhenNothingRuns() async {
         let probe = CommandProbe()
         await probe.stubService(exitCode: 0, output: #"{"status":"running"}"#)
@@ -816,6 +848,22 @@ final class ContainerIndicatorPluginTests: XCTestCase {
         XCTAssertTrue(ContainerTerminalLauncher.isValidIdentifier("web-1.local"))
         XCTAssertFalse(ContainerTerminalLauncher.isValidExecutablePath("container"))
         XCTAssertFalse(ContainerTerminalLauncher.isValidExecutablePath("/usr/bin/container\nrm"))
+    }
+
+    func testTerminalProcessTimeoutStopsTheProcess() async {
+        let started = Date()
+        let succeeded = await ContainerTerminalLauncher.runProcess(
+            executable: URL(fileURLWithPath: "/bin/sleep"),
+            arguments: ["5"],
+            timeout: 0.2
+        )
+
+        XCTAssertFalse(succeeded, "A timed-out helper reports failure")
+        XCTAssertLessThan(
+            Date().timeIntervalSince(started),
+            2,
+            "The caller must not wait for the full helper runtime"
+        )
     }
 
     func testTerminalLauncherWritesExecutableScriptAndOpensIt() async throws {
